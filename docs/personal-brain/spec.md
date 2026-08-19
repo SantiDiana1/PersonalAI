@@ -46,9 +46,9 @@ interface RawEvent {
   id: string;
   source: 'notes' | 'github' | 'notion' | 'jira' | 'hermes_feedback';
   sourceAuthority: 'canonical' | 'supporting';
-  externalRef?: string;   // url, PR id, etc.
+  externalRef?: string; // url, PR id, etc.
   text: string;
-  occurredAt: string;     // fecha del evento real, no de la ingesta
+  occurredAt: string; // fecha del evento real, no de la ingesta
   ingestedAt: string;
 }
 ```
@@ -67,12 +67,12 @@ La capa más importante del spec — tres trabajos, tal cual el artículo de ref
 ```ts
 interface Observation {
   id: string;
-  statement: string;             // el hecho extraído, en lenguaje natural estructurado
-  entity: string;                // p.ej. "repo:personalAI", "topic:deploy"
+  statement: string; // el hecho extraído, en lenguaje natural estructurado
+  entity: string; // p.ej. "repo:personalAI", "topic:deploy"
   sourceEventId: string;
   sourceAuthority: 'canonical' | 'supporting';
   validFrom: string;
-  supersededBy?: string;         // si fue reconciliada por otra observation
+  supersededBy?: string; // si fue reconciliada por otra observation
   createdAt: string;
 }
 
@@ -91,7 +91,7 @@ Multi-estrategia (single-strategy pierde queries que las otras sí capturan, seg
 
 - **Semántica**: embeddings sobre `statement` de cada `Observation`/`MentalModel` (pgvector, similarity search).
 - **Por entidad**: si la query menciona un repo/proyecto concreto (`repo:personalAI`), filtra directo por ese `entity`.
-- **Temporal**: soporte para "¿cuál es la convención *actual*?" (excluye observations `superseded_by`) vs "¿qué se decidió en su momento?" (histórico, incluye todas).
+- **Temporal**: soporte para "¿cuál es la convención _actual_?" (excluye observations `superseded_by`) vs "¿qué se decidió en su momento?" (histórico, incluye todas).
 - **Grafo** (v2, no bloqueante para v1): traversal simple sobre relaciones `entity -> entity` cuando la pregunta requiere saltar de una entidad a otra relacionada.
 
 Resultado combinado con un re-ranking simple (score de similarity + boost si hay match de entidad + penalización si la observation está superseded).
@@ -109,6 +109,7 @@ Base: `POST /v1/*`, JSON, autenticado con un token estático simple (Bearer) —
 ### `POST /v1/query`
 
 Request:
+
 ```json
 {
   "question": "¿cuál es la convención de nombres de branches en personalAI?",
@@ -118,6 +119,7 @@ Request:
 ```
 
 Response:
+
 ```json
 {
   "mentalModels": [{ "id": "...", "summary": "...", "entity": "repo:personalAI" }],
@@ -160,7 +162,7 @@ interface BrainIngestInput {
 // tool: brain_record_observation — envuelve POST /v1/observations
 interface BrainRecordObservationInput {
   entity: string;
-  text: string;         // resultado de la acción del agente, en lenguaje natural
+  text: string; // resultado de la acción del agente, en lenguaje natural
   externalRef?: string; // p.ej. URL del PR
 }
 ```

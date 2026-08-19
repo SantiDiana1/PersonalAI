@@ -1,6 +1,6 @@
 # Roadmap y User Stories — PersonalAI
 
-> Documento *spec-driven*: cada fase es una unidad de trabajo autocontenida con objetivo, user stories, criterios de aceptación y Definition of Done. La idea es que Claude Code (u otro coding agent) pueda coger **una fase entera** y saber exactamente qué construir y cuándo darla por terminada, sin tener que interpretar prosa suelta.
+> Documento _spec-driven_: cada fase es una unidad de trabajo autocontenida con objetivo, user stories, criterios de aceptación y Definition of Done. La idea es que Claude Code (u otro coding agent) pueda coger **una fase entera** y saber exactamente qué construir y cuándo darla por terminada, sin tener que interpretar prosa suelta.
 
 Filosofía (tomada del artículo de referencia sobre "company brain"): **no intentes modelar todo el sistema de golpe**. Se construye primero el workflow más estrecho posible de cada proyecto, se valida, y solo entonces se integra y se amplía. Cada fase deja algo demostrable, aunque sea a nivel de portfolio/demo.
 
@@ -21,16 +21,16 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 
 ## Vista general
 
-| Fase | Nombre | Objetivo en una frase | Depende de |
-|---|---|---|---|
-| 0 | Fundación del monorepo + auth compartida | Monorepo instalable + sesión de Claude Pro compartida lista para usarse | — |
-| 1 | Brain MVP | Puedo preguntarle algo a Brain y me devuelve el fragmento relevante | Fase 0 |
-| 2 | `claude-code-runner-mcp` en solitario | Puedo delegar una tarea de código a Claude Code en un contenedor aislado, sin Hermes todavía | Fase 0 |
-| 3 | hermes-agent + Skill `resolve-issue` (solo GitHub) | Etiqueto una issue y Hermes abre un PR sin que yo haga nada más | Fase 0, 2 |
-| 4 | Integrar Brain vía `brain-mcp` | Hermes resuelve issues mejor porque consulta a Brain antes de actuar | Fase 1, 3 |
-| 5 | Ampliar fuentes (Notion, Jira) | Hermes coge tareas también desde Notion y Jira | Fase 4 |
-| 6 | Consolidación real en Brain | Brain deja de ser "un vector store con extra pasos" y reconcilia contradicciones | Fase 1, 4 |
-| 7 | Pulido de portfolio | El proyecto es presentable de principio a fin a un reclutador/cliente | Fase 5, 6 |
+| Fase | Nombre                                             | Objetivo en una frase                                                                        | Depende de |
+| ---- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------- |
+| 0    | Fundación del monorepo + auth compartida           | Monorepo instalable + sesión de Claude Pro compartida lista para usarse                      | —          |
+| 1    | Brain MVP                                          | Puedo preguntarle algo a Brain y me devuelve el fragmento relevante                          | Fase 0     |
+| 2    | `claude-code-runner-mcp` en solitario              | Puedo delegar una tarea de código a Claude Code en un contenedor aislado, sin Hermes todavía | Fase 0     |
+| 3    | hermes-agent + Skill `resolve-issue` (solo GitHub) | Etiqueto una issue y Hermes abre un PR sin que yo haga nada más                              | Fase 0, 2  |
+| 4    | Integrar Brain vía `brain-mcp`                     | Hermes resuelve issues mejor porque consulta a Brain antes de actuar                         | Fase 1, 3  |
+| 5    | Ampliar fuentes (Notion, Jira)                     | Hermes coge tareas también desde Notion y Jira                                               | Fase 4     |
+| 6    | Consolidación real en Brain                        | Brain deja de ser "un vector store con extra pasos" y reconcilia contradicciones             | Fase 1, 4  |
+| 7    | Pulido de portfolio                                | El proyecto es presentable de principio a fin a un reclutador/cliente                        | Fase 5, 6  |
 
 ---
 
@@ -293,4 +293,3 @@ Cualquier persona externa (reclutador, cliente potencial) puede entender qué ha
 - Alta disponibilidad / multi-región — un único VPS es suficiente para el objetivo de portfolio + uso personal.
 - Automatizar la reautenticación de la sesión de Claude Code cuando expira o es revocada (§0.2/§3.3 de hermes/spec.md) — es y seguirá siendo un paso manual del Operador.
 - Ofrecer este sistema como servicio a terceros — uso estrictamente personal, dado el riesgo de ToS asumido en la autenticación compartida.
-

@@ -75,20 +75,20 @@ Expone una única tool principal:
 // única vez en el host con `claude setup-token`. Es la MISMA sesión que
 // usa hermes-agent para su propio chat (ver spec §0.1). Ver §3.2 y §3.3.
 interface RunCodingTaskInput {
-  repo: string;           // owner/repo
-  baseBranch?: string;    // por defecto la rama por defecto del repo
+  repo: string; // owner/repo
+  baseBranch?: string; // por defecto la rama por defecto del repo
   taskTitle: string;
   taskDescription: string;
-  brainContext?: string;  // texto ya recuperado de brain-mcp, para inyectar en el prompt
+  brainContext?: string; // texto ya recuperado de brain-mcp, para inyectar en el prompt
   timeoutSeconds?: number; // por defecto 1800 (30 min)
 }
 
 interface RunCodingTaskOutput {
   status: 'success' | 'failed' | 'needs_human_input' | 'timed_out';
-  branchName?: string;      // rama empujada, si hubo cambios
+  branchName?: string; // rama empujada, si hubo cambios
   commitShas?: string[];
-  summary: string;          // resumen de lo hecho, generado por Claude Code
-  logsUrl?: string;         // referencia a logs guardados, si aplica
+  summary: string; // resumen de lo hecho, generado por Claude Code
+  logsUrl?: string; // referencia a logs guardados, si aplica
 }
 ```
 

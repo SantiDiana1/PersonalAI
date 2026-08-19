@@ -15,14 +15,14 @@ Este proyecto es principalmente una pieza de **portfolio técnico** (para enseñ
 
 ## Estructura de la documentación (spec-driven development)
 
-Este repo se desarrolla siguiendo un enfoque *spec-first*: antes de escribir código, se definen specs detalladas para que Claude Code (u otro coding agent) tenga contexto suficiente para implementar sin ambigüedad.
+Este repo se desarrolla siguiendo un enfoque _spec-first_: antes de escribir código, se definen specs detalladas para que Claude Code (u otro coding agent) tenga contexto suficiente para implementar sin ambigüedad.
 
-| Documento | Contenido |
-|---|---|
-| [docs/architecture.md](docs/architecture.md) | Visión general del sistema, estructura del monorepo, diagrama de integración Hermes ↔ MCP servers ↔ Brain |
-| [docs/roadmap.md](docs/roadmap.md) | Roadmap *spec-driven*, por fases: objetivo, user stories con criterios de aceptación, y Definition of Done por fase |
-| [docs/hermes/spec.md](docs/hermes/spec.md) | Spec de despliegue/configuración de hermes-agent + specs de los MCP servers y el Skill que construimos nosotros |
-| [docs/personal-brain/spec.md](docs/personal-brain/spec.md) | Spec funcional y técnica completa del Personal Brain |
+| Documento                                                  | Contenido                                                                                                           |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)               | Visión general del sistema, estructura del monorepo, diagrama de integración Hermes ↔ MCP servers ↔ Brain           |
+| [docs/roadmap.md](docs/roadmap.md)                         | Roadmap _spec-driven_, por fases: objetivo, user stories con criterios de aceptación, y Definition of Done por fase |
+| [docs/hermes/spec.md](docs/hermes/spec.md)                 | Spec de despliegue/configuración de hermes-agent + specs de los MCP servers y el Skill que construimos nosotros     |
+| [docs/personal-brain/spec.md](docs/personal-brain/spec.md) | Spec funcional y técnica completa del Personal Brain                                                                |
 
 ## Decisiones ya tomadas (no las vuelvas a preguntar)
 

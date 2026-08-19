@@ -123,4 +123,3 @@ Un único VPS Linux (Ubuntu 22.04/24.04) con Docker y Docker Compose:
 - Reverse proxy (Caddy o Nginx) delante del gateway de hermes-agent si se quiere hablar con él desde Telegram/Discord fuera del VPS, y delante de la API de Brain si se expone para otros usos.
 
 No se detalla más infraestructura (Terraform, Kubernetes, etc.) porque no aporta al objetivo del portfolio y añade complejidad operativa innecesaria para un proyecto personal.
-
