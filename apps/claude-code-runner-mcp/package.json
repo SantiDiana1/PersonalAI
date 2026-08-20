@@ -5,15 +5,26 @@
   "description": "Servidor MCP que orquesta contenedores efímeros con Claude Code",
   "type": "module",
   "main": "./dist/index.js",
+  "bin": {
+    "claude-code-runner-mcp": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "node dist/index.js"
   },
   "dependencies": {
-    "@personalai/shared": "workspace:*"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@personalai/shared": "workspace:*",
+    "dockerode": "^5.0.1",
+    "pg": "^8.13.1",
+    "pino": "^10.3.1",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/dockerode": "^3.3.32",
+    "@types/pg": "^8.11.10",
     "typescript": "^5.7.2",
     "vitest": "^2.1.5"
   }

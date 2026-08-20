@@ -84,9 +84,9 @@ Monorepo instalable con CI verde, Postgres+pgvector disponible en local, hermes-
 ### User stories
 
 - **US-1.1** — Como Operador, quiero invocar la tool MCP `run_coding_task(repo, taskTitle, taskDescription, ...)` desde un cliente MCP de prueba, para validar el ciclo completo antes de conectarlo a hermes-agent.
-  - [ ] La tool clona el repo indicado (shallow), lanza un contenedor Docker con Claude Code CLI, ejecuta `claude -p` de forma no interactiva, y devuelve `{ status, branchName?, commitShas?, summary, logsUrl? }`.
-  - [ ] El contenedor hereda la sesión de `hermes-claude-auth` vía `CLAUDE_CODE_OAUTH_TOKEN` inyectada como variable de entorno, sin recibir ninguna `ANTHROPIC_API_KEY`.
-  - [ ] El contenedor se destruye (`docker rm -f`) tanto en éxito como en fallo o timeout — verificado que no quedan contenedores huérfanos tras varias ejecuciones.
+  - [x] La tool clona el repo indicado (shallow), lanza un contenedor Docker con Claude Code CLI, ejecuta `claude -p` de forma no interactiva, y devuelve `{ status, branchName?, commitShas?, summary, logsUrl? }`. Verificado invocando `runCodingTask` contra un repo local: clona, monta `/workspace`, crea rama `hermes/<ts>-<slug>`, ejecuta `claude -p` en el contenedor y devuelve el output tipado.
+  - [x] El contenedor hereda la sesión de `hermes-claude-auth` vía `CLAUDE_CODE_OAUTH_TOKEN` inyectada como variable de entorno, sin recibir ninguna `ANTHROPIC_API_KEY`. Verificado en `src/docker/runContainer.ts` (única variable de auth inyectada) y por inspección del log del contenedor.
+  - [x] El contenedor se destruye (`docker rm -f`) tanto en éxito como en fallo o timeout — verificado que no quedan contenedores huérfanos tras varias ejecuciones. Verificado con `docker ps -a --filter ancestor=...` vacío tras ejecuciones de éxito simulado, fallo de auth y timeout forzado (imagen de prueba con `sleep 300`, `timeoutSeconds: 2` → `timedOut: true`, contenedor eliminado).
 - **US-1.2** — Como Sistema, quiero comprobar la validez de la sesión de Claude Code antes de lanzar cada contenedor, para devolver `needs_human_input` de forma inmediata si la sesión expiró o fue revocada, en vez de lanzar un contenedor que fallará igualmente.
   - [ ] Si la sesión no es válida, la tool responde `status: 'needs_human_input'` sin llegar a hacer `docker run`.
   - [ ] El `summary` distingue "sesión expirada" de "sesión rechazada por el servidor (posible revocación)" cuando sea posible.
