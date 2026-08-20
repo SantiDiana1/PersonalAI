@@ -81,20 +81,22 @@ Monorepo instalable con CI verde, Postgres+pgvector disponible en local, hermes-
 
 **Depende de**: Fase 0 (en particular, `hermes-claude-auth` de US-0.4).
 
+**Estado: completada.**
+
 ### User stories
 
 - **US-1.1** — Como Operador, quiero invocar la tool MCP `run_coding_task(repo, taskTitle, taskDescription, ...)` desde un cliente MCP de prueba, para validar el ciclo completo antes de conectarlo a hermes-agent.
-  - [ ] La tool clona el repo indicado (shallow), lanza un contenedor Docker con Claude Code CLI, ejecuta `claude -p` de forma no interactiva, y devuelve `{ status, branchName?, commitShas?, summary, logsUrl? }`.
-  - [ ] El contenedor hereda la sesión de `hermes-claude-auth` vía `CLAUDE_CODE_OAUTH_TOKEN` inyectada como variable de entorno, sin recibir ninguna `ANTHROPIC_API_KEY`.
-  - [ ] El contenedor se destruye (`docker rm -f`) tanto en éxito como en fallo o timeout — verificado que no quedan contenedores huérfanos tras varias ejecuciones.
+  - [x] La tool clona el repo indicado (shallow), lanza un contenedor Docker con Claude Code CLI, ejecuta `claude -p` de forma no interactiva, y devuelve `{ status, branchName?, commitShas?, summary, logsUrl? }`. Verificado invocando `runCodingTask` contra un repo local: clona, monta `/workspace`, crea rama `hermes/<ts>-<slug>`, ejecuta `claude -p` en el contenedor y devuelve el output tipado.
+  - [x] El contenedor hereda la sesión de `hermes-claude-auth` vía `CLAUDE_CODE_OAUTH_TOKEN` inyectada como variable de entorno, sin recibir ninguna `ANTHROPIC_API_KEY`. Verificado en `src/docker/runContainer.ts` (única variable de auth inyectada) y por inspección del log del contenedor.
+  - [x] El contenedor se destruye (`docker rm -f`) tanto en éxito como en fallo o timeout — verificado que no quedan contenedores huérfanos tras varias ejecuciones. Verificado con `docker ps -a --filter ancestor=...` vacío tras ejecuciones de éxito simulado, fallo de auth y timeout forzado (imagen de prueba con `sleep 300`, `timeoutSeconds: 2` → `timedOut: true`, contenedor eliminado).
 - **US-1.2** — Como Sistema, quiero comprobar la validez de la sesión de Claude Code antes de lanzar cada contenedor, para devolver `needs_human_input` de forma inmediata si la sesión expiró o fue revocada, en vez de lanzar un contenedor que fallará igualmente.
-  - [ ] Si la sesión no es válida, la tool responde `status: 'needs_human_input'` sin llegar a hacer `docker run`.
-  - [ ] El `summary` distingue "sesión expirada" de "sesión rechazada por el servidor (posible revocación)" cuando sea posible.
+  - [x] Si la sesión no es válida, la tool responde `status: 'needs_human_input'` sin llegar a hacer `docker run`. Verificado con un token inválido real: `run_coding_task` devuelve `needs_human_input` y no hay clon de repo ni contenedor de tarea (solo el contenedor efímero de comprobación, eliminado tras el chequeo).
+  - [x] El `summary` distingue "sesión expirada" de "sesión rechazada por el servidor (posible revocación)" cuando sea posible. `classifySessionCheck` (`src/session.ts`) aplica una heurística sobre el mensaje real de `claude` (verificado con un token inválido real: `API Error: 401 OAuth access token is invalid` → clasificado como `expired`); testeada con 3 casos en `src/session.test.ts`.
 - **US-1.3** — Como Operador, quiero que el contenedor de ejecución no tenga acceso al socket de Docker del host ni red libre, para limitar el radio de impacto de un prompt malicioso proveniente de una issue de terceros.
-  - [ ] Verificado manualmente que desde dentro del contenedor no se puede alcanzar el Docker socket ni hacer peticiones a dominios fuera de la allowlist (`api.anthropic.com`, `github.com`).
-  - [ ] Las credenciales de GitHub inyectadas están scoped al repo concreto de la tarea (nunca un token de cuenta completa).
+  - [x] Verificado manualmente que desde dentro del contenedor no se puede alcanzar el Docker socket ni hacer peticiones a dominios fuera de la allowlist (`api.anthropic.com`, `github.com`). Implementado con dos redes Docker (`claude-code-runner-internal`, `internal: true`, sin ruta a Internet + `claude-code-runner-egress`) y un proxy de allowlist (`claude-code-runner-proxy`, tinyproxy + `filter.allow`), ver `src/docker/network.ts` y `docker/proxy/`. Verificado: (1) `docker run --network claude-code-runner-internal curl https://example.com` sin proxy → `Could not resolve host` (sin ruta directa); (2) `ls /var/run/docker.sock` dentro de `claude-code-runner-image` → `No such file or directory`; (3) vía el proxy, `https://github.com` → `200`, `https://example.com` → `403` (bloqueado por `FilterDefaultDeny`). El aislamiento está activado por defecto en `runCodingTask`/`checkSessionValid` (`ensureIsolation()`), no es opt-in.
+  - [x] Las credenciales de GitHub inyectadas están scoped al repo concreto de la tarea (nunca un token de cuenta completa). El `githubToken` se inyecta tal cual lo recibe la tool (nunca se persiste a disco, se redacta del logger — `src/logger.ts`); scoping real es responsabilidad operacional del Operador al generar el PAT fine-grained/GitHub App (ver `docs/hermes/spec.md §6`), no verificable en código sin credenciales reales.
 - **US-1.4** — Como Operador, quiero un límite de tareas concurrentes/por hora configurable, para no agotar la ventana de 5h/semanal de la cuenta Pro compartida con hermes-agent.
-  - [ ] Un intento de superar el límite configurado se rechaza (o se encola) en vez de lanzar un contenedor adicional.
+  - [x] Un intento de superar el límite configurado se rechaza (o se encola) en vez de lanzar un contenedor adicional. `RateLimiter` (`src/rateLimit.ts`, configurable vía `CLAUDE_CODE_RUNNER_MAX_CONCURRENT`/`CLAUDE_CODE_RUNNER_MAX_PER_HOUR`) se consulta justo antes de `runTaskContainer`; si no hay hueco, `run_coding_task` devuelve `needs_human_input` sin lanzar contenedor. Verificado con un test de integración (`src/rateLimit.integration.test.ts`, Docker mockeado) que lanza dos tareas en paralelo con `maxConcurrent: 1`: una se rechaza sin invocar `runTaskContainer` (`toHaveBeenCalledTimes(1)`), y tras liberar el slot una tercera tarea sí se lanza.
 
 ### Tareas técnicas
 
@@ -106,7 +108,11 @@ Monorepo instalable con CI verde, Postgres+pgvector disponible en local, hermes-
 
 ### Definition of Done
 
-Puedo invocar `run_coding_task` manualmente contra un repo real y obtener una rama con cambios generados por Claude Code, con aislamiento verificado y manejo explícito de sesión expirada/revocada. hermes-agent todavía no está en el bucle.
+Puedo invocar `run_coding_task` manualmente contra un repo real y obtener una rama con cambios generados por Claude Code, con aislamiento verificado y manejo explícito de sesión expirada/revocada. hermes-agent todavía no está en el bucle. **Cumplida** — verificado con dos ejecuciones reales (token OAuth y PAT de GitHub reales) contra `SantiDiana1/PersonalAI`:
+
+- Contra `main` (sin `docs/`): `claude` razonó correctamente que la tarea era irrealizable sin salirse de alcance y devolvió `needs_human_input` con una explicación clara, en vez de improvisar — confirma el camino de "tarea ambigua" del prompt.
+- Contra `feat/phase0` (con `docs/roadmap.md`): `status: 'success'`, un único commit (`8c80ceef...`, autor `Hermes (claude-code-runner)`) con exactamente el cambio pedido, rama `hermes/<ts>-e2e-fase-1-...` empujada de verdad al repo privado (confirmado con `git ls-remote` y `git fetch`+`git diff` — solo se tocó la línea pedida, ningún otro archivo).
+- Corrigió dos bugs reales descubiertos por esta prueba: el clon (host-side) no soportaba repos privados (le faltaba el token embebido en la URL), y el PAT inicial del Operador tenía permiso `Contents: Read` en vez de `Read and write`. Ambos arreglados y sus mensajes de error saneados para nunca filtrar el token en logs.
 
 ---
 
