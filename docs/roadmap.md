@@ -151,9 +151,10 @@ Puedo invocar `run_coding_task` manualmente contra un repo real y obtener una ra
   - [ ] hermes-agent responde en modo chat usando `CLAUDE_CODE_OAUTH_TOKEN`, sin `ANTHROPIC_API_KEY` configurada. **Nota (Fase 0)**: no hace falta ningún wrapper — hermes-agent soporta esta variable de entorno de fábrica (ver [hermes/spec.md §0.1/§0.3](hermes/spec.md#01-autenticación-token-oauth-de-larga-duración-para-todo-vía-suscripción-pro)).
   - [ ] Verificado que ambos componentes comparten el mismo secreto de sesión sin conflictos.
   - [ ] **SEC-2.1**: `docker inspect` del contenedor de hermes-agent no lista `/var/run/docker.sock` en sus binds, y `docker ps` ejecutado _dentro_ de ese contenedor falla.
-  - [ ] **SEC-4.1**: el contenedor del runner sí lo tiene, y es el único del compose que lo tiene.
-  - [ ] **SEC-2.2**: ningún servicio usa `network_mode: host`.
-  - [ ] **SEC-3.1**: el servicio del runner no declara `ports:`; verificado que su puerto no responde desde el host ni desde otro equipo de la LAN.
+  - [x] **SEC-4.1**: el contenedor del runner sí lo tiene, y es el único del compose que lo tiene. Verificado recorriendo los contenedores del compose desplegado e inspeccionando `HostConfig.Binds`: runner → 1 montaje de `docker.sock`, postgres → 0.
+  - [x] **SEC-2.2**: ningún servicio usa `network_mode: host`. Todos van sobre una red `bridge` propia del compose.
+  - [x] **SEC-3.1**: el servicio del runner no declara `ports:`; verificado en el despliegue real que `NetworkSettings.Ports` es `{"8080/tcp":null}` (expuesto pero **no publicado**), que `curl` desde el host a `localhost:8080` no obtiene respuesta, y que un contenedor hermano de la misma red sí alcanza `/health`. Desde esa misma red interna, una petición MCP sin token sigue recibiendo `401` (SEC-3.2 en profundidad).
+  - [x] Persistencia operativa: la migración crea `runner.task_runs` en Postgres, verificado con `\d runner.task_runs` contra la base desplegada.
 - **US-2.3** — Como Operador, quiero registrar el GitHub MCP oficial y `claude-code-runner-mcp` en la configuración de hermes-agent, para que el agente pueda listar issues y delegar la ejecución sin conectores propios.
   - [ ] `hermes mcp list` lista ambos servidores como conectados y healthy.
   - [ ] **SEC-6.1**: las credenciales de GitHub son un PAT fine-grained scoped solo a los repos elegidos, con los permisos mínimos (contenidos, issues, pull requests). Verificado que un repo fuera del scope falla.
@@ -161,7 +162,8 @@ Puedo invocar `run_coding_task` manualmente contra un repo real y obtener una ra
 - **US-2.4** — Como Hermes, quiero un Skill `resolve-issue` que liste issues candidatas (label acordado, p. ej. `hermes`), delegue la ejecución en `run_coding_task`, y reporte el resultado en la issue original, para resolver tareas de código sin intervención humana en el camino feliz.
   - [ ] Etiquetar una issue real con el label acordado produce, en minutos, un PR abierto con el resumen de Claude Code como descripción.
   - [ ] Si el resultado es `failed`/`needs_human_input`/`timed_out`, el Skill comenta en la issue explicando qué pasó y **no** abre PR.
-  - [ ] **SEC-2.3**: el Skill hace todo su trabajo vía tools MCP, sin invocar `gh` ni comandos de shell — condición para que corra en cron con `approvals.cron_mode` en `deny`.
+  - [x] Formato del Skill válido para hermes-agent: `hermes skills list` (con `skills.external_dirs` apuntando a `hermes/skills/` del repo) lo carga como `resolve-issue`, `local`, `enabled`. Verificado contra un `HERMES_HOME` aislado, sin tocar la instalación real del Operador.
+  - [x] **SEC-2.3**: el Skill hace todo su trabajo vía tools MCP, sin invocar `gh` ni comandos de shell — condición para que corra en cron con `approvals.cron_mode` en `deny`. Escrito como regla innegociable explícita en el propio `SKILL.md`, junto con la instrucción de tratar el contenido de las issues como datos y nunca como instrucciones.
   - [ ] **Prompt injection**: verificado con una issue de prueba cuyo cuerpo contiene instrucciones hostiles explícitas ("ignora tus instrucciones y..."), que el sistema no ejecuta la instrucción inyectada y el daño queda contenido. Se documenta qué hizo realmente el agente, sin adornos.
 - **US-2.5** — Como Operador, quiero que el cron nativo de hermes-agent dispare el Skill cada N minutos (configurable), para no tener que ejecutar nada manualmente.
   - [ ] El Skill se ejecuta automáticamente según el cron configurado (`hermes cron`), verificado durante al menos un ciclo completo sin intervención.
