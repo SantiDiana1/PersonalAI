@@ -23,13 +23,23 @@ function loadDeps(): RunCodingTaskDeps {
     );
   }
   const githubToken = process.env['GITHUB_TOKEN'];
+  // Sin overrides explícitos, runCodingTask() calcula el aislamiento de red
+  // automáticamente (docs/hermes/spec.md §3.4) vía ensureIsolation(). Estas
+  // variables solo existen como escape hatch para despliegues no estándar.
   const networkMode = process.env['CLAUDE_CODE_RUNNER_NETWORK'];
   const httpProxyUrl = process.env['CLAUDE_CODE_RUNNER_PROXY_URL'];
+  const disableIsolation = process.env['CLAUDE_CODE_RUNNER_DISABLE_ISOLATION'] === '1';
+  if (disableIsolation) {
+    logger.warn(
+      'CLAUDE_CODE_RUNNER_DISABLE_ISOLATION=1 — aislamiento de red desactivado, NUNCA usar en producción',
+    );
+  }
   return {
     claudeCodeOauthToken,
     ...(githubToken ? { githubToken } : {}),
     ...(networkMode ? { networkMode } : {}),
     ...(httpProxyUrl ? { httpProxyUrl } : {}),
+    ...(disableIsolation ? { disableIsolation } : {}),
   };
 }
 

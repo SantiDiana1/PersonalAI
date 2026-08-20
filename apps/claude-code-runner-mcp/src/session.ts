@@ -1,5 +1,6 @@
 import Docker from 'dockerode';
 import { RUNNER_IMAGE } from './docker/runContainer.js';
+import type { IsolationSetup } from './docker/network.js';
 import { logger } from './logger.js';
 
 export type SessionCheckResult =
@@ -54,18 +55,25 @@ export function classifySessionCheck(exitCode: number, logs: string): SessionChe
  * Code instalado fuera de Docker y para reusar exactamente el mismo camino
  * (imagen, red) que usará la tarea real.
  */
-export async function checkSessionValid(claudeCodeOauthToken: string): Promise<SessionCheckResult> {
+export async function checkSessionValid(
+  claudeCodeOauthToken: string,
+  isolation: Partial<IsolationSetup> = {},
+): Promise<SessionCheckResult> {
   const docker = new Docker();
+  const env = [`CLAUDE_CODE_OAUTH_TOKEN=${claudeCodeOauthToken}`];
+  if (isolation.httpProxyUrl) {
+    env.push(`HTTP_PROXY=${isolation.httpProxyUrl}`, `HTTPS_PROXY=${isolation.httpProxyUrl}`);
+  }
   const container = await docker.createContainer({
     Image: RUNNER_IMAGE,
     Entrypoint: ['claude'],
     Cmd: ['-p', 'Reply with exactly the single word: OK', '--output-format', 'text'],
-    Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeCodeOauthToken}`],
+    Env: env,
     User:
       typeof process.getuid === 'function'
         ? `${process.getuid()}:${process.getgid?.() ?? 0}`
         : undefined,
-    HostConfig: { AutoRemove: false },
+    HostConfig: { AutoRemove: false, NetworkMode: isolation.networkMode },
   });
 
   try {

@@ -6,6 +6,7 @@ import { finishTaskRun, insertTaskRun } from './db.js';
 import { cleanupClone, shallowClone } from './git.js';
 import { logger } from './logger.js';
 import { runTaskContainer } from './docker/runContainer.js';
+import { ensureIsolation, type IsolationSetup } from './docker/network.js';
 import { buildPrompt } from './prompt.js';
 import { checkSessionValid } from './session.js';
 import type { RunCodingTaskInput, RunCodingTaskOutput } from './types.js';
@@ -17,11 +18,29 @@ const DEFAULT_TIMEOUT_SECONDS = 1800;
 export interface RunCodingTaskDeps {
   githubToken?: string;
   claudeCodeOauthToken: string;
-  /** Ver docs/hermes/spec.md §3.4. Sin valor, se usa la red por defecto de Docker (solo pensado para desarrollo/tests locales). */
+  /** Ver docs/hermes/spec.md §3.4. Sin valor, se calcula automáticamente con `ensureIsolation()` (red interna + proxy allowlist). */
   networkMode?: string;
   httpProxyUrl?: string;
+  /** SOLO para desarrollo/tests locales: desactiva el aislamiento de red y usa la red por defecto de Docker. Nunca en producción. */
+  disableIsolation?: boolean;
   /** Prefijo de clonado, sobreescribible en tests para apuntar a un repo local en vez de github.com. */
   gitBaseUrl?: string;
+}
+
+async function resolveIsolation(deps: RunCodingTaskDeps): Promise<Partial<IsolationSetup>> {
+  if (deps.networkMode !== undefined || deps.httpProxyUrl !== undefined) {
+    return {
+      ...(deps.networkMode !== undefined ? { networkMode: deps.networkMode } : {}),
+      ...(deps.httpProxyUrl !== undefined ? { httpProxyUrl: deps.httpProxyUrl } : {}),
+    };
+  }
+  if (deps.disableIsolation) {
+    logger.warn(
+      'aislamiento de red desactivado (disableIsolation) — solo válido en desarrollo/tests',
+    );
+    return {};
+  }
+  return ensureIsolation();
 }
 
 function slugify(title: string): string {
@@ -49,10 +68,12 @@ export async function runCodingTask(
     ...(input.brainContext !== undefined ? { brainContext: input.brainContext } : {}),
   });
 
+  const isolation = await resolveIsolation(deps);
+
   // Paso 1 del flujo (docs/hermes/spec.md §3.2): comprobar la sesión ANTES
   // de clonar o lanzar el contenedor de la tarea. Si no es válida, no se
   // llega a hacer `docker run` para la tarea real.
-  const sessionCheck = await checkSessionValid(deps.claudeCodeOauthToken);
+  const sessionCheck = await checkSessionValid(deps.claudeCodeOauthToken, isolation);
   if (!sessionCheck.valid) {
     const output: RunCodingTaskOutput = {
       status: 'needs_human_input',
@@ -88,8 +109,7 @@ export async function runCodingTask(
       ...(deps.githubToken !== undefined ? { githubToken: deps.githubToken } : {}),
       taskBranchName,
       timeoutSeconds,
-      ...(deps.networkMode !== undefined ? { networkMode: deps.networkMode } : {}),
-      ...(deps.httpProxyUrl !== undefined ? { httpProxyUrl: deps.httpProxyUrl } : {}),
+      ...isolation,
     });
 
     if (containerResult.timedOut) {
