@@ -51,10 +51,10 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 - **US-0.3** — Como Operador, quiero instalar hermes-agent localmente y explorar su configuración, formato de skills (`skills/`, `optional-skills/`) y mecanismo de registro de MCP servers, para diseñar con datos reales el detalle fino de las tools de la Fase 2 y 3.
   - [ ] hermes-agent corre localmente en modo CLI (`hermes`) tras el instalador oficial.
   - [ ] Documentado (nota interna, no hace falta un `.md` de portfolio) el formato exacto de un skill y de `hermes mcp add`.
-- **US-0.4** — Como Operador, quiero generar la sesión persistente `hermes-claude-auth` (vía `claude setup-token` en el host) y verificar que es válida, para que tanto hermes-agent como `claude-code-runner-mcp` puedan heredarla más adelante sin gestionar API keys de Anthropic.
-  - [ ] Volumen Docker `hermes-claude-auth` creado y poblado con una sesión válida.
-  - [ ] Verificado manualmente (`claude /status` o equivalente) que la sesión es utilizable desde un contenedor que la monte read-only.
-  - [ ] Leído y entendido [hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar) (riesgo de ToS) antes de continuar — es una decisión consciente del Operador, no algo que se ejecuta "por defecto".
+- **US-0.4** — Como Operador, quiero generar el secreto persistente `hermes-claude-auth` (token de larga duración vía `claude setup-token` en el host) y verificar que es válido, para que tanto hermes-agent como `claude-code-runner-mcp` puedan heredarlo más adelante sin gestionar API keys de Anthropic.
+  - [x] Secreto `hermes-claude-auth` generado (`claude setup-token`) y guardado como `CLAUDE_CODE_OAUTH_TOKEN` en `.env` fuera de git. **Nota**: el diseño original de esta historia asumía un volumen Docker con archivos de sesión montado read-only; verificado en la práctica que `claude setup-token` no persiste ningún archivo — imprime un token que se inyecta como variable de entorno. Corregido en [hermes/spec.md §0.3](hermes/spec.md#03-corrección-de-diseño--hermes-claude-auth-es-un-token-no-un-volumen-de-archivos).
+  - [x] Verificado que la sesión es utilizable: `docker run --env-file .env ... claude -p "..."` responde correctamente, sin exponer el token en ningún log.
+  - [x] Leído y entendido [hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar) (riesgo de ToS) antes de continuar — confirmado explícitamente por el Operador antes de generar el token.
 
 ### Tareas técnicas
 

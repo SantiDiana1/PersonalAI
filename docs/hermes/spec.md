@@ -22,13 +22,14 @@ Dado esto, **nuestro trabajo no es reimplementar nada de lo anterior**. Es const
 
 Todo lo demás (leer GitHub Issues, leer Notion, leer Jira) se resuelve registrando servidores MCP **de terceros ya existentes** para esas plataformas — no se escriben conectores propios.
 
-### 0.1 Autenticación: `claude -p` para todo, vía suscripción Pro
+### 0.1 Autenticación: token OAuth de larga duración para todo, vía suscripción Pro
 
-**Decisión de este proyecto**: tanto el propio hermes-agent (para su agent loop / chat) como los contenedores de `claude-code-runner-mcp` (para resolver issues) se autentican **exclusivamente con la sesión OAuth de la suscripción Pro del operador**, nunca con `ANTHROPIC_API_KEY`. En la práctica esto significa:
+**Decisión de este proyecto**: tanto el propio hermes-agent (para su agent loop / chat) como los contenedores de `claude-code-runner-mcp` (para resolver issues) se autentican **exclusivamente con un token OAuth de larga duración de la suscripción Pro del operador**, nunca con `ANTHROPIC_API_KEY`. En la práctica esto significa:
 
-- **hermes-agent** no llama al Agent SDK con una API key convencional. En su lugar, su backend de modelo Anthropic se configura para invocar el **binario `claude` como subproceso** (`claude -p`), igual que hace `claude-code-runner-mcp` para las tareas de código. Si hermes-agent no soporta esto de fábrica, se adapta con un wrapper mínimo (mismo patrón que usan forks de NanoClaw que migraron de Agent SDK a CLI real — ver §0.2).
-- **`claude-code-runner-mcp`** sigue el diseño ya establecido: contenedores efímeros que montan un volumen persistente con la sesión autenticada (§3.2).
-- Una única sesión OAuth (`hermes-claude-auth`), compartida por ambos componentes.
+- El token se genera **una única vez** en el host con `claude setup-token` (login interactivo, ver §0.3), que **imprime por stdout** un token de larga duración (`sk-ant-oat01-...`) — no crea ni deja ningún archivo de sesión reutilizable. Ese token se guarda como secreto único, `hermes-claude-auth` (§0.3), inyectado como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN`.
+- **hermes-agent** no necesita ningún wrapper propio: soporta de fábrica el proveedor `anthropic` (alias `claude-code`) autenticándose vía `CLAUDE_CODE_OAUTH_TOKEN` (o, alternativamente, detectando `~/.claude/.credentials.json` si existiera de un login interactivo completo — no es el caso aquí). Confirmado explorando su código real (`agent/anthropic_adapter.py`, `hermes_cli/auth.py`) — ver `docs/hermes/exploration-notes.md` §4 para el detalle. No se construye ningún wrapper.
+- **`claude-code-runner-mcp`** inyecta el mismo `CLAUDE_CODE_OAUTH_TOKEN` como variable de entorno en cada contenedor efímero, y ejecuta `claude -p` de forma no interactiva (§3.2) — el CLI de Claude Code soporta esta variable nativamente para uso headless, es su mecanismo documentado para CI/entornos sin navegador.
+- Un único secreto (`hermes-claude-auth`, el valor del token), compartido por ambos componentes vía sus respectivos `.env`/secret store — **no** es un volumen Docker con archivos de sesión (ver §0.3 para la corrección respecto al diseño original de este spec).
 
 ### 0.2 Nota de riesgo — léela antes de desplegar
 
@@ -38,7 +39,18 @@ Esto **viola explícitamente los Términos de Servicio de consumidor de Anthropi
 - **Sí hay riesgo contractual**: si Anthropic lo detecta, la consecuencia habitual es suspensión de la cuenta — no solo del uso automatizado, sino de tu cuenta Pro entera, incluyendo tu uso normal de Claude Code para tu trabajo diario.
 - **Precedente**: el propio proyecto NanoClaw tiene un issue abierto (#1224) discutiendo esto tras la aclaración de ToS de febrero 2026; la comunidad lo trata como "riesgo asumido por el usuario", no como algo resuelto o sancionado por Anthropic.
 - Este proyecto se hace con ese riesgo **consciente y aceptado** por el operador, como experimento personal de bajo volumen — no como base para un despliegue de cara a terceros ni como pieza de portfolio profesional sin matizar este punto.
-- Mitigación parcial: mantener el volumen `hermes-claude-auth` como único punto de fallo — si Anthropic revoca la sesión, se reautentica a mano (§3.3) y punto; no se automatiza la reautenticación para no agravar la situación con extracción de tokens adicional.
+- Mitigación parcial: mantener el secreto `hermes-claude-auth` (el token) como único punto de fallo — si Anthropic revoca la sesión, se reautentica a mano (§3.3) y punto; no se automatiza la reautenticación para no agravar la situación con extracción de tokens adicional.
+
+### 0.3 Corrección de diseño — `hermes-claude-auth` es un token, no un volumen de archivos
+
+**Verificado en la práctica al ejecutar US-0.4 (Fase 0)**: el diseño original de este documento asumía que `claude setup-token` genera un archivo de sesión persistente (tipo `~/.claude/.credentials.json`) que se podía montar como volumen Docker read-only y compartir entre contenedores. Esto **no es así**:
+
+- `claude setup-token` (`Usage: claude setup-token [options]` — _"Set up a long-lived authentication token"_) **imprime el token por stdout** y no persiste ningún archivo de sesión reutilizable en `~/.claude/`. Confirmado montando un volumen Docker en el `$HOME` de un contenedor efímero, ejecutando `claude setup-token` con login interactivo completo, y verificando después que no existe `~/.claude/.credentials.json` ni ningún token real en `~/.claude.json` (solo metadata de arranque) — el volumen quedaba vacío de credenciales tras el login.
+- El mecanismo real y documentado por Anthropic para este caso (headless/CI) es: capturar el token impreso y exportarlo como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN` — que tanto `claude -p` (el CLI) como hermes-agent (`hermes_cli/auth.py: api_key_env_vars=(...,"CLAUDE_CODE_OAUTH_TOKEN")`) soportan nativamente.
+
+**Diseño corregido**: `hermes-claude-auth` es el **valor del token** (`sk-ant-oat01-...`), generado una vez con `claude setup-token`, guardado como secreto (`.env` fuera de git en local/dev; el mecanismo de secretos del VPS en producción — nunca en el repo ni horneado en una imagen), e inyectado como `CLAUDE_CODE_OAUTH_TOKEN` tanto en el proceso de hermes-agent como en cada contenedor efímero de `claude-code-runner-mcp`. Todas las referencias de este documento a "volumen `hermes-claude-auth` montado read-only en `/root/.claude`" deben leerse como "variable de entorno `CLAUDE_CODE_OAUTH_TOKEN` inyectada desde el secreto `hermes-claude-auth`" — el resto del razonamiento (sesión única compartida, sin API key, riesgo de ToS de §0.2, reautenticación manual) no cambia.
+
+Verificado extremo a extremo (US-0.4): `docker run --env-file .env ... claude -p "..."` responde correctamente usando únicamente `CLAUDE_CODE_OAUTH_TOKEN`, sin exponer el valor del token en ningún log.
 
 ## 1. Objetivos
 
@@ -70,10 +82,11 @@ Expone una única tool principal:
 // tool: run_coding_task
 //
 // Auth: el contenedor NO recibe ninguna credencial de Anthropic nueva.
-// Hereda la sesión de Claude Code del operador vía el volumen persistente
-// hermes-claude-auth (montado read-only en /root/.claude), generado una
-// única vez en el host con `claude setup-token`. Es la MISMA sesión que
-// usa hermes-agent para su propio chat (ver spec §0.1). Ver §3.2 y §3.3.
+// Hereda la sesión de Claude Code del operador vía el secreto hermes-claude-auth
+// (token de larga duración, inyectado como variable de entorno
+// CLAUDE_CODE_OAUTH_TOKEN), generado una única vez en el host con
+// `claude setup-token`. Es la MISMA sesión que usa hermes-agent para su
+// propio chat (ver spec §0.1/§0.3). Ver §3.2 y §3.3.
 interface RunCodingTaskInput {
   repo: string; // owner/repo
   baseBranch?: string; // por defecto la rama por defecto del repo
@@ -96,14 +109,14 @@ interface RunCodingTaskOutput {
 
 ### 3.2 Qué hace internamente
 
-1. Comprueba que la sesión de Claude Code del volumen `hermes-claude-auth` sigue siendo válida (ver 3.3). Si no lo es, devuelve `status: 'needs_human_input'` inmediatamente, sin lanzar contenedor.
+1. Comprueba que el token de la sesión de Claude Code (`hermes-claude-auth`) sigue siendo válido (ver 3.3). Si no lo es, devuelve `status: 'needs_human_input'` inmediatamente, sin lanzar contenedor.
 2. Clona (shallow) el repo indicado en un volumen efímero.
 3. Genera un `prompt.md` con: título + descripción de la tarea, `brainContext` si se proporcionó, e instrucciones de estilo/convenciones básicas del repo.
 4. Lanza un contenedor Docker (`docker run`, vía `dockerode`) a partir de una imagen `claude-code-runner-image` (Node.js + git + Claude Code CLI instalado, sin credenciales horneadas).
-5. Monta el volumen con el repo + `prompt.md`, monta **read-only** el volumen persistente `hermes-claude-auth` en `/root/.claude` (hereda la sesión autenticada de Claude Code del operador), e inyecta como variable de entorno únicamente el token de GitHub de vida corta scoped al repo concreto.
+5. Monta el volumen con el repo + `prompt.md`, e inyecta como variables de entorno: `CLAUDE_CODE_OAUTH_TOKEN` (el secreto `hermes-claude-auth`, la sesión autenticada de Claude Code del operador) y el token de GitHub de vida corta scoped al repo concreto.
 6. Ejecuta `claude -p` de forma no interactiva contra el prompt, con timeout.
 7. Al terminar (o al hacer timeout), recoge del contenedor: los commits generados y un `result.json` que Claude Code (o un wrapper alrededor) escribe con resumen y estado.
-8. Hace `docker rm -f` del contenedor — siempre, en cualquier desenlace. El volumen `hermes-claude-auth` no se toca ni se destruye; es compartido entre ejecuciones, incluidas las del propio hermes-agent.
+8. Hace `docker rm -f` del contenedor — siempre, en cualquier desenlace. El secreto `hermes-claude-auth` no se toca ni se destruye; es compartido entre ejecuciones, incluidas las del propio hermes-agent.
 9. Empuja la rama (si hay cambios) y devuelve el `RunCodingTaskOutput` como respuesta de la tool MCP. Abrir el PR en sí **no** lo hace esta tool — eso lo hace el Skill llamando al GitHub MCP, para no duplicar lógica de GitHub en dos sitios.
 
 ### 3.3 Limitación conocida: expiración o revocación de sesión
@@ -121,8 +134,8 @@ El token de sesión OAuth de Claude Code caduca periódicamente (del orden de ho
 
 - Un contenedor efímero por tarea, destruido al terminar o al hacer timeout — nunca quedan contenedores huérfanos.
 - El contenedor **no tiene acceso al Docker socket** (no puede lanzar más contenedores) y su red está restringida a una allowlist (`api.anthropic.com`, `github.com` — solo lo estrictamente necesario para esa tarea; sin acceso libre a Internet).
-- Credenciales de vida corta con scope mínimo para GitHub (token limitado al repo de la tarea, nunca un token global de cuenta). La sesión de Claude Code, al ser compartida vía el volumen `hermes-claude-auth`, es la única credencial de larga duración presente en el sistema — se monta **read-only** precisamente para que ningún contenedor pueda modificarla o exfiltrarla más allá de su uso normal por el CLI.
-- Sin acceso al filesystem del host más allá del volumen efímero de esa tarea y el volumen de auth (read-only).
+- Credenciales de vida corta con scope mínimo para GitHub (token limitado al repo de la tarea, nunca un token global de cuenta). El token de Claude Code, al ser compartido vía el secreto `hermes-claude-auth`, es la única credencial de larga duración presente en el sistema — se inyecta únicamente como variable de entorno del proceso `claude` dentro del contenedor, nunca se escribe a disco ni queda accesible al resto del sistema de archivos del contenedor.
+- Sin acceso al filesystem del host más allá del volumen efímero de esa tarea (el secreto de auth no es un volumen — ver §0.3).
 - `claude-code-runner-mcp` es el **único** componente del sistema con acceso al socket de Docker del host — ni hermes-agent, ni brain-mcp lo necesitan.
 
 Esta es la parte de seguridad más sensible del proyecto: un agente que ejecuta código arbitrario delegado por otro agente es, por definición, una superficie de ataque. Especial cuidado con **prompt injection** desde el cuerpo de issues de terceros (ver sección 6).
@@ -152,9 +165,9 @@ El **cron nativo de hermes-agent** (`hermes cron`) dispara este skill cada N min
 
 ## 6. Seguridad — checklist específico (OWASP-relevante)
 
-- **Prompt injection desde issues/tickets externos**: el cuerpo de una issue es input no confiable — puede contener instrucciones dirigidas al agente ("ignora tus instrucciones y..."). El blast radius está limitado por el aislamiento de `claude-code-runner-mcp` (sección 3.4): aunque el prompt esté comprometido, el contenedor no tiene red libre, no puede modificar la sesión de auth (montada read-only) ni acceso a más recursos que los de esa tarea concreta.
+- **Prompt injection desde issues/tickets externos**: el cuerpo de una issue es input no confiable — puede contener instrucciones dirigidas al agente ("ignora tus instrucciones y..."). El blast radius está limitado por el aislamiento de `claude-code-runner-mcp` (sección 3.4): aunque el prompt esté comprometido, el contenedor no tiene red libre, no puede leer el secreto de auth desde disco (solo existe como variable de entorno del proceso `claude`) ni acceso a más recursos que los de esa tarea concreta.
 - **Aprobación de comandos de hermes-agent**: revisar y configurar el modo de aprobación de comandos que trae hermes-agent (mencionado en su doc de seguridad) para las acciones que el propio hermes-agent ejecuta fuera del contenedor de Claude Code (p. ej. llamadas MCP potencialmente destructivas).
-- **Gestión de secretos**: tokens de GitHub/Notion/Jira en un `.env` fuera de git (o secret manager si el VPS lo soporta) — nunca en el repo ni horneados en ninguna imagen Docker. La sesión de Claude Code vive exclusivamente en el volumen `hermes-claude-auth`, montado read-only, y nunca se copia a la imagen ni a variables de entorno.
+- **Gestión de secretos**: tokens de GitHub/Notion/Jira en un `.env` fuera de git (o secret manager si el VPS lo soporta) — nunca en el repo ni horneados en ninguna imagen Docker. El token de Claude Code (`hermes-claude-auth`) vive exclusivamente en `.env`/secret store fuera de git, inyectado como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN`, y nunca se copia a la imagen ni se escribe a disco dentro de un contenedor.
 - **Mínimo privilegio**: GitHub App/PAT limitado a los repos explícitamente elegidos, no a toda la cuenta.
 - **Rate limiting**: límite de tareas concurrentes/por hora en `claude-code-runner-mcp`, para evitar que un bucle (p. ej. una issue que se reabre sola) agote la ventana de 5h/semanal de la suscripción Pro o la cuota de GitHub. Especialmente relevante aquí porque **hermes-agent y `claude-code-runner-mcp` comparten la misma cuota** (§0.1) — un pico de tareas de código puede dejar sin ventana disponible al chat, y viceversa.
 - **Riesgo de cuenta (§0.2)**: dado que el uso viola los ToS de consumidor, se recomienda no usar la cuenta Pro personal "de trabajo" (la que se usa para desarrollo profesional diario) para este experimento, si es posible mantener una cuenta separada de bajo coste dedicada solo a Hermes — así una eventual suspensión no afecta al uso profesional. Queda como decisión del operador, no como requisito del spec.
@@ -181,15 +194,15 @@ create table task_runs (
 
 ## 8. Stack técnico
 
-- **hermes-agent**: se despliega tal cual (imagen Docker upstream), con un wrapper mínimo de configuración para que su backend de modelo Anthropic invoque `claude -p` como subproceso en vez de usar el Agent SDK con API key (ver §0.1). Este wrapper es la única modificación no estándar sobre hermes-agent.
+- **hermes-agent**: se despliega tal cual (imagen Docker upstream), sin ninguna modificación de código — su proveedor `anthropic`/`claude-code` ya soporta `CLAUDE_CODE_OAUTH_TOKEN` de fábrica (ver §0.1/§0.3). No hace falta ningún wrapper.
 - **`claude-code-runner-mcp`** y **`brain-mcp`**: TypeScript + Node.js, SDK oficial de MCP (`@modelcontextprotocol/sdk`), `dockerode` para orquestar contenedores.
 - Postgres para el estado operacional del runner (esquema separado del de Brain).
 - `pino` para logging estructurado.
-- Volumen Docker nombrado `hermes-claude-auth` para la sesión persistente de Claude Code (creado y poblado manualmente por el operador antes del primer despliegue, vía `claude setup-token` ejecutado en el host), **compartido entre hermes-agent y `claude-code-runner-mcp`**.
+- Secreto `hermes-claude-auth` (token de larga duración `CLAUDE_CODE_OAUTH_TOKEN`, generado manualmente por el operador antes del primer despliegue vía `claude setup-token` ejecutado en el host, guardado en `.env`/secret store fuera de git), **compartido entre hermes-agent y `claude-code-runner-mcp`** — ver §0.3.
 
 ## 9. Preguntas abiertas
 
-- ¿El wrapper de hermes-agent para invocar `claude -p` en vez del Agent SDK se implementa como fork propio o como capa de proxy delante del backend de modelo configurado en `hermes.config.yaml`? A decidir mirando el código real de hermes-agent al empezar la implementación.
+- ~~¿El wrapper de hermes-agent...?~~ Resuelto en Fase 0 (§0.3): no hace falta wrapper, hermes-agent soporta `CLAUDE_CODE_OAUTH_TOKEN` nativamente.
 - ¿Cómo se comparte la cuota de la ventana de 5h/semanal entre el chat de hermes-agent y las tareas de `claude-code-runner-mcp` sin que una acapare a la otra? Candidato simple para v1: límite duro de tareas de código concurrentes/por hora (ya recogido en §6), revisando manualmente si hace falta ajustar.
 - ¿Se usa `hermes setup --portal` (Nous Portal, todo-en-uno) o BYO keys por integración? Ya no aplica al modelo Anthropic (ahora vía sesión Pro compartida), pero sigue siendo relevante para otros proveedores si en algún momento se quisiera usar un modelo distinto para partes no críticas.
 - ¿Formato exacto del Skill `resolve-issue`? Pendiente de revisar la carpeta `skills/`/`optional-skills/` del repo de hermes-agent al implementar, para seguir su convención exacta (frontmatter, estructura de carpetas).

@@ -119,6 +119,7 @@ Un único VPS Linux (Ubuntu 22.04/24.04) con Docker y Docker Compose:
 - `hermes/docker/docker-compose.yml` levanta: `hermes-agent` (imagen oficial de NousResearch, ver su propio `Dockerfile`/`docker-compose.yml` upstream como base), `brain`, `brain-mcp`, `claude-code-runner-mcp`, `postgres` (con `pgvector`).
 - `hermes-agent` se configura (`hermes/config/hermes.config.yaml` + `hermes mcp add ...`) para registrar los 5 servidores MCP (GitHub, Notion, Jira, brain-mcp, claude-code-runner-mcp).
 - `claude-code-runner-mcp` es el único componente con acceso al socket de Docker del host, para lanzar los contenedores efímeros de Claude Code — ver [hermes/spec.md](hermes/spec.md#aislamiento-de-ejecución) para el detalle de seguridad de esto.
+- La sesión de Claude Code compartida (`hermes-claude-auth`) es un **secreto** (token `CLAUDE_CODE_OAUTH_TOKEN`, `.env`/secret store), no un volumen Docker con archivos de sesión — ver [hermes/spec.md §0.3](hermes/spec.md#03-corrección-de-diseño--hermes-claude-auth-es-un-token-no-un-volumen-de-archivos), corregido durante la Fase 0 al verificarlo en la práctica.
 - El scheduler que dispara periódicamente el Skill `resolve-issue` es el **cron nativo de hermes-agent** (`hermes cron`), no un scheduler propio.
 - Reverse proxy (Caddy o Nginx) delante del gateway de hermes-agent si se quiere hablar con él desde Telegram/Discord fuera del VPS, y delante de la API de Brain si se expone para otros usos.
 

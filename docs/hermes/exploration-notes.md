@@ -95,7 +95,7 @@ Evidencia concreta:
 
 **Riesgo de ToS**: sigue aplicando igual — usar el token OAuth de la sesión Pro fuera del cliente oficial de Claude Code (aquí, vía hermes-agent llamando directamente a la API con headers simulados) es exactamente el patrón que motiva el aviso de §0.2. No cambia la decisión de riesgo, solo cómo se implementa técnicamente (más simple de lo previsto: cero código propio para esta parte).
 
-→ **Reportado al Operador — no se ha tomado ninguna decisión de arquitectura unilateral sobre esto.** Pendiente de confirmación antes de dar por buena la Fase 3 US-3.1 con este diseño en vez del wrapper original.
+→ **Reportado al Operador y confirmado** (ver también hallazgo #2, sección 7): no hace falta wrapper. `docs/hermes/spec.md` §0.1/§0.3/§8/§9 actualizados en consecuencia.
 
 ## 5. Configuración y estado en disco
 
@@ -109,9 +109,20 @@ Evidencia concreta:
 - `hermes cron {list,create,add,edit,pause,resume,run,remove,rm,delete,status,tick}`.
 - `hermes cron status` — comprueba si el scheduler está corriendo. `hermes cron tick` — ejecuta los jobs pendientes una vez y sale (útil para testing sin esperar al intervalo real). Confirma lo asumido en el spec: cron nativo, no hace falta construir uno propio (Fase 3 US-3.4).
 
-## 7. Resumen de conclusiones para las fases siguientes
+## 7. Hallazgo #2 — `claude setup-token` no persiste archivos, imprime un token (US-0.4)
+
+Al ejecutar US-0.4 en la práctica, un segundo hallazgo relacionado con el de la sección 4, esta vez sobre el mecanismo exacto de `claude setup-token`:
+
+- `claude setup-token --help` → _"Set up a **long-lived authentication token**"_. No es un login interactivo que deja una sesión en `~/.claude/`.
+- Probado montando un volumen Docker en el `$HOME` de un contenedor efímero (`-e HOME=/home/node-home -v hermes-claude-auth:/home/node-home`), completando el login OAuth real (navegador + código pegado), y verificando después el contenido del volumen: `~/.claude.json` solo contiene metadata de arranque (`firstStartTime`, `machineID`, `userID`, ...) y `~/.claude/.credentials.json` **no existe**. El token no se persiste en ningún archivo del `$HOME`.
+- El comportamiento real: `claude setup-token` **imprime el token por stdout** (`sk-ant-oat01-...`) para que se capture y se use como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN` — el mecanismo documentado por Anthropic para uso headless/CI, que coincide con lo ya encontrado en la sección 4 (`hermes_cli/auth.py: api_key_env_vars=(...,"CLAUDE_CODE_OAUTH_TOKEN")`).
+- **Corrección aplicada** (confirmada con el Operador, ver conversación): `hermes-claude-auth` pasa de ser "un volumen Docker con `~/.claude/` montado read-only" a ser "un secreto (el valor del token), guardado en `.env` fuera de git, inyectado como `CLAUDE_CODE_OAUTH_TOKEN`". Aplicado a `docs/hermes/spec.md` §0.1/§0.3/§3.1/§3.2/§3.4/§6/§8 y a `docs/roadmap.md` US-0.4.
+- Verificado extremo a extremo: `docker run --rm --env-file .env node:20-slim ... claude -p "Reply with exactly the single word: OK"` → `OK`, sin que el token apareciera en ningún momento en la salida de los comandos.
+- El volumen Docker `hermes-claude-auth` creado inicialmente (vacío, sin credenciales reales) se elimina — ya no forma parte del diseño.
+
+## 8. Resumen de conclusiones para las fases siguientes
 
 - ✅ Formato de skill confirmado — Fase 3 puede implementarse siguiendo la convención real sin sorpresas.
 - ✅ `hermes mcp add` confirmado — registro vía stdio (`--command`/`--args`/`--env`) es la vía natural para nuestros MCP servers propios.
 - ✅ `hermes cron` confirmado — nativo, sin scheduler propio.
-- ⚠️ **Auth (§0.1/§0.2)**: el wrapper descrito en el spec no es necesario — hermes-agent ya soporta la sesión OAuth de Claude Code de forma nativa. Cambia el "cómo" de US-3.1, no el "qué" (sigue siendo una única sesión compartida, sigue el mismo riesgo de ToS). **Pendiente de tu confirmación** antes de dar esto por bueno en el diseño de Fase 3.
+- ✅ **Auth (§0.1/§0.2/§0.3)**: confirmado y ya corregido en el spec. No hace falta wrapper — hermes-agent soporta `CLAUDE_CODE_OAUTH_TOKEN` nativamente. `hermes-claude-auth` es un secreto (token), no un volumen — verificado end-to-end en US-0.4. Mismo riesgo de ToS que antes, solo cambia el "cómo" técnico (más simple de lo previsto).
