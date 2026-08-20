@@ -7,6 +7,7 @@ import { cleanupClone, shallowClone } from './git.js';
 import { logger } from './logger.js';
 import { runTaskContainer } from './docker/runContainer.js';
 import { buildPrompt } from './prompt.js';
+import { checkSessionValid } from './session.js';
 import type { RunCodingTaskInput, RunCodingTaskOutput } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -47,6 +48,19 @@ export async function runCodingTask(
     taskTitle: input.taskTitle,
     ...(input.brainContext !== undefined ? { brainContext: input.brainContext } : {}),
   });
+
+  // Paso 1 del flujo (docs/hermes/spec.md §3.2): comprobar la sesión ANTES
+  // de clonar o lanzar el contenedor de la tarea. Si no es válida, no se
+  // llega a hacer `docker run` para la tarea real.
+  const sessionCheck = await checkSessionValid(deps.claudeCodeOauthToken);
+  if (!sessionCheck.valid) {
+    const output: RunCodingTaskOutput = {
+      status: 'needs_human_input',
+      summary: `Sesión de Claude Code no válida (${sessionCheck.reason}): ${sessionCheck.detail}`,
+    };
+    await finishTaskRun(taskRunId, output.status, output);
+    return output;
+  }
 
   let workspaceDir: string | undefined;
   try {

@@ -54,7 +54,10 @@ export async function runTaskContainer(options: RunContainerOptions): Promise<Ru
     // El bind mount hereda los permisos del propietario del directorio en el
     // host; forzamos el mismo UID/GID dentro del contenedor para que el
     // usuario no-root de la imagen pueda escribir en /workspace.
-    User: typeof process.getuid === 'function' ? `${process.getuid()}:${process.getgid?.() ?? 0}` : undefined,
+    User:
+      typeof process.getuid === 'function'
+        ? `${process.getuid()}:${process.getgid?.() ?? 0}`
+        : undefined,
     HostConfig: {
       Binds: [`${options.workspaceDir}:/workspace`],
       NetworkMode: options.networkMode,
