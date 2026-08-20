@@ -103,6 +103,10 @@ services:
     volumes:
       # SEC-2.1: aquí NO se monta /var/run/docker.sock. Nunca.
       - ${HERMES_HOME:-~/.hermes}:/opt/data
+      # El skill resolve-issue se carga desde el repo (fuente de verdad
+      # versionada) vía `skills.external_dirs`, en vez de copiarlo a
+      # ~/.hermes/skills/ y tener dos copias divergiendo. Solo lectura.
+      - ../skills:/opt/data/skills-repo:ro
     environment:
       HERMES_UID: ${HERMES_UID:-10000}
       HERMES_GID: ${HERMES_GID:-10000}

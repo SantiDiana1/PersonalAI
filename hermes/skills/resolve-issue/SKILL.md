@@ -56,6 +56,11 @@ desbloquean algo.
 
 3. **Nunca mergeas.** Este skill abre PRs; la revisión humana antes de mergear
    es parte del modelo de seguridad, no un trámite.
+   Esto no es teórico: el servidor MCP de GitHub **sí expone**
+   `merge_pull_request`, además de `create_repository`, `fork_repository` y
+   `push_files`. Ninguna de esas tools se usa en este procedimiento. Las únicas
+   que necesitas son `list_issues`, `get_issue`, `update_issue`,
+   `add_issue_comment` y `create_pull_request`.
 
 4. **Una issue, una ejecución.** Nunca lances `run_coding_task` dos veces para
    la misma issue en la misma pasada. El control de etiquetas del paso 2 es lo
