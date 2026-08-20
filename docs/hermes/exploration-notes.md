@@ -10,7 +10,7 @@
 ## 1. Instalación y versión
 
 - Ya instalado en este host: `hermes --version` → `Hermes Agent v0.11.0 (2026.4.23)`.
-- Instalador oficial (para un VPS nuevo, Fase 2): `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` (Linux/macOS/WSL2/Termux). Instala uv, Python 3.11, Node.js, ripgrep, ffmpeg.
+- Instalador oficial (para el servidor local nuevo, Fase 2): `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` (Linux/macOS/WSL2/Termux). Instala uv, Python 3.11, Node.js, ripgrep, ffmpeg.
 - Proyecto real en disco: `~/.hermes/hermes-agent` (checkout de git, no un paquete pip aislado). Estado de runtime del usuario (config, auth, memorias, cron) vive en `~/.hermes/` (fuera del checkout del código).
 - CLI expone muchos más subcomandos que los mencionados en el spec: `chat, model, fallback, gateway, setup, whatsapp, slack, login, logout, auth, status, cron, webhook, hooks, doctor, dump, debug, backup, import, config, pairing, skills, plugins, curator, memory, tools, mcp, sessions, insights, claw, version, update, uninstall, acp, profile, completion, dashboard, logs`.
 
