@@ -13,6 +13,12 @@ No son dos demos aisladas: **Hermes consulta a Brain (vía MCP) antes de actuar*
 
 Este proyecto es principalmente una pieza de **portfolio técnico** (para enseñar a clientes/reclutadores que sé diseñar y construir agentes autónomos y el patrón de integración Hermes ↔ MCP ↔ memoria), aunque también está pensado para **uso personal real** una vez esté operativo: quiero que Hermes me resuelva issues reales de mis propios repos. El foco de las primeras fases es Hermes y su despliegue en VPS; Brain aparece pronto pero deliberadamente pequeño — retomar el "company brain" completo (consolidación real) queda como proyecto propio a futuro, no como parte de este roadmap.
 
+## Requisitos previos
+
+- Node.js 20+
+- pnpm 9
+- Docker
+
 ## Estructura de la documentación (spec-driven development)
 
 Este repo se desarrolla siguiendo un enfoque _spec-first_: antes de escribir código, se definen specs detalladas para que Claude Code (u otro coding agent) tenga contexto suficiente para implementar sin ambigüedad.
