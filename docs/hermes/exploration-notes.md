@@ -10,7 +10,7 @@
 ## 1. Instalación y versión
 
 - Ya instalado en este host: `hermes --version` → `Hermes Agent v0.11.0 (2026.4.23)`.
-- Instalador oficial (para un VPS nuevo, Fase 3): `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` (Linux/macOS/WSL2/Termux). Instala uv, Python 3.11, Node.js, ripgrep, ffmpeg.
+- Instalador oficial (para un VPS nuevo, Fase 2): `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` (Linux/macOS/WSL2/Termux). Instala uv, Python 3.11, Node.js, ripgrep, ffmpeg.
 - Proyecto real en disco: `~/.hermes/hermes-agent` (checkout de git, no un paquete pip aislado). Estado de runtime del usuario (config, auth, memorias, cron) vive en `~/.hermes/` (fuera del checkout del código).
 - CLI expone muchos más subcomandos que los mencionados en el spec: `chat, model, fallback, gateway, setup, whatsapp, slack, login, logout, auth, status, cron, webhook, hooks, doctor, dump, debug, backup, import, config, pairing, skills, plugins, curator, memory, tools, mcp, sessions, insights, claw, version, update, uninstall, acp, profile, completion, dashboard, logs`.
 
@@ -52,7 +52,7 @@ metadata:
 ...
 ```
 
-Confirma lo que el spec asumía: frontmatter YAML (`name`, `description`, `version`, `metadata.hermes.{tags,related_skills}`) + cuerpo markdown con secciones libres (Overview/Prerequisites/Workflow/...). Compatible con agentskills.io. **Conclusión para Fase 3**: `hermes/skills/resolve-issue/SKILL.md` debe seguir exactamente esta convención (carpeta propia, `SKILL.md` con este frontmatter, subcarpetas `templates/`/`references/` opcionales para plantillas de comentarios de PR/issue).
+Confirma lo que el spec asumía: frontmatter YAML (`name`, `description`, `version`, `metadata.hermes.{tags,related_skills}`) + cuerpo markdown con secciones libres (Overview/Prerequisites/Workflow/...). Compatible con agentskills.io. **Conclusión para Fase 2**: `hermes/skills/resolve-issue/SKILL.md` debe seguir exactamente esta convención (carpeta propia, `SKILL.md` con este frontmatter, subcarpetas `templates/`/`references/` opcionales para plantillas de comentarios de PR/issue).
 
 Comandos de gestión: `hermes skills {browse,search,install,inspect,list,check,update,audit,uninstall,reset,publish,snapshot,tap,config}` — instalación desde registries (skills.sh, GitHub, ClawHub), no solo skills locales del checkout.
 
@@ -73,7 +73,7 @@ Add one with:
   hermes mcp add <name> --command <cmd> --args <args...>
 ```
 
-**Conclusión para Fase 3**: el GitHub MCP oficial (`github/github-mcp-server`) y nuestros `brain-mcp`/`claude-code-runner-mcp` se registran vía `hermes mcp add <name> --command ... --args ... --env ...` (stdio, ejecutando el binario/imagen del servidor MCP), no hace falta URL HTTP si los exponemos como proceso stdio. A confirmar el comando exacto por servidor cuando se implementen en Fase 2/3.
+**Conclusión para Fase 2**: el GitHub MCP oficial (`github/github-mcp-server`) y nuestros `brain-mcp`/`claude-code-runner-mcp` se registran vía `hermes mcp add <name> --command ... --args ... --env ...` (stdio, ejecutando el binario/imagen del servidor MCP), no hace falta URL HTTP si los exponemos como proceso stdio. A confirmar el comando exacto por servidor cuando se implementen en Fase 1/2.
 
 ## 4. Hallazgo crítico — autenticación Anthropic (afecta §0.1/§0.2 de hermes/spec.md)
 
@@ -91,7 +91,7 @@ Evidencia concreta:
 
 **Lo que esto significa en la práctica**: hermes-agent, con el proveedor `anthropic` (o el alias `claude-code`) y sin `ANTHROPIC_API_KEY` seteada, detecta y usa automáticamente `~/.claude/.credentials.json` — la misma sesión que genera `claude setup-token` en el host — llamando a la API de Anthropic directamente por HTTP (no spawneando el binario `claude` como subproceso). Es un mecanismo _distinto_ al descrito en el spec (llamada HTTP directa con headers de identidad, en vez de invocar `claude -p`), pero **logra el mismo resultado**: una única sesión Pro compartida, sin API key, sin escribir código propio.
 
-**No se necesita ningún wrapper propio para el chat de hermes-agent.** El único componente que sí necesita invocar el binario `claude` como subproceso real es `claude-code-runner-mcp` (Fase 2) — porque ahí queremos ejecutar la CLI de Claude Code de verdad dentro del contenedor efímero (con sus herramientas de edición de código, no solo llamadas de chat a la API). Ese diseño de `claude-code-runner-mcp` (§3.2 del spec) no cambia.
+**No se necesita ningún wrapper propio para el chat de hermes-agent.** El único componente que sí necesita invocar el binario `claude` como subproceso real es `claude-code-runner-mcp` (Fase 1) — porque ahí queremos ejecutar la CLI de Claude Code de verdad dentro del contenedor efímero (con sus herramientas de edición de código, no solo llamadas de chat a la API). Ese diseño de `claude-code-runner-mcp` (§3.2 del spec) no cambia.
 
 **Riesgo de ToS**: sigue aplicando igual — usar el token OAuth de la sesión Pro fuera del cliente oficial de Claude Code (aquí, vía hermes-agent llamando directamente a la API con headers simulados) es exactamente el patrón que motiva el aviso de §0.2. No cambia la decisión de riesgo, solo cómo se implementa técnicamente (más simple de lo previsto: cero código propio para esta parte).
 
@@ -107,7 +107,7 @@ Evidencia concreta:
 ## 6. Cron
 
 - `hermes cron {list,create,add,edit,pause,resume,run,remove,rm,delete,status,tick}`.
-- `hermes cron status` — comprueba si el scheduler está corriendo. `hermes cron tick` — ejecuta los jobs pendientes una vez y sale (útil para testing sin esperar al intervalo real). Confirma lo asumido en el spec: cron nativo, no hace falta construir uno propio (Fase 3 US-3.4).
+- `hermes cron status` — comprueba si el scheduler está corriendo. `hermes cron tick` — ejecuta los jobs pendientes una vez y sale (útil para testing sin esperar al intervalo real). Confirma lo asumido en el spec: cron nativo, no hace falta construir uno propio (Fase 2 US-2.4).
 
 ## 7. Hallazgo #2 — `claude setup-token` no persiste archivos, imprime un token (US-0.4)
 
@@ -122,7 +122,7 @@ Al ejecutar US-0.4 en la práctica, un segundo hallazgo relacionado con el de la
 
 ## 8. Resumen de conclusiones para las fases siguientes
 
-- ✅ Formato de skill confirmado — Fase 3 puede implementarse siguiendo la convención real sin sorpresas.
+- ✅ Formato de skill confirmado — Fase 2 puede implementarse siguiendo la convención real sin sorpresas.
 - ✅ `hermes mcp add` confirmado — registro vía stdio (`--command`/`--args`/`--env`) es la vía natural para nuestros MCP servers propios.
 - ✅ `hermes cron` confirmado — nativo, sin scheduler propio.
 - ✅ **Auth (§0.1/§0.2/§0.3)**: confirmado y ya corregido en el spec. No hace falta wrapper — hermes-agent soporta `CLAUDE_CODE_OAUTH_TOKEN` nativamente. `hermes-claude-auth` es un secreto (token), no un volumen — verificado end-to-end en US-0.4. Mismo riesgo de ToS que antes, solo cambia el "cómo" técnico (más simple de lo previsto).

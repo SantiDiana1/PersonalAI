@@ -29,10 +29,9 @@ flowchart LR
             CCMCP["claude-code-runner-mcp<br/>(nuestro)"]
         end
 
-        subgraph BrainSvc["Brain (nuestro)"]
+        subgraph BrainSvc["Brain (nuestro, deliberadamente básico — ver personal-brain/spec.md §0)"]
             ING[Ingestion]
-            CON[Consolidation]
-            RET[Retrieval API]
+            RET["Retrieval API<br/>(similarity search, sin consolidation)"]
             DB[(Postgres + pgvector)]
         end
 
@@ -43,7 +42,7 @@ flowchart LR
     NO --> ING
     JI --> ING
     NT --> ING
-    ING --> CON --> DB
+    ING --> DB
     DB --> RET
     RET <--> BMCP
 
@@ -62,12 +61,13 @@ flowchart LR
 ```
 personalAI/
   apps/
-    brain/                     # servicio de memoria (Personal Brain): ingestion/consolidation/retrieval/api
+    brain/                     # servicio de memoria (Personal Brain), deliberadamente básico — ver personal-brain/spec.md §0
       src/
         ingestion/
-        consolidation/
-        retrieval/
+        retrieval/               # solo similarity search en v1 — sin entidad/temporal/grafo
         api/
+        # NO existe src/consolidation/ en este proyecto: diseñado en el spec, construcción
+        # pospuesta a trabajo futuro del Operador (personal-brain/spec.md §4.2)
       Dockerfile
     brain-mcp/                 # servidor MCP adaptador — expone la API de Brain como tools MCP
       src/
@@ -100,7 +100,7 @@ Gestión del monorepo con **pnpm workspaces** para `apps/brain`, `apps/brain-mcp
 
 hermes-agent no llama a nada directamente salvo a través de **MCP**. Esto es intencional y además es justo el mecanismo de extensión que el propio proyecto expone ("MCP Integration: Connect any MCP server for extended capabilities"). Dos servidores MCP cubren el contrato que nos interesa para el portfolio:
 
-- **`brain-mcp`** expone `brain_query` (equivalente a lo que antes llamábamos `POST /v1/query`) y `brain_record_observation` (equivalente a `POST /v1/observations`). Ver el contrato completo en [personal-brain/spec.md](personal-brain/spec.md#api-vía-mcp).
+- **`brain-mcp`** expone `brain_query` (envuelve `POST /v1/query`, devuelve fragmentos por similitud — sin observations/mental models en v1) y `brain_record_observation` (envuelve `POST /v1/observations`). Ver el contrato completo en [personal-brain/spec.md](personal-brain/spec.md#52-api-vía-mcp-apps-brain-mcp-lo-que-realmente-consume-hermes).
 - **`claude-code-runner-mcp`** expone `run_coding_task(repo, prompt, context)`, que hace todo el trabajo de aislamiento Docker y devuelve un resultado estructurado (éxito/fallo, diff, resumen). Ver detalle en [hermes/spec.md](hermes/spec.md#3-claude-code-runner-mcp).
 
 GitHub, Notion y Jira se resuelven con servidores MCP **ya existentes** de esas plataformas — no construimos conectores propios para leer/escribir en ellas. Solo escribimos el "pegamento" (el Skill) que decide qué hacer con las tools que esos MCP servers exponen.
@@ -109,7 +109,7 @@ GitHub, Notion y Jira se resuelven con servidores MCP **ya existentes** de esas 
 
 - Demuestra que sé **evaluar cuándo no construir algo desde cero** (usar hermes-agent en vez de reinventar un orquestador de agentes) y dónde sí aporta valor construir código propio (el runner de Claude Code, el Brain).
 - Demuestra diseño de **servidores MCP** como patrón de integración — la pieza de infraestructura de agentes más relevante ahora mismo.
-- Demuestra el patrón **"company brain"** completo (ingestion → consolidation → retrieval → action) en `apps/brain`, consumible no solo por Hermes sino por cualquier cliente MCP.
+- Demuestra el patrón **"company brain"** aplicado con cabeza: `apps/brain` construye de verdad las capas de ingestion, retrieval y action (consumible no solo por Hermes sino por cualquier cliente MCP), y documenta con precisión la capa de consolidation como trabajo futuro en vez de fingir tenerla — ver [personal-brain/spec.md §0](personal-brain/spec.md#0-alcance-de-este-proyecto--léelo-antes-que-nada).
 - Cada pieza (`brain`, `brain-mcp`, `claude-code-runner-mcp`) se puede **evaluar y presentar por separado** o como sistema integrado.
 
 ## Despliegue
