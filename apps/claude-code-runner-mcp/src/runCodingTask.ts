@@ -8,6 +8,7 @@ import { logger } from './logger.js';
 import { runTaskContainer } from './docker/runContainer.js';
 import { ensureIsolation, type IsolationSetup } from './docker/network.js';
 import { buildPrompt } from './prompt.js';
+import { defaultRateLimiter, type RateLimiter } from './rateLimit.js';
 import { checkSessionValid } from './session.js';
 import type { RunCodingTaskInput, RunCodingTaskOutput } from './types.js';
 
@@ -25,6 +26,8 @@ export interface RunCodingTaskDeps {
   disableIsolation?: boolean;
   /** Prefijo de clonado, sobreescribible en tests para apuntar a un repo local en vez de github.com. */
   gitBaseUrl?: string;
+  /** Ver docs/hermes/spec.md §6. Por defecto, el limitador compartido del proceso (defaultRateLimiter). */
+  rateLimiter?: RateLimiter;
 }
 
 async function resolveIsolation(deps: RunCodingTaskDeps): Promise<Partial<IsolationSetup>> {
@@ -89,6 +92,7 @@ export async function runCodingTask(
       repo: input.repo,
       ...(input.baseBranch !== undefined ? { baseBranch: input.baseBranch } : {}),
       ...(deps.gitBaseUrl !== undefined ? { baseUrl: deps.gitBaseUrl } : {}),
+      ...(deps.githubToken !== undefined ? { githubToken: deps.githubToken } : {}),
     });
 
     const { stdout: baseShaRaw } = await execFileAsync('git', [
@@ -102,15 +106,34 @@ export async function runCodingTask(
     await writeFile(join(workspaceDir, 'prompt.md'), buildPrompt(input));
 
     const taskBranchName = `hermes/${Date.now()}-${slugify(input.taskTitle)}`;
+    const rateLimiter = deps.rateLimiter ?? defaultRateLimiter;
 
-    const containerResult = await runTaskContainer({
-      workspaceDir,
-      claudeCodeOauthToken: deps.claudeCodeOauthToken,
-      ...(deps.githubToken !== undefined ? { githubToken: deps.githubToken } : {}),
-      taskBranchName,
-      timeoutSeconds,
-      ...isolation,
-    });
+    // Ver docs/hermes/spec.md §6: límite de tareas concurrentes/por hora,
+    // para no agotar la ventana de 5h/semanal compartida con hermes-agent.
+    if (!rateLimiter.tryAcquire()) {
+      const output: RunCodingTaskOutput = {
+        status: 'needs_human_input',
+        summary:
+          'Límite de tareas concurrentes/por hora alcanzado — la tarea se rechaza en vez de lanzar ' +
+          'un contenedor adicional. Reintenta más tarde o revisa CLAUDE_CODE_RUNNER_MAX_CONCURRENT/CLAUDE_CODE_RUNNER_MAX_PER_HOUR.',
+      };
+      await finishTaskRun(taskRunId, output.status, output);
+      return output;
+    }
+
+    let containerResult;
+    try {
+      containerResult = await runTaskContainer({
+        workspaceDir,
+        claudeCodeOauthToken: deps.claudeCodeOauthToken,
+        ...(deps.githubToken !== undefined ? { githubToken: deps.githubToken } : {}),
+        taskBranchName,
+        timeoutSeconds,
+        ...isolation,
+      });
+    } finally {
+      rateLimiter.release();
+    }
 
     if (containerResult.timedOut) {
       const output: RunCodingTaskOutput = {
@@ -202,7 +225,17 @@ async function pushBranch(
   githubToken: string,
 ): Promise<void> {
   const url = `https://x-access-token:${githubToken}@github.com/${repo}.git`;
-  await execFileAsync('git', ['-C', dir, 'push', url, `HEAD:${branch}`]);
+  try {
+    await execFileAsync('git', ['-C', dir, 'push', url, `HEAD:${branch}`]);
+  } catch (err) {
+    // Ver git.ts:redactSecrets — el mismo riesgo aplica aquí: el error de
+    // execFile puede incluir la URL con el token embebido.
+    const message = (err instanceof Error ? err.message : String(err)).replace(
+      /x-access-token:[^@]+@/g,
+      'x-access-token:***@',
+    );
+    throw new Error(`git push falló: ${message}`);
+  }
 }
 
 export { slugify };

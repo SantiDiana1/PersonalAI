@@ -94,7 +94,7 @@ Monorepo instalable con CI verde, Postgres+pgvector disponible en local, hermes-
   - [x] Verificado manualmente que desde dentro del contenedor no se puede alcanzar el Docker socket ni hacer peticiones a dominios fuera de la allowlist (`api.anthropic.com`, `github.com`). Implementado con dos redes Docker (`claude-code-runner-internal`, `internal: true`, sin ruta a Internet + `claude-code-runner-egress`) y un proxy de allowlist (`claude-code-runner-proxy`, tinyproxy + `filter.allow`), ver `src/docker/network.ts` y `docker/proxy/`. Verificado: (1) `docker run --network claude-code-runner-internal curl https://example.com` sin proxy → `Could not resolve host` (sin ruta directa); (2) `ls /var/run/docker.sock` dentro de `claude-code-runner-image` → `No such file or directory`; (3) vía el proxy, `https://github.com` → `200`, `https://example.com` → `403` (bloqueado por `FilterDefaultDeny`). El aislamiento está activado por defecto en `runCodingTask`/`checkSessionValid` (`ensureIsolation()`), no es opt-in.
   - [x] Las credenciales de GitHub inyectadas están scoped al repo concreto de la tarea (nunca un token de cuenta completa). El `githubToken` se inyecta tal cual lo recibe la tool (nunca se persiste a disco, se redacta del logger — `src/logger.ts`); scoping real es responsabilidad operacional del Operador al generar el PAT fine-grained/GitHub App (ver `docs/hermes/spec.md §6`), no verificable en código sin credenciales reales.
 - **US-1.4** — Como Operador, quiero un límite de tareas concurrentes/por hora configurable, para no agotar la ventana de 5h/semanal de la cuenta Pro compartida con hermes-agent.
-  - [ ] Un intento de superar el límite configurado se rechaza (o se encola) en vez de lanzar un contenedor adicional.
+  - [x] Un intento de superar el límite configurado se rechaza (o se encola) en vez de lanzar un contenedor adicional. `RateLimiter` (`src/rateLimit.ts`, configurable vía `CLAUDE_CODE_RUNNER_MAX_CONCURRENT`/`CLAUDE_CODE_RUNNER_MAX_PER_HOUR`) se consulta justo antes de `runTaskContainer`; si no hay hueco, `run_coding_task` devuelve `needs_human_input` sin lanzar contenedor. Verificado con un test de integración (`src/rateLimit.integration.test.ts`, Docker mockeado) que lanza dos tareas en paralelo con `maxConcurrent: 1`: una se rechaza sin invocar `runTaskContainer` (`toHaveBeenCalledTimes(1)`), y tras liberar el slot una tercera tarea sí se lanza.
 
 ### Tareas técnicas
 
@@ -106,7 +106,11 @@ Monorepo instalable con CI verde, Postgres+pgvector disponible en local, hermes-
 
 ### Definition of Done
 
-Puedo invocar `run_coding_task` manualmente contra un repo real y obtener una rama con cambios generados por Claude Code, con aislamiento verificado y manejo explícito de sesión expirada/revocada. hermes-agent todavía no está en el bucle.
+Puedo invocar `run_coding_task` manualmente contra un repo real y obtener una rama con cambios generados por Claude Code, con aislamiento verificado y manejo explícito de sesión expirada/revocada. hermes-agent todavía no está en el bucle. **Cumplida** — verificado con dos ejecuciones reales (token OAuth y PAT de GitHub reales) contra `SantiDiana1/PersonalAI`:
+
+- Contra `main` (sin `docs/`): `claude` razonó correctamente que la tarea era irrealizable sin salirse de alcance y devolvió `needs_human_input` con una explicación clara, en vez de improvisar — confirma el camino de "tarea ambigua" del prompt.
+- Contra `feat/phase0` (con `docs/roadmap.md`): `status: 'success'`, un único commit (`8c80ceef...`, autor `Hermes (claude-code-runner)`) con exactamente el cambio pedido, rama `hermes/<ts>-e2e-fase-1-...` empujada de verdad al repo privado (confirmado con `git ls-remote` y `git fetch`+`git diff` — solo se tocó la línea pedida, ningún otro archivo).
+- Corrigió dos bugs reales descubiertos por esta prueba: el clon (host-side) no soportaba repos privados (le faltaba el token embebido en la URL), y el PAT inicial del Operador tenía permiso `Contents: Read` en vez de `Read and write`. Ambos arreglados y sus mensajes de error saneados para nunca filtrar el token en logs.
 
 ---
 
