@@ -81,6 +81,8 @@ Monorepo instalable con CI verde, Postgres+pgvector disponible en local, hermes-
 
 **Depende de**: Fase 0 (en particular, `hermes-claude-auth` de US-0.4).
 
+**Estado: completada.**
+
 ### User stories
 
 - **US-1.1** — Como Operador, quiero invocar la tool MCP `run_coding_task(repo, taskTitle, taskDescription, ...)` desde un cliente MCP de prueba, para validar el ciclo completo antes de conectarlo a hermes-agent.
