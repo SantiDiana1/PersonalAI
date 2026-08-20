@@ -1,0 +1,24 @@
+# El contexto de build es la raíz del monorepo (ver
+# apps/claude-code-runner-mcp/Dockerfile). Sin esto, `docker build` enviaría
+# cientos de MB de node_modules y artefactos al demonio en cada build.
+
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+.git
+.github
+
+# Nunca deben entrar en una imagen (SEC-6.2 de docs/security.md).
+.env
+.env.*
+!.env.example
+
+coverage
+**/coverage
+.vscode
+.idea
+*.log

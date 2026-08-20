@@ -166,6 +166,10 @@ Al meter el runner en un contenedor, esto **se rompe en silencio**: el runner pe
 
 **Solución adoptada**: una raíz de workspaces dedicada, montada en el contenedor del runner **en la misma ruta** que tiene en el host (p. ej. `/var/lib/personalai/workspaces` → `/var/lib/personalai/workspaces`). Así toda ruta que el runner calcula es válida también para el demonio. Requiere hacer configurable la raíz de los checkouts (variable `CLAUDE_CODE_RUNNER_WORKSPACE_ROOT`) en vez de usar `os.tmpdir()` a pelo. Esa raíz contiene solo workspaces del proyecto (SEC-4.4).
 
+**Verificado empíricamente (Fase 2, US-2.1)**, ejecutando el mismo escenario en las dos configuraciones desde dentro del contenedor del runner: sin la raíz compartida, el contenedor hermano recibe un `/workspace` **vacío** (confirmando que el fallo es real y silencioso); con la raíz montada en la misma ruta, ve correctamente el contenido del checkout.
+
+**Nota operativa**: como el contenedor del runner corre como root (ver el razonamiento en su `Dockerfile`), los directorios de workspace aparecen en el host propiedad de root. No es un problema de funcionamiento — quien los crea y los borra es el propio runner, que es root dentro de su contenedor — pero conviene saberlo al inspeccionar o limpiar esa raíz a mano desde el host.
+
 ## 4. Servidores MCP de terceros (GitHub, Notion, Jira)
 
 Se usan servidores MCP ya existentes y mantenidos, no conectores propios:
