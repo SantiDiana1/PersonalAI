@@ -62,12 +62,13 @@ async function ensureProxyRunning(docker: Docker): Promise<string> {
   return PROXY_CONTAINER_NAME;
 }
 
-/**
- * Garantiza que existen las redes y el proxy de allowlist, y devuelve las
- * opciones a pasar a `runTaskContainer`/`checkSessionValid` para que el
- * contenedor de tarea quede en la red interna sin salida directa.
- */
-export async function ensureIsolation(): Promise<IsolationSetup> {
+// Las redes y el proxy son estables durante la vida del proceso: una vez
+// creados no hace falta volver a consultar la API de Docker (2x
+// listNetworks + 1x listContainers) en cada tarea. Se memoiza la promesa de
+// configuración; si falla, se limpia para reintentar en la siguiente llamada.
+let isolationSetup: Promise<IsolationSetup> | undefined;
+
+async function setupIsolation(): Promise<IsolationSetup> {
   const docker = new Docker();
   await ensureNetwork(docker, EGRESS_NETWORK, false);
   await ensureNetwork(docker, INTERNAL_NETWORK, true);
@@ -76,4 +77,20 @@ export async function ensureIsolation(): Promise<IsolationSetup> {
     networkMode: INTERNAL_NETWORK,
     httpProxyUrl: `http://${proxyName}:${String(PROXY_PORT)}`,
   };
+}
+
+/**
+ * Garantiza que existen las redes y el proxy de allowlist, y devuelve las
+ * opciones a pasar a `runTaskContainer`/`checkSessionValid` para que el
+ * contenedor de tarea quede en la red interna sin salida directa.
+ *
+ * El resultado se memoiza por proceso (ver `isolationSetup`): solo la
+ * primera llamada consulta/crea las redes y el proxy en Docker.
+ */
+export function ensureIsolation(): Promise<IsolationSetup> {
+  isolationSetup ??= setupIsolation().catch((err: unknown) => {
+    isolationSetup = undefined;
+    throw err;
+  });
+  return isolationSetup;
 }
