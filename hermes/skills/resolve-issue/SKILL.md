@@ -140,12 +140,21 @@ resultado, no la des por perdida ni la relances.
 
 **Si `status === 'success'`:**
 
+Estos tres pasos son **secuenciales, no paralelos**. En concreto, no llames a
+`create_pull_request` y a `add_issue_comment` a la vez: el número del PR no lo
+sabes hasta que la primera llamada responde, y adivinarlo (por ejemplo,
+asumiendo que es `issue + 1`) puede dar un número equivocado — los números de
+issues y PRs comparten la misma secuencia en GitHub, así que ese cálculo no es
+fiable. Comenta **con el número exacto que devuelve la respuesta de
+`create_pull_request`**, nunca uno calculado o supuesto.
+
 1. Abre un PR con la tool del MCP de GitHub (típicamente `create_pull_request`):
    - rama origen: el `branchName` devuelto
    - rama destino: la rama por defecto del repo (o la `baseBranch` usada)
    - título: el título de la issue
    - cuerpo: el `summary` devuelto, más una línea `Closes #<número>`
-2. Comenta en la issue con el enlace al PR.
+2. Con el número de PR que acabas de recibir, comenta en la issue con el
+   enlace al PR.
 3. Sustituye `hermes:in-progress` por `hermes:done`.
 
 **Si `status` es `failed`, `needs_human_input` o `timed_out`:**
