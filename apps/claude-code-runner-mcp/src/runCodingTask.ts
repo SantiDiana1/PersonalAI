@@ -244,7 +244,14 @@ async function pushBranch(
 ): Promise<void> {
   const url = `https://x-access-token:${githubToken}@github.com/${repo}.git`;
   try {
-    await execFileAsync('git', [...GIT_SAFE_DIRECTORY_ARGS, '-C', dir, 'push', url, `HEAD:${branch}`]);
+    await execFileAsync('git', [
+      ...GIT_SAFE_DIRECTORY_ARGS,
+      '-C',
+      dir,
+      'push',
+      url,
+      `HEAD:${branch}`,
+    ]);
   } catch (err) {
     // Ver git.ts:redactSecrets — el mismo riesgo aplica aquí: el error de
     // execFile puede incluir la URL con el token embebido.
