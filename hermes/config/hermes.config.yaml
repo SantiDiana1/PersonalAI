@@ -31,6 +31,15 @@ mcp_servers:
     # CLAUDE_CODE_RUNNER_AUTH_TOKEN del compose.
     headers:
       Authorization: Bearer ${MCP_CLAUDE_CODE_RUNNER_API_KEY}
+    # Debe ser MAYOR que el timeoutSeconds por defecto de run_coding_task
+    # (1800s, ver apps/claude-code-runner-mcp/src/runCodingTask.ts). Sin este
+    # campo, el timeout por defecto del cliente MCP de hermes es mucho más
+    # corto: hermes se rinde y reporta `timed_out` al Operador mientras la
+    # tarea real sigue corriendo en segundo plano y puede acabar en éxito —
+    # discrepancia real, reproducida en Fase 2 (issue de prueba #6): el
+    # runner pusheó una rama con un commit válido después de que hermes ya
+    # hubiera comentado "timed_out" y cerrado el ciclo, dejando la rama sin PR.
+    timeout: 1900
 
   # GitHub. Servidor de terceros ya existente — no escribimos conector propio.
   #
