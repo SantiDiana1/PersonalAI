@@ -20,7 +20,7 @@ La distinción que hace el propio artículo de vectorize es clave para justifica
 - Ser la memoria persistente y consultable que evita que yo (o un agente como Hermes) tengamos que re-derivar contexto que ya existe en algún sitio (una decisión de arquitectura tomada hace 3 meses, una convención de un repo, el motivo de un bug ya resuelto) — **en v1, a nivel de "aquí hay un fragmento de texto relacionado", no de hecho estructurado y reconciliado**.
 - Servir de primer paso hacia, a escala personal, las **4 propiedades** de un company brain real (estado real en este proyecto, no aspiracional):
   1. **Shared** — ✅ construido: una única fuente de verdad (Brain) que consultan tanto yo como cualquier agente (Hermes u otros futuros).
-  2. **Enforceable** — ✅ construido: Hermes (Fase 4) está obligado a consultar a Brain antes de actuar vía el Skill `resolve-issue`.
+  2. **Enforceable** — ✅ construido: Hermes (Fase 5) está obligado a consultar a Brain antes de actuar vía el Skill `resolve-issue`, tanto por GitHub como por Telegram.
   3. **Evolving** — ⚠️ parcial: Brain recibe feedback real de Hermes (`hermes_feedback`) y crece con el uso, pero **no reconcilia ni sintetiza** ese feedback — eso es la parte de consolidación fuera de alcance (§4.2). Se actualiza sola en el sentido de "acumula", no en el sentido de "aprende y resume".
   4. **Agent-readable** — ✅ construido: API estructurada (HTTP + MCP), no solo texto para humanos.
 - Documentar de verdad la capa de **consolidación** (extracción de observations + reconciliación de contradicciones + mental models) como diseño de referencia — es la capa que, según el artículo, diferencia un company brain real de "un vector store con extra pasos". **No se implementa en este proyecto** (ver §0), queda lista para cuando el Operador quiera construirla.
@@ -36,14 +36,14 @@ La distinción que hace el propio artículo de vectorize es clave para justifica
 
 ## 4. Las capas — qué se construye y qué no
 
-### 4.1 Ingestion (`src/ingestion/`) — ✅ se construye en este proyecto (Fase 3)
+### 4.1 Ingestion (`src/ingestion/`) — ✅ se construye en este proyecto (Fase 4)
 
 Fuentes soportadas, por prioridad:
 
-1. **Notas personales** (Markdown — de un vault de Obsidian/Notion export, o archivos sueltos) — vía import manual/CLI en Fase 3, vía sync automático en trabajo futuro.
+1. **Notas personales** (Markdown — de un vault de Obsidian/Notion export, o archivos sueltos) — vía import manual/CLI en Fase 4, vía sync automático en trabajo futuro.
 2. **GitHub** — descripciones de PR, comentarios de review y commits de mis propios repos (fuente canónica para "por qué se hizo X en el código").
-3. **Notion / Jira** — páginas/tickets marcados como fuente de contexto (no todas las tareas, solo documentos de referencia: decisiones, runbooks) — Fase 5.
-4. **Resultados de Hermes** — cada llamada a `brain_record_observation` (vía `brain-mcp`, ver sección 5.2) que hermes-agent hace tras ejecutar una tarea es, en sí mismo, una fuente de ingestion (la más valiosa, porque es feedback directo de una acción real) — Fase 4. En v1 esto se persiste tal cual como `RawEvent` (`source: 'hermes_feedback'`), sin extracción LLM.
+3. **Notion / Jira** — páginas/tickets marcados como fuente de contexto (no todas las tareas, solo documentos de referencia: decisiones, runbooks) — Futurible A (post-v1, ver `docs/roadmap.md`).
+4. **Resultados de Hermes** — cada llamada a `brain_record_observation` (vía `brain-mcp`, ver sección 5.2) que hermes-agent hace tras ejecutar una tarea (por GitHub o por Telegram) es, en sí mismo, una fuente de ingestion (la más valiosa, porque es feedback directo de una acción real) — Fase 5. En v1 esto se persiste tal cual como `RawEvent` (`source: 'hermes_feedback'`), sin extracción LLM.
 
 Filtro de canonicidad (tomado del artículo, sí se construye): cada fuente se etiqueta con una `source_authority` (`canonical` | `supporting`). Un PR description es `canonical`; una nota rápida sin revisar es `supporting`. En v1 este campo se persiste y se puede usar para ordenar/filtrar resultados, pero no hay lógica de reconciliación que lo use activamente (eso es consolidación, fuera de alcance).
 
@@ -98,7 +98,7 @@ interface MentalModel {
 }
 ```
 
-### 4.3 Retrieval (`src/retrieval/`) — parcial: solo semántica se construye en este proyecto (Fase 3)
+### 4.3 Retrieval (`src/retrieval/`) — parcial: solo semántica se construye en este proyecto (Fase 4)
 
 El artículo de referencia recomienda multi-estrategia (single-strategy pierde queries que las otras sí capturan). En este proyecto:
 
@@ -109,7 +109,7 @@ El artículo de referencia recomienda multi-estrategia (single-strategy pierde q
 
 En v1, el resultado de `POST /v1/query` es simplemente los `k` `RawEvent`s más similares por embedding, con su score — sin re-ranking por entidad ni penalización por superseded (no aplica, no hay ese concepto en v1).
 
-### 4.4 Action (`src/api` + `brain-mcp` + consumidores) — ✅ se construye en este proyecto (Fase 3/4)
+### 4.4 Action (`src/api` + `brain-mcp` + consumidores) — ✅ se construye en este proyecto (Fase 4/5)
 
 Brain no actúa por sí mismo — expone la capa de retrieval y recibe feedback. Brain en sí habla HTTP/REST (`apps/brain/src/api`); el consumidor real, [hermes-agent](https://github.com/NousResearch/hermes-agent) (ver [hermes/spec.md](../hermes/spec.md)), no le habla directamente — pasa por **`apps/brain-mcp`**, un servidor MCP fino que traduce tools MCP a llamadas a esta API. Esto es intencional: hermes-agent (y cualquier otro cliente MCP futuro — Claude Desktop, Cursor, etc.) obtiene a Brain como una integración MCP estándar, sin acoplarse a los detalles HTTP internos.
 
@@ -119,7 +119,7 @@ La propiedad "evolving" de action se cumple solo parcialmente en v1: Brain **acu
 
 ### 5.1 API interna (HTTP/REST, `apps/brain/src/api`)
 
-Base: `POST /v1/*`, JSON, autenticado con un token estático simple (Bearer) — solo la llama `brain-mcp` (mismo host/red interna del VPS), no hace falta OAuth para v1.
+Base: `POST /v1/*`, JSON, autenticado con un token estático simple (Bearer) — solo la llama `brain-mcp` (mismo host/red interna del servidor local), no hace falta OAuth para v1.
 
 ### `POST /v1/query`
 
@@ -278,5 +278,5 @@ Aunque v1 es de un único usuario, el spec deja el diseño listo para generaliza
 
 ## 11. Preguntas abiertas
 
-- ¿Notion/Obsidian export como fuente principal de notas, o directamente un vault de Obsidian sincronizado por filesystem? Afecta al conector de ingestion de la Fase 3.
-- ¿Qué proveedor de embeddings se usa por defecto? Recomendado: mismo proveedor que usa Claude Code para minimizar el número de credenciales a gestionar en el VPS.
+- ¿Notion/Obsidian export como fuente principal de notas, o directamente un vault de Obsidian sincronizado por filesystem? Afecta al conector de ingestion de la Fase 4.
+- ¿Qué proveedor de embeddings se usa por defecto? Recomendado: mismo proveedor que usa Claude Code para minimizar el número de credenciales a gestionar en el servidor local.

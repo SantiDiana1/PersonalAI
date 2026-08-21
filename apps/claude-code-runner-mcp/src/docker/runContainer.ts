@@ -2,7 +2,9 @@ import Docker from 'dockerode';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger } from '../logger.js';
+import { resolveTaskUser, taskUserSpec } from '../taskUser.js';
 import type { ContainerResult } from '../types.js';
+import { chownWorkspace } from '../workspace.js';
 
 export const RUNNER_IMAGE =
   process.env['CLAUDE_CODE_RUNNER_IMAGE'] ?? 'claude-code-runner-image:local';
@@ -10,7 +12,6 @@ export const RUNNER_IMAGE =
 export interface RunContainerOptions {
   workspaceDir: string;
   claudeCodeOauthToken: string;
-  githubToken?: string;
   taskBranchName: string;
   timeoutSeconds: number;
   /** Ver docs/hermes/spec.md §3.4 — red restringida a una allowlist. Sin valor -> red por defecto de Docker (solo para tests locales, nunca en producción). */
@@ -37,27 +38,39 @@ export interface RunContainerResult {
 export async function runTaskContainer(options: RunContainerOptions): Promise<RunContainerResult> {
   const docker = new Docker();
 
+  // DELIBERADAMENTE sin GITHUB_TOKEN (SEC-6.1 / SEC-5.6).
+  //
+  // El contenedor efímero no necesita credenciales de GitHub: el repo ya está
+  // clonado en /workspace y quien empuja la rama al terminar es el runner
+  // (`pushBranch`), no la tarea. Abrir el PR tampoco es cosa suya — eso lo hace
+  // el Skill vía GitHub MCP (docs/hermes/spec.md §3.2 paso 9).
+  //
+  // Esto no es teórico: con un GITHUB_TOKEN presente se observó a Claude Code
+  // crear su propia rama, empujarla y abrir un PR por su cuenta, saltándose el
+  // flujo y dejando el `taskBranchName` sin commits. Pedirlo por prompt no
+  // basta; sin credencial no puede hacerlo, punto.
   const env = [
     `CLAUDE_CODE_OAUTH_TOKEN=${options.claudeCodeOauthToken}`,
     `TASK_BRANCH_NAME=${options.taskBranchName}`,
   ];
-  if (options.githubToken) {
-    env.push(`GITHUB_TOKEN=${options.githubToken}`);
-  }
   if (options.httpProxyUrl) {
     env.push(`HTTP_PROXY=${options.httpProxyUrl}`, `HTTPS_PROXY=${options.httpProxyUrl}`);
   }
 
+  // El contenedor efímero corre como usuario no-root, así que el checkout y el
+  // prompt.md —creados por este proceso, que en despliegue es root— tienen que
+  // cambiar de propietario o la tarea no podrá ni commitear ni escribir
+  // result.json. No-op cuando el runner no corre como root.
+  const taskUser = resolveTaskUser();
+  await chownWorkspace(options.workspaceDir, taskUser.uid, taskUser.gid);
+
   const container = await docker.createContainer({
     Image: RUNNER_IMAGE,
     Env: env,
-    // El bind mount hereda los permisos del propietario del directorio en el
-    // host; forzamos el mismo UID/GID dentro del contenedor para que el
-    // usuario no-root de la imagen pueda escribir en /workspace.
-    User:
-      typeof process.getuid === 'function'
-        ? `${process.getuid()}:${process.getgid?.() ?? 0}`
-        : undefined,
+    // Usuario NO-root, obligatoriamente: el CLI de Claude Code rechaza
+    // --dangerously-skip-permissions con privilegios de root. Ver taskUser.ts.
+    // El workspace se ha puesto a nombre de este usuario justo arriba.
+    User: taskUserSpec(taskUser),
     HostConfig: {
       Binds: [`${options.workspaceDir}:/workspace`],
       NetworkMode: options.networkMode,

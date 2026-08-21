@@ -1,0 +1,103 @@
+# Configuración de hermes-agent para PersonalAI.
+#
+# ESTE FICHERO NO SE COPIA ENCIMA DE ~/.hermes/config.yaml.
+#
+# El config.yaml real de hermes-agent lo genera y mantiene el propio hermes
+# (tiene ~340 líneas de opciones con sus defaults). Sobrescribirlo entero
+# rompería cosas y se desactualizaría en cada versión. Lo que hay aquí son
+# EXCLUSIVAMENTE las claves que este proyecto necesita fijar, con el valor que
+# deben tener y por qué.
+#
+# Cómo aplicarlo: ver hermes/config/README.md.
+
+# ---------------------------------------------------------------------------
+# Servidores MCP
+# ---------------------------------------------------------------------------
+mcp_servers:
+  # Nuestro runner. Se registra por URL (HTTP), NO por `command` (stdio).
+  #
+  # Esto es deliberado y es el eje de la arquitectura: un servidor MCP stdio
+  # corre como subproceso de su cliente, así que registrarlo con `command`
+  # metería el runner —el único proceso con acceso al socket de Docker— dentro
+  # del contenedor de hermes, que es el que ingiere texto no confiable.
+  # Ver docs/security.md SEC-2.1 y docs/hermes/spec.md §3.5.
+  #
+  # `claude-code-runner` es el nombre del servicio en docker-compose.yml; se
+  # resuelve por DNS interno de Compose. El puerto no está publicado (SEC-3.1).
+  claude-code-runner:
+    url: http://claude-code-runner:8080/mcp
+    # SEC-3.2. El valor real vive en ~/.hermes/.env como
+    # MCP_CLAUDE_CODE_RUNNER_API_KEY y debe coincidir con la variable
+    # CLAUDE_CODE_RUNNER_AUTH_TOKEN del compose.
+    headers:
+      Authorization: Bearer ${MCP_CLAUDE_CODE_RUNNER_API_KEY}
+    # Debe ser MAYOR que el timeoutSeconds por defecto de run_coding_task
+    # (1800s, ver apps/claude-code-runner-mcp/src/runCodingTask.ts). Sin este
+    # campo, el timeout por defecto del cliente MCP de hermes es mucho más
+    # corto: hermes se rinde y reporta `timed_out` al Operador mientras la
+    # tarea real sigue corriendo en segundo plano y puede acabar en éxito —
+    # discrepancia real, reproducida en Fase 2 (issue de prueba #6): el
+    # runner pusheó una rama con un commit válido después de que hermes ya
+    # hubiera comentado "timed_out" y cerrado el ciclo, dejando la rama sin PR.
+    timeout: 1900
+
+  # GitHub. Servidor de terceros ya existente — no escribimos conector propio.
+  #
+  # Se usa la implementación stdio en TypeScript, ejecutada con npx dentro del
+  # contenedor de hermes (su imagen ya trae nodejs y npm). Motivo: el servidor
+  # oficial en Go se distribuye principalmente como imagen Docker, y lanzarlo
+  # desde dentro de hermes exigiría darle el socket de Docker — justo lo que
+  # esta arquitectura prohíbe (SEC-2.1).
+  #
+  # Nota honesta: este paquete está archivado upstream. Funciona, pero si deja
+  # de mantenerse, la alternativa sin socket es el servidor remoto de GitHub
+  # (`url: https://api.githubcopilot.com/mcp/` con la misma cabecera Bearer),
+  # que traslada la ejecución a GitHub en vez de a un proceso local.
+  github:
+    command: npx
+    args: ['-y', '@modelcontextprotocol/server-github']
+    env:
+      # SEC-6.1: PAT fine-grained, scoped SOLO a los repos donde Hermes actúa,
+      # con permisos mínimos (contenidos, issues, pull requests).
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
+
+# ---------------------------------------------------------------------------
+# Skills
+# ---------------------------------------------------------------------------
+skills:
+  # Carga el skill resolve-issue directamente desde el repositorio, en vez de
+  # copiarlo a ~/.hermes/skills/. Así la fuente de verdad es el repo (versionada
+  # y revisable) y no hay dos copias divergiendo.
+  #
+  # La ruta debe ser la que ve el CONTENEDOR de hermes. Si montas el repo,
+  # ajústala; si prefieres no montarlo, copia hermes/skills/resolve-issue a
+  # ~/.hermes/skills/ y deja esta lista vacía.
+  external_dirs:
+    - /opt/data/skills-repo
+
+# ---------------------------------------------------------------------------
+# Aprobaciones — SEC-2.3
+# ---------------------------------------------------------------------------
+# Ambos son ya el valor por defecto de hermes-agent; se declaran aquí porque
+# son un requisito de seguridad, no una preferencia, y deben sobrevivir a
+# cualquier revisión futura de la configuración.
+approvals:
+  # Los comandos peligrosos de shell piden confirmación al Operador.
+  mode: manual
+  # En cron no hay nadie para aprobar, así que se BLOQUEAN. El skill
+  # resolve-issue está escrito para trabajar solo con tools MCP precisamente
+  # para no necesitar que esto se relaje a `approve`.
+  cron_mode: deny
+
+# ---------------------------------------------------------------------------
+# Modelo
+# ---------------------------------------------------------------------------
+# Proveedor anthropic (alias claude-code) autenticado con la sesión Pro
+# compartida vía CLAUDE_CODE_OAUTH_TOKEN, sin ANTHROPIC_API_KEY.
+# Ver docs/hermes/spec.md §0.1/§0.3 — y §0.2 para el riesgo de ToS asumido.
+#
+# Ojo: hermes-agent limpia ANTHROPIC_API_KEY del .env cuando se activa esta
+# ruta. Si defines una API key, tomará esa en su lugar y dejarás de usar la
+# suscripción Pro compartida.
+model:
+  provider: anthropic

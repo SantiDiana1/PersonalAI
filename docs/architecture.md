@@ -15,18 +15,20 @@ flowchart LR
         NT[Notas personales / journal]
     end
 
-    subgraph VPS["VPS (Docker Compose)"]
-        subgraph HA["hermes-agent (NousResearch, upstream)"]
-            LOOP["Agent loop + memoria propia + cron"]
-            SKILL["Skill: resolve-issue<br/>(procedimiento que construimos nosotros)"]
+    subgraph VPS["Servidor local — Mac Mini (Docker Compose)"]
+        subgraph HAC["Contenedor hermes-agent — SIN socket Docker"]
+            subgraph HA["hermes-agent (NousResearch, upstream)"]
+                LOOP["Agent loop + memoria propia + cron"]
+                SKILL["Skill: resolve-issue<br/>(procedimiento que construimos nosotros)"]
+            end
+            GHMCP["GitHub MCP<br/>(oficial, stdio)"]
+            NOMCP["Notion MCP<br/>(oficial, stdio)"]
+            JIMCP["Jira/Atlassian MCP<br/>(oficial/comunidad, stdio)"]
+            BMCP["brain-mcp<br/>(nuestro, stdio)"]
         end
 
-        subgraph MCPs["Servidores MCP"]
-            GHMCP["GitHub MCP<br/>(oficial)"]
-            NOMCP["Notion MCP<br/>(oficial)"]
-            JIMCP["Jira/Atlassian MCP<br/>(oficial/comunidad)"]
-            BMCP["brain-mcp<br/>(nuestro)"]
-            CCMCP["claude-code-runner-mcp<br/>(nuestro)"]
+        subgraph RUNC["Contenedor claude-code-runner-mcp — ÚNICO con socket Docker"]
+            CCMCP["claude-code-runner-mcp<br/>(nuestro, MCP sobre HTTP)"]
         end
 
         subgraph BrainSvc["Brain (nuestro, deliberadamente básico — ver personal-brain/spec.md §0)"]
@@ -35,7 +37,7 @@ flowchart LR
             DB[(Postgres + pgvector)]
         end
 
-        RUN["Contenedor efímero<br/>Claude Code CLI + checkout del repo"]
+        RUN["Contenedor efímero<br/>Claude Code CLI + checkout del repo<br/>(red aislada + proxy allowlist)"]
     end
 
     GH --> ING
@@ -49,7 +51,7 @@ flowchart LR
     LOOP --> SKILL
     SKILL -->|1. lista tareas| GHMCP & NOMCP & JIMCP
     SKILL -->|2. consulta contexto| BMCP
-    SKILL -->|3. delega la ejecución| CCMCP
+    SKILL -->|"3. delega la ejecución<br/>(HTTP + Bearer, red interna)"| CCMCP
     CCMCP --> RUN
     RUN -->|4. commits| GHMCP
     SKILL -->|5. abre PR / comenta| GHMCP & NOMCP & JIMCP
@@ -100,7 +102,7 @@ Gestión del monorepo con **pnpm workspaces** para `apps/brain`, `apps/brain-mcp
 
 hermes-agent no llama a nada directamente salvo a través de **MCP**. Esto es intencional y además es justo el mecanismo de extensión que el propio proyecto expone ("MCP Integration: Connect any MCP server for extended capabilities"). Dos servidores MCP cubren el contrato que nos interesa para el portfolio:
 
-- **`brain-mcp`** expone `brain_query` (envuelve `POST /v1/query`, devuelve fragmentos por similitud — sin observations/mental models en v1) y `brain_record_observation` (envuelve `POST /v1/observations`). Ver el contrato completo en [personal-brain/spec.md](personal-brain/spec.md#52-api-vía-mcp-apps-brain-mcp-lo-que-realmente-consume-hermes).
+- **`brain-mcp`** expone `brain_query` (envuelve `POST /v1/query`, devuelve fragmentos por similitud — sin observations/mental models en v1) y `brain_record_observation` (envuelve `POST /v1/observations`). Ver el contrato completo en [personal-brain/spec.md](personal-brain/spec.md#52-api-vía-mcp-appsbrain-mcp-lo-que-realmente-consume-hermes).
 - **`claude-code-runner-mcp`** expone `run_coding_task(repo, prompt, context)`, que hace todo el trabajo de aislamiento Docker y devuelve un resultado estructurado (éxito/fallo, diff, resumen). Ver detalle en [hermes/spec.md](hermes/spec.md#3-claude-code-runner-mcp).
 
 GitHub, Notion y Jira se resuelven con servidores MCP **ya existentes** de esas plataformas — no construimos conectores propios para leer/escribir en ellas. Solo escribimos el "pegamento" (el Skill) que decide qué hacer con las tools que esos MCP servers exponen.
@@ -114,13 +116,16 @@ GitHub, Notion y Jira se resuelven con servidores MCP **ya existentes** de esas 
 
 ## Despliegue
 
-Un único VPS Linux (Ubuntu 22.04/24.04) con Docker y Docker Compose:
+Un único servidor local — un Mac Mini del Operador, siempre encendido, con Docker y Docker Compose — en vez de un VPS: para este proyecto de uso personal ("andar por casa", ver [hermes/spec.md §0](hermes/spec.md#0-aclaración-importante-qué-es-hermes-aquí)) el coste recurrente de un VPS no compensa, y ni el flujo de GitHub (cron sondeando, Fase 2) ni el de Telegram (long-polling, Fase 3) necesitan puertos de entrada expuestos a internet ni IP pública — todo el tráfico que genera hermes-agent es saliente. Esto sí implica que la disponibilidad depende de la luz/red doméstica del Operador, algo asumido conscientemente dado el alcance personal del proyecto.
 
-- `hermes/docker/docker-compose.yml` levanta: `hermes-agent` (imagen oficial de NousResearch, ver su propio `Dockerfile`/`docker-compose.yml` upstream como base), `brain`, `brain-mcp`, `claude-code-runner-mcp`, `postgres` (con `pgvector`).
+- `hermes/docker/docker-compose.yml` levanta: `hermes-agent` (imagen construida del upstream de NousResearch, sin modificar su código), `brain`, `brain-mcp`, `claude-code-runner-mcp`, `postgres` (con `pgvector`).
 - `hermes-agent` se configura (`hermes/config/hermes.config.yaml` + `hermes mcp add ...`) para registrar los 5 servidores MCP (GitHub, Notion, Jira, brain-mcp, claude-code-runner-mcp).
-- `claude-code-runner-mcp` es el único componente con acceso al socket de Docker del host, para lanzar los contenedores efímeros de Claude Code — ver [hermes/spec.md](hermes/spec.md#aislamiento-de-ejecución) para el detalle de seguridad de esto.
+- **Separación de privilegios (el punto de diseño más importante del despliegue)**: `claude-code-runner-mcp` corre en **su propio contenedor** y es el **único** con el socket de Docker montado; `hermes-agent` corre en un contenedor **sin** socket. Se comunican por MCP sobre Streamable HTTP en una red interna de Compose, autenticada con un secreto compartido y sin publicar el puerto al host ni a la LAN.
+
+  El motivo: en Docker, poder crear contenedores equivale a control total del host (se puede crear uno que monte el disco entero), y hermes-agent es precisamente el componente que ingiere texto no confiable (cuerpos de issues) — darle esa capacidad convierte cualquier prompt injection en compromiso del Mac Mini. Registrar el runner por stdio lo haría subproceso de hermes y forzaría exactamente eso, por lo que se descarta. Requisitos completos en [security.md](security.md) (SEC-2.1, SEC-3.1 – SEC-3.3, SEC-4.1); detalle de transporte en [hermes/spec.md §3.5](hermes/spec.md#35-transporte-mcp-http-en-red-interna-no-stdio).
+
 - La sesión de Claude Code compartida (`hermes-claude-auth`) es un **secreto** (token `CLAUDE_CODE_OAUTH_TOKEN`, `.env`/secret store), no un volumen Docker con archivos de sesión — ver [hermes/spec.md §0.3](hermes/spec.md#03-corrección-de-diseño--hermes-claude-auth-es-un-token-no-un-volumen-de-archivos), corregido durante la Fase 0 al verificarlo en la práctica.
 - El scheduler que dispara periódicamente el Skill `resolve-issue` es el **cron nativo de hermes-agent** (`hermes cron`), no un scheduler propio.
-- Reverse proxy (Caddy o Nginx) delante del gateway de hermes-agent si se quiere hablar con él desde Telegram/Discord fuera del VPS, y delante de la API de Brain si se expone para otros usos.
+- Reverse proxy (Caddy o Nginx) delante del gateway de hermes-agent solo si en algún momento hiciera falta exponer algo del servidor local a internet (p. ej. la API de Brain para otros usos) — no hace falta para Telegram/GitHub en v1, ver nota de disponibilidad arriba.
 
 No se detalla más infraestructura (Terraform, Kubernetes, etc.) porque no aporta al objetivo del portfolio y añade complejidad operativa innecesaria para un proyecto personal.

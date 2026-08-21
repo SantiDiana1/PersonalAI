@@ -4,11 +4,11 @@
 
 ## 0. Aclaración importante: qué es "Hermes" aquí
 
-**Hermes = [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) desplegado en un VPS**, no un orquestador que construimos desde cero. Es un proyecto open-source (MIT, ~230k★) de Nous Research que ya trae:
+**Hermes = [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) desplegado en un servidor local (Mac Mini del Operador, no un VPS — decisión de coste, ver [architecture.md §Despliegue](../architecture.md#despliegue))**, no un orquestador que construimos desde cero. Es un proyecto open-source (MIT, ~230k★) de Nous Research que ya trae:
 
 - Un **agent loop** con modelo intercambiable (Anthropic, OpenAI, OpenRouter, Nous Portal, endpoints propios).
 - **Memoria persistente** propia (memoria curada, búsqueda FTS5 de sesiones, modelado de usuario) y un **sistema de skills** (memoria procedimental, compatible con el estándar abierto [agentskills.io](https://agentskills.io/)).
-- Un **gateway multi-plataforma** (Telegram, Discord, Slack, WhatsApp, Signal, CLI) — un único proceso, se le puede hablar desde el móvil mientras trabaja en el VPS.
+- Un **gateway multi-plataforma** (Telegram, Discord, Slack, WhatsApp, Signal, CLI) — un único proceso, se le puede hablar desde el móvil mientras trabaja en el servidor local.
 - **Cron scheduler** integrado para automatizaciones ("daily reports, nightly backups, weekly audits... running unattended").
 - **Delegación de subagentes** para paralelizar trabajo.
 - **Siete backends de ejecución de comandos**: local, Docker, SSH, Singularity, Modal, Daytona, Vercel Sandbox — con aislamiento de contenedor ya contemplado en su modelo de seguridad ("Command approval, DM pairing, container isolation").
@@ -17,7 +17,7 @@
 Dado esto, **nuestro trabajo no es reimplementar nada de lo anterior**. Es construir las tres piezas que le faltan para este caso de uso concreto:
 
 1. **`claude-code-runner-mcp`** — servidor MCP que sabe lanzar Claude Code en un contenedor Docker efímero por tarea (sección 3).
-2. **`brain-mcp`** — servidor MCP adaptador sobre la API de nuestro Personal Brain (contrato detallado en [personal-brain/spec.md](../personal-brain/spec.md#api-vía-mcp)).
+2. **`brain-mcp`** — servidor MCP adaptador sobre la API de nuestro Personal Brain (contrato detallado en [personal-brain/spec.md](../personal-brain/spec.md#52-api-vía-mcp-appsbrain-mcp-lo-que-realmente-consume-hermes)).
 3. **El Skill `resolve-issue`** — el procedimiento, en el formato de skills de hermes-agent, que le dice al agente qué hacer y en qué orden (sección 5).
 
 Todo lo demás (leer GitHub Issues, leer Notion, leer Jira) se resuelve registrando servidores MCP **de terceros ya existentes** para esas plataformas — no se escriben conectores propios.
@@ -48,21 +48,22 @@ Esto **viola explícitamente los Términos de Servicio de consumidor de Anthropi
 - `claude setup-token` (`Usage: claude setup-token [options]` — _"Set up a long-lived authentication token"_) **imprime el token por stdout** y no persiste ningún archivo de sesión reutilizable en `~/.claude/`. Confirmado montando un volumen Docker en el `$HOME` de un contenedor efímero, ejecutando `claude setup-token` con login interactivo completo, y verificando después que no existe `~/.claude/.credentials.json` ni ningún token real en `~/.claude.json` (solo metadata de arranque) — el volumen quedaba vacío de credenciales tras el login.
 - El mecanismo real y documentado por Anthropic para este caso (headless/CI) es: capturar el token impreso y exportarlo como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN` — que tanto `claude -p` (el CLI) como hermes-agent (`hermes_cli/auth.py: api_key_env_vars=(...,"CLAUDE_CODE_OAUTH_TOKEN")`) soportan nativamente.
 
-**Diseño corregido**: `hermes-claude-auth` es el **valor del token** (`sk-ant-oat01-...`), generado una vez con `claude setup-token`, guardado como secreto (`.env` fuera de git en local/dev; el mecanismo de secretos del VPS en producción — nunca en el repo ni horneado en una imagen), e inyectado como `CLAUDE_CODE_OAUTH_TOKEN` tanto en el proceso de hermes-agent como en cada contenedor efímero de `claude-code-runner-mcp`. Todas las referencias de este documento a "volumen `hermes-claude-auth` montado read-only en `/root/.claude`" deben leerse como "variable de entorno `CLAUDE_CODE_OAUTH_TOKEN` inyectada desde el secreto `hermes-claude-auth`" — el resto del razonamiento (sesión única compartida, sin API key, riesgo de ToS de §0.2, reautenticación manual) no cambia.
+**Diseño corregido**: `hermes-claude-auth` es el **valor del token** (`sk-ant-oat01-...`), generado una vez con `claude setup-token`, guardado como secreto (`.env` fuera de git en el servidor local, único entorno de este proyecto — nunca en el repo ni horneado en una imagen), e inyectado como `CLAUDE_CODE_OAUTH_TOKEN` tanto en el proceso de hermes-agent como en cada contenedor efímero de `claude-code-runner-mcp`. Todas las referencias de este documento a "volumen `hermes-claude-auth` montado read-only en `/root/.claude`" deben leerse como "variable de entorno `CLAUDE_CODE_OAUTH_TOKEN` inyectada desde el secreto `hermes-claude-auth`" — el resto del razonamiento (sesión única compartida, sin API key, riesgo de ToS de §0.2, reautenticación manual) no cambia.
 
 Verificado extremo a extremo (US-0.4): `docker run --env-file .env ... claude -p "..."` responde correctamente usando únicamente `CLAUDE_CODE_OAUTH_TOKEN`, sin exponer el valor del token en ningún log.
 
 ## 1. Objetivos
 
-- Reducir el tiempo entre "escribo una issue en uno de mis repos (o una tarea en Notion/Jira)" y "tengo un PR que la resuelve o la intenta resolver".
+- Reducir el tiempo entre "escribo una issue en uno de mis repos (o le mando una tarea por Telegram)" y "tengo un PR que la resuelve o la intenta resolver".
+- Convertir Hermes en mi sistema de IA personal hablable desde el móvil (Telegram, §9), no solo un bot que reacciona a etiquetas de GitHub.
 - Demostrar cómo extender un agente de terceros ya maduro con MCP servers y skills propios, en vez de construir un orquestador desde cero.
-- Demostrar un patrón de aislamiento seguro para delegar ejecución de código a un coding agent (Claude Code) sin darle acceso irrestricto al VPS.
+- Demostrar un patrón de aislamiento seguro para delegar ejecución de código a un coding agent (Claude Code) sin darle acceso irrestricto al servidor local.
 - Servir de consumidor de referencia del Brain — validar que la memoria organizacional aporta valor real a un agente que actúa.
 - Experimentar, para uso personal, con un único mecanismo de auth por suscripción Pro para todo el sistema (ver §0.1), evitando gestionar credenciales de API distintas para cada componente.
 
 ## 2. No-objetivos (v1)
 
-- No modificamos el código fuente de hermes-agent más allá de lo necesario para el wrapper de auth de §0.1 — el resto se configura, no se reimplementa.
+- No modificamos el código fuente de hermes-agent — se despliega tal cual (imagen upstream) y se configura únicamente; su proveedor `anthropic`/`claude-code` ya soporta `CLAUDE_CODE_OAUTH_TOKEN` de fábrica (ver §0.1/§0.3), no hace falta ningún wrapper.
 - No sustituye a un humano revisando el PR antes de mergear — el flujo abre PRs, no los mergea automáticamente.
 - No gestiona proyectos completos ni planifica sprints — solo ejecuta tareas ya definidas y etiquetadas explícitamente para él.
 - No soporta múltiples usuarios/tenants — un único operador (yo) configura sus propias credenciales y su propia instancia de hermes-agent.
@@ -132,13 +133,42 @@ El token de sesión OAuth de Claude Code caduca periódicamente (del orden de ho
 
 ### 3.4 Aislamiento de ejecución (no negociable)
 
-- Un contenedor efímero por tarea, destruido al terminar o al hacer timeout — nunca quedan contenedores huérfanos.
-- El contenedor **no tiene acceso al Docker socket** (no puede lanzar más contenedores) y su red está restringida a una allowlist (`api.anthropic.com`, `github.com` — solo lo estrictamente necesario para esa tarea; sin acceso libre a Internet).
-- Credenciales de vida corta con scope mínimo para GitHub (token limitado al repo de la tarea, nunca un token global de cuenta). El token de Claude Code, al ser compartido vía el secreto `hermes-claude-auth`, es la única credencial de larga duración presente en el sistema — se inyecta únicamente como variable de entorno del proceso `claude` dentro del contenedor, nunca se escribe a disco ni queda accesible al resto del sistema de archivos del contenedor.
-- Sin acceso al filesystem del host más allá del volumen efímero de esa tarea (el secreto de auth no es un volumen — ver §0.3).
-- `claude-code-runner-mcp` es el **único** componente del sistema con acceso al socket de Docker del host — ni hermes-agent, ni brain-mcp lo necesitan.
+Los requisitos completos y numerados viven en **[docs/security.md](../security.md)**, que es la fuente única de verdad. Resumen de lo que aplica a este componente:
 
-Esta es la parte de seguridad más sensible del proyecto: un agente que ejecuta código arbitrario delegado por otro agente es, por definición, una superficie de ataque. Especial cuidado con **prompt injection** desde el cuerpo de issues de terceros (ver sección 6).
+- Un contenedor efímero por tarea, destruido al terminar o al hacer timeout — nunca quedan contenedores huérfanos (SEC-5.4).
+- El contenedor **no tiene acceso al Docker socket** (SEC-5.1) y su red está restringida a una allowlist (`api.anthropic.com`, `github.com`), sin acceso libre a Internet (SEC-5.2).
+- Credenciales de GitHub con scope mínimo (SEC-6.1), nunca un token global de cuenta. El token de Claude Code, compartido vía el secreto `hermes-claude-auth`, se inyecta únicamente como variable de entorno, nunca se escribe a disco (SEC-6.2).
+- Sin acceso al filesystem del host más allá del workspace efímero de esa tarea (SEC-5.6).
+- `claude-code-runner-mcp` es el **único** componente del sistema con acceso al socket de Docker del host (SEC-4.1) — ni hermes-agent, ni brain-mcp lo tienen.
+
+Esta es la parte de seguridad más sensible del proyecto: un agente que ejecuta código arbitrario delegado por otro agente es, por definición, una superficie de ataque. Especial cuidado con **prompt injection** desde el cuerpo de issues de terceros (ver sección 6 y [security.md §0](../security.md#0-por-qué-este-documento-existe)).
+
+### 3.5 Transporte MCP: HTTP en red interna, no stdio
+
+**Decisión de arquitectura (Fase 2).** El runner se expone por **Streamable HTTP** (`StreamableHTTPServerTransport` del SDK oficial), no por stdio, y corre en **su propio contenedor** — el único con el socket de Docker montado.
+
+El motivo es directo: un servidor MCP stdio corre como _subproceso del cliente_. Si registrásemos el runner por stdio, viviría dentro del contenedor de hermes-agent, y ese contenedor necesitaría el socket de Docker — justo el componente que ingiere texto no confiable. Eso rompe SEC-2.1, que es el requisito del que cuelga toda la arquitectura. Ver la comparativa de alternativas descartadas en [security.md §1](../security.md#1-el-concepto-central-el-socket-de-docker-es-la-llave-maestra).
+
+Consecuencias:
+
+- Registro en hermes-agent con `hermes mcp add claude-code-runner --url http://claude-code-runner:8080/mcp --auth header` (no `--command`).
+- El puerto **no se publica** al host ni a la LAN — vive solo en la red interna de Compose (SEC-3.1).
+- Cada petición exige `Authorization: Bearer <secreto>` (SEC-3.2). Sin cabecera válida → `401`, sin ejecutar nada.
+- La superficie sigue siendo exactamente una tool, `run_coding_task` (SEC-3.3).
+
+### 3.6 Nota de implementación: rutas de workspace en despliegue contenerizado
+
+Detalle no obvio que **bloquea** el despliegue de §3.5 si se ignora, detectado al diseñar la Fase 2.
+
+Cuando el runner corría en el host (Fase 1), clonaba el repo en un directorio temporal propio (`mkdtemp` bajo `/tmp`) y lo pasaba como bind mount al contenedor efímero. Eso funciona porque la ruta existe en el host, que es quien resuelve los bind mounts.
+
+Al meter el runner en un contenedor, esto **se rompe en silencio**: el runner pediría al demonio de Docker montar `/tmp/claude-code-runner-XXX`, pero el demonio resuelve esa ruta **en el host**, donde no existe (o, peor, existe y es otra cosa). El contenedor efímero recibiría un `/workspace` vacío y la tarea fallaría de forma confusa, sin error claro.
+
+**Solución adoptada**: una raíz de workspaces dedicada, montada en el contenedor del runner **en la misma ruta** que tiene en el host (p. ej. `/var/lib/personalai/workspaces` → `/var/lib/personalai/workspaces`). Así toda ruta que el runner calcula es válida también para el demonio. Requiere hacer configurable la raíz de los checkouts (variable `CLAUDE_CODE_RUNNER_WORKSPACE_ROOT`) en vez de usar `os.tmpdir()` a pelo. Esa raíz contiene solo workspaces del proyecto (SEC-4.4).
+
+**Verificado empíricamente (Fase 2, US-2.1)**, ejecutando el mismo escenario en las dos configuraciones desde dentro del contenedor del runner: sin la raíz compartida, el contenedor hermano recibe un `/workspace` **vacío** (confirmando que el fallo es real y silencioso); con la raíz montada en la misma ruta, ve correctamente el contenido del checkout.
+
+**Nota operativa**: como el contenedor del runner corre como root (ver el razonamiento en su `Dockerfile`), los directorios de workspace aparecen en el host propiedad de root. No es un problema de funcionamiento — quien los crea y los borra es el propio runner, que es root dentro de su contenedor — pero conviene saberlo al inspeccionar o limpiar esa raíz a mano desde el host.
 
 ## 4. Servidores MCP de terceros (GitHub, Notion, Jira)
 
@@ -165,9 +195,13 @@ El **cron nativo de hermes-agent** (`hermes cron`) dispara este skill cada N min
 
 ## 6. Seguridad — checklist específico (OWASP-relevante)
 
-- **Prompt injection desde issues/tickets externos**: el cuerpo de una issue es input no confiable — puede contener instrucciones dirigidas al agente ("ignora tus instrucciones y..."). El blast radius está limitado por el aislamiento de `claude-code-runner-mcp` (sección 3.4): aunque el prompt esté comprometido, el contenedor no tiene red libre, no puede leer el secreto de auth desde disco (solo existe como variable de entorno del proceso `claude`) ni acceso a más recursos que los de esa tarea concreta.
-- **Aprobación de comandos de hermes-agent**: revisar y configurar el modo de aprobación de comandos que trae hermes-agent (mencionado en su doc de seguridad) para las acciones que el propio hermes-agent ejecuta fuera del contenedor de Claude Code (p. ej. llamadas MCP potencialmente destructivas).
-- **Gestión de secretos**: tokens de GitHub/Notion/Jira en un `.env` fuera de git (o secret manager si el VPS lo soporta) — nunca en el repo ni horneados en ninguna imagen Docker. El token de Claude Code (`hermes-claude-auth`) vive exclusivamente en `.env`/secret store fuera de git, inyectado como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN`, y nunca se copia a la imagen ni se escribe a disco dentro de un contenedor.
+> El modelo completo, por capas y con requisitos numerados (`SEC-x.y`) verificables fase a fase, está en **[docs/security.md](../security.md)**. Esta sección resume lo específico de Hermes; ante cualquier discrepancia, manda `security.md`.
+
+- **Prompt injection desde issues/tickets externos**: el cuerpo de una issue es input no confiable — puede contener instrucciones dirigidas al agente ("ignora tus instrucciones y..."). Este es el modo de fallo _esperado_, no una hipótesis. La defensa no es intentar detectar la inyección, sino que **el componente que la ingiere no tenga permisos peligrosos**: hermes-agent corre en un contenedor sin socket de Docker (SEC-2.1) y lo máximo que puede pedirle al runner es una tarea de código con forma fija (SEC-3.3). Aunque el prompt del contenedor efímero esté comprometido, ese contenedor no tiene red libre (SEC-5.2) ni acceso al host (SEC-5.6).
+- **Aprobación de comandos de hermes-agent**: se mantienen los valores por defecto `approvals.mode: manual` y `approvals.cron_mode: deny` (SEC-2.3). Matiz verificado en el código de hermes-agent (`tools/approval.py`): este mecanismo cubre **comandos de shell**, no llamadas a tools MCP — por eso el Skill `resolve-issue` trabaja exclusivamente vía MCP (sección 5), lo que le permite correr desatendido en cron **sin** relajar `cron_mode`.
+- **Acceso al agente desde Telegram**: denegación por defecto más allowlist explícita de usuarios (SEC-1.1); nunca activar los flags de allow-all (SEC-1.2). Ver también §9.4.
+- **Perímetro de red**: cero puertos entrantes en el router de casa (SEC-0.1) — posible porque tanto Telegram (long polling) como el cron de GitHub generan tráfico exclusivamente saliente.
+- **Gestión de secretos**: tokens de GitHub/Notion/Jira en un `.env` fuera de git en el servidor local — nunca en el repo ni horneados en ninguna imagen Docker. El token de Claude Code (`hermes-claude-auth`) vive exclusivamente en `.env`/secret store fuera de git, inyectado como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN`, y nunca se copia a la imagen ni se escribe a disco dentro de un contenedor.
 - **Mínimo privilegio**: GitHub App/PAT limitado a los repos explícitamente elegidos, no a toda la cuenta.
 - **Rate limiting**: límite de tareas concurrentes/por hora en `claude-code-runner-mcp`, para evitar que un bucle (p. ej. una issue que se reabre sola) agote la ventana de 5h/semanal de la suscripción Pro o la cuota de GitHub. Especialmente relevante aquí porque **hermes-agent y `claude-code-runner-mcp` comparten la misma cuota** (§0.1) — un pico de tareas de código puede dejar sin ventana disponible al chat, y viceversa.
 - **Riesgo de cuenta (§0.2)**: dado que el uso viola los ToS de consumidor, se recomienda no usar la cuenta Pro personal "de trabajo" (la que se usa para desarrollo profesional diario) para este experimento, si es posible mantener una cuenta separada de bajo coste dedicada solo a Hermes — así una eventual suspensión no afecta al uso profesional. Queda como decisión del operador, no como requisito del spec.
@@ -200,7 +234,37 @@ create table task_runs (
 - `pino` para logging estructurado.
 - Secreto `hermes-claude-auth` (token de larga duración `CLAUDE_CODE_OAUTH_TOKEN`, generado manualmente por el operador antes del primer despliegue vía `claude setup-token` ejecutado en el host, guardado en `.env`/secret store fuera de git), **compartido entre hermes-agent y `claude-code-runner-mcp`** — ver §0.3.
 
-## 9. Preguntas abiertas
+## 9. Interacción conversacional (Telegram)
+
+Hermes no es solo "un bot que cierra issues de GitHub" — el objetivo de este proyecto (ver `docs/roadmap.md` §Milestone v1) es que sea mi sistema de IA personal, hablable desde el móvil. hermes-agent ya trae un gateway multi-plataforma de fábrica (§0); esta sección documenta cómo se usa el canal de Telegram concretamente, implementado en la Fase 3 del roadmap.
+
+### 9.1 Configuración del gateway
+
+`hermes gateway setup` registra el bot de Telegram (bot token de @BotFather) y activa **DM pairing**: el gateway solo responde a un `chat_id` explícitamente emparejado por el Operador. Cualquier mensaje de un `chat_id` no emparejado se ignora o se responde con un rechazo explícito — nunca se ejecuta una tarea a partir de un remitente no verificado. Esto reutiliza el mismo modelo de seguridad que hermes-agent ya documenta ("Command approval, DM pairing, container isolation", §0), no es un mecanismo nuevo.
+
+### 9.2 De mensaje a tarea
+
+Un mensaje conversacional del tipo "resuelve la issue #42 de mi-repo" o "arregla X en el repo Y" se traduce en los mismos parámetros (`repo`, `taskTitle`, `taskDescription`) que consume `run_coding_task` — es la misma tool que usa el Skill `resolve-issue` (sección 5), solo que el disparador es un mensaje de chat en vez del cron de GitHub. Si el mensaje no deja claro el repo o el alcance de la tarea, Hermes pregunta antes de ejecutar — nunca asume un repo por defecto ni interpreta de más una petición ambigua.
+
+### 9.3 Confirmación inmediata y notificación de finalización
+
+`run_coding_task` puede tardar hasta el timeout configurado (por defecto 30 minutos, §3.1) — no es razonable dejar la conversación de Telegram bloqueada esperando la respuesta de la tool en el mismo turno. El diseño de dos pasos:
+
+1. **Confirmación inmediata**: en cuanto se acepta la tarea (antes de que `run_coding_task` devuelva nada), Hermes responde con algo como "Vale, me pongo con ello — tarea `<id>`, te aviso cuando termine".
+2. **Notificación de finalización** — dos mecanismos posibles, en orden de preferencia (a decidir empíricamente durante la Fase 3 del roadmap, y documentar aquí cuál se usó):
+   - **Preferido**: delegar la llamada a `run_coding_task` en un subagente de hermes-agent (su mecanismo nativo de "delegación de subagentes para paralelizar trabajo", §0). El chat principal queda libre mientras tanto, y el resultado se reporta de vuelta al hilo original de Telegram cuando el subagente termina. Hay que verificar en la práctica que esto funciona para tareas largas (hasta 30 min) antes de asumirlo como mecanismo definitivo.
+   - **Fallback**: si la delegación de subagentes no resulta viable para esperas largas, un job de `hermes cron` consulta periódicamente `runner.task_runs` (sección 7) por tareas que hayan pasado a un estado terminal desde la última comprobación, y envía un mensaje al `chat_id` del Operador vía el gateway con el resultado.
+
+### 9.4 Seguridad
+
+El canal de entrada (GitHub vs. Telegram) nunca cambia las garantías de seguridad de la ejecución: una tarea iniciada por Telegram pasa por el mismo `run_coding_task`, con el mismo aislamiento de contenedor (§3.4) y el mismo rate limiting (SEC-4.3), que una originada en una issue de GitHub (SEC-1.4).
+
+Dos puntos específicos de este canal, ambos innegociables:
+
+- **Control de acceso (SEC-1.1/SEC-1.2)**: un bot de Telegram es descubrible — su nombre de usuario es público y cualquiera puede escribirle. hermes-agent ya deniega por defecto (verificado en `gateway/run.py::_is_user_authorized`, cuya resolución termina en "Default: deny"); encima se pone una allowlist explícita (`TELEGRAM_ALLOWED_USERS`) y/o DM pairing aprobado a mano. Los flags de allow-all (`GATEWAY_ALLOW_ALL_USERS`, `TELEGRAM_ALLOW_ALL_USERS`) no se activan nunca. Se verifica con una segunda cuenta de Telegram, no se asume.
+- **Sin exposición de red (SEC-0.1)**: hablar con Hermes desde fuera de casa **no requiere abrir ningún puerto** del router. El gateway usa long polling contra `api.telegram.org` (`getUpdates`, verificado en `gateway/platforms/telegram.py`), no webhooks: tanto el Operador como Hermes hablan con los servidores de Telegram, nunca directamente entre sí. Cualquier propuesta de "exponerlo con un túnel para que funcione" indica un malentendido, no una necesidad real.
+
+## 10. Preguntas abiertas
 
 - ~~¿El wrapper de hermes-agent...?~~ Resuelto en Fase 0 (§0.3): no hace falta wrapper, hermes-agent soporta `CLAUDE_CODE_OAUTH_TOKEN` nativamente.
 - ¿Cómo se comparte la cuota de la ventana de 5h/semanal entre el chat de hermes-agent y las tareas de `claude-code-runner-mcp` sin que una acapare a la otra? Candidato simple para v1: límite duro de tareas de código concurrentes/por hora (ya recogido en §6), revisando manualmente si hace falta ajustar.

@@ -1,0 +1,129 @@
+# Despliegue de PersonalAI en el servidor local (Mac Mini).
+#
+# Uso, desde este directorio:
+#   cp .env.example .env    # y rellenar los secretos
+#   HERMES_UID=$(id -u) HERMES_GID=$(id -g) docker compose up -d
+#
+# ---------------------------------------------------------------------------
+# LA DECISIÓN DE DISEÑO MÁS IMPORTANTE DE ESTE FICHERO
+# ---------------------------------------------------------------------------
+# `claude-code-runner` es el ÚNICO servicio que monta /var/run/docker.sock.
+# `hermes` NO lo monta, y no debe montarlo nunca (SEC-2.1 de docs/security.md).
+#
+# En Docker, poder hablar con el socket equivale a control total del host: se
+# puede crear un contenedor que monte el disco entero. hermes-agent es
+# precisamente el componente que ingiere texto no confiable (cuerpos de issues
+# de GitHub, mensajes de Telegram), así que darle esa capacidad convertiría
+# cualquier prompt injection en compromiso del Mac Mini.
+#
+# Por eso el runner se registra en hermes por HTTP (`hermes mcp add --url`) y
+# no por stdio: un servidor MCP stdio corre como subproceso de su cliente, lo
+# que lo metería dentro del contenedor de hermes y forzaría exactamente lo que
+# este diseño evita. Ver docs/hermes/spec.md §3.5.
+# ---------------------------------------------------------------------------
+
+name: personalai
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-personalai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatoria}
+      POSTGRES_DB: ${POSTGRES_DB:-personalai}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # Sin `ports:` — solo accesible desde la red interna del compose.
+    networks: [personalai]
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-personalai} -d ${POSTGRES_DB:-personalai}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  claude-code-runner:
+    build:
+      # Contexto = raíz del monorepo: el paquete depende de @personalai/shared
+      # vía `workspace:*`.
+      context: ../..
+      dockerfile: apps/claude-code-runner-mcp/Dockerfile
+    image: claude-code-runner-mcp:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # SEC-3.1: NINGÚN `ports:`. El endpoint MCP vive solo en la red interna del
+    # compose; no es alcanzable desde el host ni desde otros equipos de la LAN.
+    # Añadir `ports:` aquí publicaría en internet doméstico un endpoint capaz de
+    # ejecutar código. No se hace ni "temporalmente para depurar".
+    networks: [personalai]
+    volumes:
+      # SEC-4.1: el socket de Docker, SOLO aquí. Es la razón de ser de este
+      # servicio (lanzar los contenedores efímeros por tarea).
+      - /var/run/docker.sock:/var/run/docker.sock
+      # SEC-4.4 + docs/hermes/spec.md §3.6: la raíz de workspaces se monta en la
+      # MISMA ruta dentro del contenedor que en el host. Es obligatorio: los
+      # bind mounts que este servicio pide para los contenedores efímeros los
+      # resuelve el demonio de Docker EN EL HOST. Si las rutas no coinciden, el
+      # contenedor efímero recibe un /workspace vacío y la tarea falla de forma
+      # confusa, sin error claro.
+      - ${WORKSPACE_ROOT:-/var/lib/personalai/workspaces}:${WORKSPACE_ROOT:-/var/lib/personalai/workspaces}
+    environment:
+      CLAUDE_CODE_RUNNER_TRANSPORT: http
+      CLAUDE_CODE_RUNNER_HTTP_PORT: '8080'
+      CLAUDE_CODE_RUNNER_WORKSPACE_ROOT: ${WORKSPACE_ROOT:-/var/lib/personalai/workspaces}
+      # SEC-3.2: sin este secreto el proceso no arranca. Genéralo con
+      # `openssl rand -hex 32`; debe ser distinto de cualquier otro secreto.
+      CLAUDE_CODE_RUNNER_AUTH_TOKEN: ${CLAUDE_CODE_RUNNER_AUTH_TOKEN:?falta CLAUDE_CODE_RUNNER_AUTH_TOKEN}
+      # Sesión Pro compartida (docs/hermes/spec.md §0.1/§0.3).
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?falta CLAUDE_CODE_OAUTH_TOKEN}
+      # SEC-6.1: PAT fine-grained, scoped solo a los repos donde Hermes actúa.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?falta GITHUB_TOKEN}
+      DATABASE_URL: postgres://${POSTGRES_USER:-personalai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-personalai}
+      CLAUDE_CODE_RUNNER_MAX_CONCURRENT: ${CLAUDE_CODE_RUNNER_MAX_CONCURRENT:-2}
+      CLAUDE_CODE_RUNNER_MAX_PER_HOUR: ${CLAUDE_CODE_RUNNER_MAX_PER_HOUR:-10}
+
+  hermes:
+    build:
+      # Checkout de NousResearch/hermes-agent. No modificamos su código: se
+      # construye tal cual desde el upstream (docs/hermes/spec.md §2).
+      context: ${HERMES_AGENT_PATH:?falta HERMES_AGENT_PATH (ruta al checkout de hermes-agent)}
+    image: hermes-agent:local
+    restart: unless-stopped
+    depends_on:
+      claude-code-runner:
+        condition: service_healthy
+    # SEC-2.2: sin `network_mode: host` (el compose upstream lo usa por
+    # comodidad). Con red de Compose, hermes no ve la red doméstica ni los
+    # servicios del Mac Mini — solo lo que necesita: salida a internet y el
+    # runner por nombre de servicio.
+    networks: [personalai]
+    volumes:
+      # SEC-2.1: aquí NO se monta /var/run/docker.sock. Nunca.
+      - ${HERMES_HOME:-~/.hermes}:/opt/data
+      # El skill resolve-issue se carga desde el repo (fuente de verdad
+      # versionada) vía `skills.external_dirs`, en vez de copiarlo a
+      # ~/.hermes/skills/ y tener dos copias divergiendo. Solo lectura.
+      - ../skills:/opt/data/skills-repo:ro
+    environment:
+      HERMES_UID: ${HERMES_UID:-10000}
+      HERMES_GID: ${HERMES_GID:-10000}
+      # Misma sesión Pro que el runner, un único secreto compartido.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?falta CLAUDE_CODE_OAUTH_TOKEN}
+      # SEC-1.1/SEC-1.2: allowlist explícita para el gateway. Los flags
+      # GATEWAY_ALLOW_ALL_USERS / TELEGRAM_ALLOW_ALL_USERS no se ponen jamás.
+      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
+    command: ['gateway', 'run']
+
+# El dashboard de hermes-agent almacena credenciales de proveedores. Si lo
+# quieres, añádelo atado a 127.0.0.1 y accede por túnel SSH — nunca con
+# `--host 0.0.0.0` (SEC-0.3 de docs/security.md).
+
+networks:
+  personalai:
+    driver: bridge
+
+volumes:
+  postgres-data:

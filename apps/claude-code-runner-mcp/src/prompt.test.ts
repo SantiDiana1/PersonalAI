@@ -41,3 +41,21 @@ describe('buildPrompt', () => {
     expect(prompt).not.toContain('Contexto recuperado de Brain');
   });
 });
+
+describe('contrato de rama y push', () => {
+  const input = {
+    repo: 'owner/repo',
+    taskTitle: 'Titulo',
+    taskDescription: 'Descripcion',
+  };
+
+  it('prohíbe explícitamente crear ramas, pushear y abrir PRs', () => {
+    // No es cosmético: con un GITHUB_TOKEN en el contenedor se observó a Claude
+    // Code crear su propia rama, empujarla y abrir un PR, dejando el
+    // taskBranchName sin commits. La defensa real es no darle credenciales
+    // (ver runContainer.ts), pero el prompt debe declarar el contrato igual.
+    const prompt = buildPrompt(input);
+    expect(prompt).toContain('No crees ramas nuevas');
+    expect(prompt).toContain('No hagas `git push` ni abras Pull Requests');
+  });
+});

@@ -1,8 +1,7 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
+import { createWorkspaceDir } from './workspace.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -17,11 +16,13 @@ export interface ShallowCloneOptions {
 }
 
 /**
- * Clona superficialmente (`--depth 1`) el repo indicado a un directorio
- * temporal. El caller es responsable de llamar a `cleanupClone` al terminar.
+ * Clona superficialmente (`--depth 1`) el repo indicado a un directorio de
+ * trabajo efímero bajo la raíz de workspaces (ver `workspace.ts`, y
+ * docs/hermes/spec.md §3.6 para por qué esa raíz importa en contenedor).
+ * El caller es responsable de llamar a `cleanupClone` al terminar.
  */
 export async function shallowClone(options: ShallowCloneOptions): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'claude-code-runner-'));
+  const dir = await createWorkspaceDir();
   let url: string;
   if (options.repo.includes('://') || options.repo.startsWith('/')) {
     url = options.repo;

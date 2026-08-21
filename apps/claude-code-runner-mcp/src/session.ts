@@ -1,5 +1,6 @@
 import Docker from 'dockerode';
 import { RUNNER_IMAGE } from './docker/runContainer.js';
+import { taskUserSpec } from './taskUser.js';
 import type { IsolationSetup } from './docker/network.js';
 import { logger } from './logger.js';
 
@@ -69,10 +70,9 @@ export async function checkSessionValid(
     Entrypoint: ['claude'],
     Cmd: ['-p', 'Reply with exactly the single word: OK', '--output-format', 'text'],
     Env: env,
-    User:
-      typeof process.getuid === 'function'
-        ? `${process.getuid()}:${process.getgid?.() ?? 0}`
-        : undefined,
+    // Mismo usuario no-root que las tareas reales, para que la comprobación
+    // valide la sesión en las mismas condiciones en que se va a usar.
+    User: taskUserSpec(),
     HostConfig: { AutoRemove: false, NetworkMode: isolation.networkMode },
   });
 

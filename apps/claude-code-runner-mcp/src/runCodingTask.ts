@@ -16,6 +16,16 @@ const execFileAsync = promisify(execFile);
 
 const DEFAULT_TIMEOUT_SECONDS = 1800;
 
+/**
+ * `runTaskContainer` da la propiedad del workspace al usuario no-root del
+ * contenedor efímero (ver `taskUser.ts`/`workspace.ts::chownWorkspace`), pero
+ * este proceso corre como root (Dockerfile del propio runner). Sin este flag,
+ * cualquier `git` lanzado aquí DESPUÉS de esa entrega de propiedad falla con
+ * "detected dubious ownership" — el workspace es efímero y de un solo uso, así
+ * que el riesgo que ese chequeo previene no aplica.
+ */
+const GIT_SAFE_DIRECTORY_ARGS = ['-c', 'safe.directory=*'];
+
 export interface RunCodingTaskDeps {
   githubToken?: string;
   claudeCodeOauthToken: string;
@@ -96,6 +106,7 @@ export async function runCodingTask(
     });
 
     const { stdout: baseShaRaw } = await execFileAsync('git', [
+      ...GIT_SAFE_DIRECTORY_ARGS,
       '-C',
       workspaceDir,
       'rev-parse',
@@ -126,7 +137,6 @@ export async function runCodingTask(
       containerResult = await runTaskContainer({
         workspaceDir,
         claudeCodeOauthToken: deps.claudeCodeOauthToken,
-        ...(deps.githubToken !== undefined ? { githubToken: deps.githubToken } : {}),
         taskBranchName,
         timeoutSeconds,
         ...isolation,
@@ -200,12 +210,20 @@ export async function runCodingTask(
 }
 
 async function currentBranch(dir: string): Promise<string> {
-  const { stdout } = await execFileAsync('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD']);
+  const { stdout } = await execFileAsync('git', [
+    ...GIT_SAFE_DIRECTORY_ARGS,
+    '-C',
+    dir,
+    'rev-parse',
+    '--abbrev-ref',
+    'HEAD',
+  ]);
   return stdout.trim();
 }
 
 async function commitsSinceBase(dir: string, baseSha: string): Promise<string[]> {
   const { stdout } = await execFileAsync('git', [
+    ...GIT_SAFE_DIRECTORY_ARGS,
     '-C',
     dir,
     'log',
@@ -226,7 +244,14 @@ async function pushBranch(
 ): Promise<void> {
   const url = `https://x-access-token:${githubToken}@github.com/${repo}.git`;
   try {
-    await execFileAsync('git', ['-C', dir, 'push', url, `HEAD:${branch}`]);
+    await execFileAsync('git', [
+      ...GIT_SAFE_DIRECTORY_ARGS,
+      '-C',
+      dir,
+      'push',
+      url,
+      `HEAD:${branch}`,
+    ]);
   } catch (err) {
     // Ver git.ts:redactSecrets — el mismo riesgo aplica aquí: el error de
     // execFile puede incluir la URL con el token embebido.
