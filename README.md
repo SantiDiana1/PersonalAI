@@ -35,3 +35,7 @@ Este repo se desarrolla siguiendo un enfoque _spec-first_: antes de escribir có
 - **Alcance**: personal, no multi-tenant — pero el modelo de datos de Brain se diseña para que el patrón generalice a un "company brain" real en el futuro (ver spec de Brain, sección de permisos).
 - **Brain se mantiene básico en este proyecto**: ingestión + búsqueda por similitud, sin capa de consolidación (extracción de hechos vía LLM, reconciliación, mental models). Esa capa está diseñada en el spec como referencia, pero no se construye aquí — es trabajo futuro que haré yo por mi cuenta.
 - **Orden de las fases**: Hermes y el despliegue en VPS van primero (Fases 1-2 tras la fundación); Brain básico llega en la Fase 3, y se integra con Hermes en la Fase 4. Ver [docs/roadmap.md](docs/roadmap.md).
+
+## Licencia
+
+Este proyecto es de uso personal y no está licenciado para redistribución.
