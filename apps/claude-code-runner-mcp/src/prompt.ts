@@ -16,7 +16,12 @@ export function buildPrompt(input: RunCodingTaskInput): string {
     '## Instrucciones',
     '',
     '- Sigue el estilo y las convenciones ya presentes en este repositorio.',
-    '- Haz commits atómicos y descriptivos.',
+    '- Trabaja en la rama que ya está activa. **No crees ramas nuevas ni cambies de rama**: ' +
+      'la rama de la tarea ya está creada y es la que se recogerá al terminar.',
+    '- Haz commits atómicos y descriptivos **en esa rama**.',
+    '- **No hagas `git push` ni abras Pull Requests.** De empujar la rama se encarga el ' +
+      'proceso que te ha lanzado, y de abrir el PR se encarga el agente que lo orquesta. ' +
+      'Tu trabajo termina en el commit local.',
     '- Si la tarea es ambigua o falta información imprescindible para completarla con confianza, ' +
       'no improvises: escribe en `result.json` `"status": "needs_human_input"` explicando qué falta.',
     '- Al terminar, escribe el resultado en `/workspace/result.json` con el formato ' +

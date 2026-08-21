@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp } from 'node:fs/promises';
+import { chown, mkdir, mkdtemp, readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -33,4 +33,34 @@ export async function createWorkspaceDir(): Promise<string> {
   const root = workspaceRoot();
   await mkdir(root, { recursive: true });
   return mkdtemp(join(root, 'claude-code-runner-'));
+}
+
+/**
+ * Da la propiedad del workspace (recursivamente) al usuario con el que correrá
+ * el contenedor efímero.
+ *
+ * Necesario en el despliegue contenerizado: el runner corre como root, así que
+ * el checkout y el `prompt.md` quedan siendo de root, pero el contenedor
+ * efímero corre como usuario no-root (obligatorio — ver `taskUser.ts`) y no
+ * podría escribir ahí: ni crear la rama, ni commitear, ni dejar `result.json`.
+ *
+ * No hace nada si el proceso no es root: no tendría permiso para cambiar el
+ * propietario, y además significa que el workspace ya es del usuario correcto
+ * (caso de la Fase 1, runner directamente en el host).
+ */
+export async function chownWorkspace(dir: string, uid: number, gid: number): Promise<void> {
+  const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+  if (!isRoot) return;
+
+  async function walk(path: string): Promise<void> {
+    await chown(path, uid, gid);
+    const info = await stat(path);
+    if (!info.isDirectory()) return;
+    const entries = await readdir(path);
+    for (const entry of entries) {
+      await walk(join(path, entry));
+    }
+  }
+
+  await walk(dir);
 }

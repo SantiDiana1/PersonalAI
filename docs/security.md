@@ -178,6 +178,16 @@ no confiable" y "tiene la llave maestra".
   - _Por qué importa_: aunque hermes esté completamente comprometido por una
     inyección, lo máximo que puede pedir es "resuelve esta tarea en este repo".
     No puede pedir "monta el disco del host".
+  - _Alcance exacto, verificado_: el servidor tampoco expone **resources** ni
+    **prompts** de MCP, y no debe empezar a hacerlo sin revisar este requisito —
+    son superficie adicional, no solo metadatos. Ojo al medirlo: hermes-agent
+    muestra "5 tool(s)" para este servidor en su banner, pero cuatro son
+    utilidades que **el cliente** añade por su cuenta a todo servidor MCP
+    (`list_resources`, `read_resource`, `list_prompts`, `get_prompt`, ver
+    `tools/mcp_tool.py::_select_utility_schemas`). La superficie real del
+    servidor se mide contra el servidor: `hermes mcp test claude-code-runner` →
+    `Tools discovered: 1`, y un cliente MCP directo devuelve exactamente
+    `["run_coding_task"]`.
 
 - **SEC-3.4 — El repo de la tarea es un parámetro acotado, no libre.** El Skill
   solo puede lanzar tareas sobre los repos donde el PAT de GitHub tiene permiso
