@@ -215,6 +215,45 @@ bloqueante: si `brain_record_observation` falla, no reintentes ni falles la
 tarea por eso — el resultado real (PR abierto, issue comentada) ya ocurrió, y
 perder este registro concreto no lo deshace.
 
+## Generalización a Notion y Jira (Fase 7)
+
+Todo lo anterior (Pasos 0–6) se escribió pensando en GitHub Issues, pero
+generaliza directamente a Notion y Jira (`docs/roadmap.md`, Fase 7, US-7.1/
+US-7.2) en cuanto sus servidores MCP estén registrados (ver el bloque
+comentado en `hermes/config/hermes.config.yaml`) — **no es un flujo nuevo**,
+solo sustituye la tool de listado/reporte por la del servidor equivalente:
+
+- **Notion**: en el Paso 0/1, si el servidor MCP `notion` está registrado,
+  lista también la base de datos "Hermes Tasks" filtrando por
+  `status = "Ready for Hermes"` (equivalente a la etiqueta `hermes` de
+  GitHub). El "marcar antes de empezar" del Paso 2 es actualizar esa
+  propiedad `status` a algo como "In Progress"/"Done"/"Needs Human" — mismo
+  propósito, evitar que una pasada del cron coja dos veces la misma tarea.
+  El Paso 5 (reportar) se traduce en comentar en la página de Notion en vez
+  de en la issue; no hay "PR" que abrir vía Notion, así que el PR se sigue
+  abriendo con el MCP de GitHub sobre el repo que la tarea de Notion indique
+  explícitamente (nunca inferido).
+- **Jira**: igual, pero con el JQL fijo `labels = hermes AND status = "To
+Do"` en vez de la etiqueta de GitHub. "Marcar antes de empezar" es
+  transicionar el issue a "In Progress" (y a "Done"/"Needs Human" al
+  reportar) en vez de tocar etiquetas.
+- **Brain**: `brain_query`/`brain_record_observation` (Pasos 3 y 6) no
+  cambian — son agnósticas de la fuente. Al ingerir contenido de Notion/Jira
+  con `brain_ingest` (p. ej. desde `ask-brain`), usa `source: 'notion'` o
+  `source: 'jira'` (ya soportado por `brain-mcp` desde la Fase 4/5, ver
+  `apps/brain-mcp/src/mcpServer.ts`) — nunca `'notes'`, para que una futura
+  consolidación (Fase 11) sepa de dónde vino cada dato.
+- **Regla dura, sin excepción**: el `repo` de una tarea de Notion/Jira sigue
+  saliendo siempre de dónde la indique el propio ticket (un campo/propiedad
+  explícita) o el Operador — igual que con GitHub, nunca se infiere del
+  texto libre de la descripción.
+
+**Estado real (Fase 7)**: esta sección está escrita y lista, pero **sin
+verificar contra un servidor Notion/Jira real** — bloqueado hasta que el
+Operador genere sus propios tokens (integración de Notion, API token de
+Atlassian) y los añada a `~/.hermes/.env`. No lo des por probado hasta tener
+una ejecución real.
+
 ## Notas de operación
 
 - Si `run_coding_task` devuelve error de rate limiting, **no reintentes**.
