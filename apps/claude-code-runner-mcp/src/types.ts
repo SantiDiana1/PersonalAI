@@ -34,6 +34,16 @@ export interface ContainerResult {
   commitShas: string[];
 }
 
+/** Resumen de una fila de `runner.task_runs` para `get_runner_status` (US-6.3/US-6.4). */
+export interface TaskRunSummary {
+  id: string;
+  repo: string;
+  taskTitle: string;
+  status: TaskRunStatus;
+  startedAt: string;
+  finishedAt?: string;
+}
+
 /** Fila de `runner.task_runs`, ver docs/hermes/spec.md §7. */
 export interface TaskRunRow {
   id: string;

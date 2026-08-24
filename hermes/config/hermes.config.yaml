@@ -93,8 +93,10 @@ skills:
   # La ruta debe ser la que ve el CONTENEDOR de hermes. Si montas el repo,
   # ajústala; si prefieres no montarlo, copia hermes/skills/resolve-issue a
   # ~/.hermes/skills/ y deja esta lista vacía.
+  # Fuera de /opt/data ($HERMES_HOME) a propósito — ver el comentario del
+  # mount en hermes/docker/docker-compose.yml (US-6.2 de docs/roadmap.md).
   external_dirs:
-    - /opt/data/skills-repo
+    - /opt/skills-repo
 
 # ---------------------------------------------------------------------------
 # Aprobaciones — SEC-2.3

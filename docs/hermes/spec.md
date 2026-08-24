@@ -77,7 +77,39 @@ El componente más parecido a "construir un ejecutor desde cero" de todo el proy
 
 ### 3.1 Contrato MCP
 
-Expone una única tool principal:
+Expone dos tools. `run_coding_task` es la principal (la única hasta la Fase 5);
+`get_runner_status` se añadió en la Fase 6 ([roadmap.md — Fase 6](../roadmap.md#fase-6--cierre-operativo-y-superficie-conversacional),
+US-6.3/US-6.4) como excepción acotada al principio de "una sola tool" del
+diseño original — es de solo lectura, sin parámetros, y no amplía la
+superficie de ataque de la forma en que lo haría una tool genérica de
+ejecución (ver el docstring de `createMcpServer` en `src/mcpServer.ts` para
+el razonamiento completo):
+
+```ts
+// tool: get_runner_status
+//
+// Sin input. Resumen de solo lectura para los skills status-report (a
+// demanda) y el cronjob de resumen periódico. Reusa checkSessionValid
+// (§3.3) — lanza el mismo contenedor efímero de comprobación de sesión que
+// usa run_coding_task — y una query nueva sobre runner.task_runs (§7).
+interface GetRunnerStatusOutput {
+  session:
+    { valid: true } | { valid: false; reason: 'expired' | 'revoked' | 'unknown'; detail: string };
+  persistenceAvailable: boolean; // false si DATABASE_URL no está configurada
+  tasksNeedingAttention: Array<{
+    id: string;
+    repo: string;
+    taskTitle: string;
+    status: 'needs_human_input' | 'failed';
+    startedAt: string;
+    finishedAt?: string;
+  }>; // needs_human_input/failed de los últimos 7 días
+  tasksStartedLast5h: number | null; // aproximación, NO telemetría real de Anthropic
+  tasksStartedLast7d: number | null;
+}
+```
+
+`run_coding_task`:
 
 ```ts
 // tool: run_coding_task
@@ -324,6 +356,26 @@ Dos puntos específicos de este canal, ambos innegociables:
 
 - **Control de acceso (SEC-1.1/SEC-1.2)**: un bot de Telegram es descubrible — su nombre de usuario es público y cualquiera puede escribirle. hermes-agent ya deniega por defecto (verificado en `gateway/run.py::_is_user_authorized`, cuya resolución termina en "Default: deny"); encima se pone una allowlist explícita (`TELEGRAM_ALLOWED_USERS`) y/o DM pairing aprobado a mano. Los flags de allow-all (`GATEWAY_ALLOW_ALL_USERS`, `TELEGRAM_ALLOW_ALL_USERS`) no se activan nunca. Se verifica con una segunda cuenta de Telegram, no se asume.
 - **Sin exposición de red (SEC-0.1)**: hablar con Hermes desde fuera de casa **no requiere abrir ningún puerto** del router. El gateway usa long polling contra `api.telegram.org` (`getUpdates`, verificado en `gateway/platforms/telegram.py`), no webhooks: tanto el Operador como Hermes hablan con los servidores de Telegram, nunca directamente entre sí. Cualquier propuesta de "exponerlo con un túnel para que funcione" indica un malentendido, no una necesidad real.
+
+### 9.5 `status-report` y `ask-brain` (Fase 6)
+
+Dos skills conversacionales más, además de `run-task` — ambos de solo
+lectura (nunca llaman a `run_coding_task`, nunca mutan más que `brain_ingest`
+sobre la propia memoria de Brain), documentados en detalle en
+`hermes/skills/status-report/SKILL.md` y `hermes/skills/ask-brain/SKILL.md`.
+
+- **`status-report`**: responde con el estado operativo de Hermes (sesión
+  OAuth compartida, tareas en `needs_human_input`/`failed`, consumo
+  aproximado de la ventana Pro) vía la tool `get_runner_status` (§3.1). Dos
+  disparadores del mismo skill: a demanda en cualquier turno interactivo, o
+  por un cronjob **recurrente** (a diferencia del cronjob de un solo disparo
+  de §9.3, aquí sí hace falta `--deliver telegram:<chat_id>` explícito,
+  porque un job recurrente no tiene chat de origen que heredar).
+- **`ask-brain`**: expone `brain_query`/`brain_ingest` (Fase 5) directamente
+  en la conversación, para consultar o alimentar Brain sin que sea un paso
+  interno de una tarea de código. A diferencia de `resolve-issue`, el
+  mensaje del Operador aquí se trata como instrucción legítima (mismo
+  criterio de confianza que `run-task`, §9.2), no como dato de terceros.
 
 ## 10. Identidad del agente (`SOUL.md`)
 
