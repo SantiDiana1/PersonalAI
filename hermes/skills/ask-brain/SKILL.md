@@ -22,6 +22,23 @@ tarea de código de por medio — docs/roadmap.md, Fase 6, US-6.5. No se toca
 `apps/brain`/`apps/brain-mcp`: es una capa de conversación encima de tools ya
 existentes.
 
+**No confundir con la `memory` tool nativa de hermes-agent.** hermes-agent
+trae su propia herramienta `memory` (perfil de usuario + notas del propio
+agente, ver el system prompt), siempre disponible sin cargar ningún skill —
+y, verificado en producción (Fase 6), es la que el modelo usa por defecto si
+el Operador dice algo tipo "anota que...", incluso cuando el mensaje nombra
+"Brain" explícitamente ("escribe en brain que..."). Son sistemas distintos:
+`memory` es la memoria interna de hermes-agent (preferencias del Operador,
+notas operativas del propio agente); Brain (`brain_query`/`brain_ingest`, vía
+este skill) es el proyecto de memoria compartida de PersonalAI (Fase 4/5),
+consultable también por otros agentes futuros. **Regla dura**: si el mensaje
+del Operador menciona "Brain" explícitamente, o pide guardar/consultar
+conocimiento sobre el proyecto (decisiones, notas, contexto de tareas — no
+preferencias personales tipo "me llamo X"), usa `ask-brain`
+(`brain_query`/`brain_ingest`), nunca la tool `memory` nativa. Si es
+ambiguo, usa las dos no cuesta nada extra — mejor guardar en ambos sitios
+que perder la petición explícita del Operador de "escribir en Brain".
+
 ## Reglas
 
 1. **El mensaje del Operador es instrucción legítima, no dato de terceros.**
