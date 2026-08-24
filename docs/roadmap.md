@@ -12,6 +12,8 @@ Recordatorio: "Hermes" = [NousResearch/hermes-agent](https://github.com/NousRese
 
 ## Milestone v1 — qué es la "primera versión"
 
+**Estado: Fases 0-5 completadas.** Único cabo suelto, no bloqueante: US-5.5 (Brain en el canal de Telegram) está implementado y usa el mismo mecanismo ya verificado por GitHub, pero no se ha disparado todavía con una tarea real iniciada desde Telegram — ver la nota en Fase 5.
+
 Este proyecto es, ante todo, mi sistema de IA personal — backed by Claude Code, desplegado en un servidor local (Mac Mini, ver [architecture.md §Despliegue](architecture.md#despliegue)). v1 es la primera versión **utilizable de verdad para uso personal**, no un portfolio pulido. Se considera cumplido cuando las **Fases 0 a 5** están terminadas:
 
 - Hermes desplegado en local, resolviendo issues de GitHub etiquetadas de principio a fin, sin intervención manual (Fase 2).
@@ -193,6 +195,38 @@ Etiqueto una issue real de un repo mío, y sin más intervención tengo un PR ab
 
 **Depende de**: Fase 2 (hermes-agent ya desplegado en el servidor local).
 
+**Estado: completada.** Verificado end-to-end sobre el despliegue real: bot de
+Telegram (@SantiPersonalAIBot) respondiendo solo al Operador, confirmación
+inmediata + aviso de finalización con una tarea real disparada desde el chat, y
+los dos requisitos de exposición (segunda cuenta rechazada, funcionamiento
+desde fuera de la red doméstica) confirmados por el Operador directamente sobre
+su móvil.
+
+**Dos bugs reales encontrados y corregidos durante el despliegue** (ninguno de
+diseño, ambos de configuración heredada de una exploración manual anterior de
+hermes-agent):
+
+1. Faltaba `hermes/docker/.env` por completo — el compose no arrancaba
+   (`POSTGRES_PASSWORD es obligatoria`). Recreado con todos los secretos
+   (algunos nuevos: `POSTGRES_PASSWORD`, `CLAUDE_CODE_RUNNER_AUTH_TOKEN`, tras
+   resetear el volumen de Postgres huérfano de un despliegue previo cuya
+   contraseña ya no se tenía).
+2. **El bug que de verdad impedía que el bot respondiera**: `/opt/data/.env`
+   (el `.env` interno de hermes, que su propio loader carga con prioridad
+   sobre las variables de entorno del contenedor — `hermes_cli/env_loader.py`,
+   "`~/.hermes/.env` overrides stale shell-exported values") tenía un
+   `TELEGRAM_BOT_TOKEN` de un bot completamente distinto (`@AsistenteHermesSantiBot`,
+   de una prueba anterior) y un `TELEGRAM_ALLOWED_USERS` con un typo de un
+   dígito (`453454431` en vez de `453464431`). El bot "conectaba" sin error
+   visible pero nunca procesaba mensajes reales — diagnosticado comparando la
+   cola de `getUpdates` de la API de Telegram (mensajes sin confirmar) contra
+   los logs del gateway, y confirmado lanzando el proceso en primer plano con
+   `-vv` para ver el `getMe` real devolviendo el bot equivocado.
+
+Diseño del mecanismo de notificación verificado leyendo el código fuente de
+hermes-agent (`docs/hermes/spec.md §9.3` — se descartó `delegate_task`, ver el
+porqué ahí) y confirmado empíricamente con una tarea real.
+
 **Seguridad**: esta fase debe verificar SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3 y SEC-1.4 de [security.md](security.md). Es la fase con más superficie de exposición del proyecto, porque abre un canal al que cualquiera puede escribir.
 
 **Nota clave (verificada en el código de hermes-agent)**: hablar con Hermes desde fuera de casa **no requiere abrir ningún puerto** del router. El gateway de Telegram usa long polling (`getUpdates`, ver `gateway/platforms/telegram.py`), no webhooks — todo el tráfico es saliente. Si en algún momento parece necesario un túnel o un port forward para que funcione, es un error de configuración, no un requisito (SEC-0.1/SEC-0.2).
@@ -200,21 +234,21 @@ Etiqueto una issue real de un repo mío, y sin más intervención tengo un PR ab
 ### User stories
 
 - **US-3.1** — Como Operador, quiero que el gateway de Telegram acepte órdenes **únicamente** de mi cuenta, para que nadie que descubra el bot pueda mandarle tareas de código.
-  - [ ] Allowlist explícita configurada (`TELEGRAM_ALLOWED_USERS` con mi ID, y/o `hermes pairing approve`). **Nota**: hermes-agent ya deniega por defecto (`gateway/run.py::_is_user_authorized` termina en "Default: deny"), pero la allowlist se configura explícitamente en vez de confiar en el default (SEC-1.1).
-  - [ ] **SEC-1.2**: verificado que `GATEWAY_ALLOW_ALL_USERS` y `TELEGRAM_ALLOW_ALL_USERS` no están puestas a `true` en ningún `.env` ni en el compose.
-  - [ ] Verificado con al menos un intento real desde una **segunda cuenta de Telegram** no autorizada, confirmando que se rechaza. No se da por bueno por lectura del código.
-  - [ ] **SEC-0.1**: verificado que el sistema funciona de extremo a extremo desde fuera de la red doméstica (p. ej. con datos móviles) **sin** haber abierto ningún puerto en el router.
+  - [x] Allowlist explícita configurada (`TELEGRAM_ALLOWED_USERS` con mi ID, y/o `hermes pairing approve`). **Nota**: hermes-agent ya deniega por defecto (`gateway/run.py::_is_user_authorized` termina en "Default: deny"), pero la allowlist se configura explícitamente en vez de confiar en el default (SEC-1.1). Verificado con el ID real del Operador (`453464431`) tras corregir un typo de un dígito que había en `/opt/data/.env` (ver nota de bugs arriba).
+  - [x] **SEC-1.2**: verificado que `GATEWAY_ALLOW_ALL_USERS` y `TELEGRAM_ALLOW_ALL_USERS` no están puestas a `true` en ningún `.env` ni en el compose. `grep -rn "ALLOW_ALL_USERS"` en el repo: ninguna coincidencia en `.env`/compose reales, solo menciones en comentarios/docs advirtiendo de no activarlas. En el `.env` real desplegado (`/opt/data/.env` dentro del contenedor `hermes`): `# GATEWAY_ALLOW_ALL_USERS=false` y `# TEAMS_ALLOW_ALL_USERS=false` — comentadas, nunca `true`.
+  - [x] Verificado con al menos un intento real desde una **segunda cuenta de Telegram** no autorizada, confirmando que se rechaza. Confirmado por el Operador directamente desde su móvil.
+  - [x] **SEC-0.1**: verificado que el sistema funciona de extremo a extremo desde fuera de la red doméstica (p. ej. con datos móviles) **sin** haber abierto ningún puerto en el router. Confirmado por el Operador directamente desde su móvil.
 - **US-3.2** — Como Operador, quiero poder escribirle a Hermes por Telegram algo como "resuelve la issue #42 de mi-repo" o "arregla X en el repo Y" y que lo traduzca en una tarea ejecutable, para no depender de etiquetar issues en GitHub para todo.
-  - [ ] Un mensaje de este tipo dispara la misma tool `run_coding_task` que usa el Skill `resolve-issue` (Fase 2), con `repo`/`taskTitle`/`taskDescription` derivados del mensaje.
-  - [ ] Si el mensaje es ambiguo (no está claro el repo o qué hay que hacer), Hermes pregunta por Telegram antes de ejecutar nada — nunca adivina un repo o alcance no confirmado.
+  - [x] Un mensaje de este tipo dispara la misma tool `run_coding_task` que usa el Skill `resolve-issue` (Fase 2), con `repo`/`taskTitle`/`taskDescription` derivados del mensaje. Verificado por el Operador con una tarea real vía el skill `run-task`.
+  - [x] Si el mensaje es ambiguo (no está claro el repo o qué hay que hacer), Hermes pregunta por Telegram antes de ejecutar nada — nunca adivina un repo o alcance no confirmado.
 - **US-3.3** — Como Operador, quiero recibir una confirmación inmediata por Telegram de que la tarea se ha aceptado y se está ejecutando, para saber que el mensaje no se ha perdido aunque la tarea tarde minutos en terminar.
-  - [ ] Tras pedir una tarea, Hermes responde en segundos (p. ej. "Vale, me pongo con ello — tarea `<id>`, te aviso cuando termine") sin esperar a que `run_coding_task` haya devuelto resultado.
+  - [x] Tras pedir una tarea, Hermes responde en segundos (p. ej. "Vale, me pongo con ello — tarea `<id>`, te aviso cuando termine") sin esperar a que `run_coding_task` haya devuelto resultado. Confirmado con el mecanismo de `cronjob(repeat=1)` de un solo disparo descrito en `docs/hermes/spec.md §9.3`.
 - **US-3.4** — Como Operador, quiero recibir un mensaje por Telegram cuando la tarea termina (éxito, fallo, o necesita input), con el resumen y el link al PR si aplica, para no tener que consultar el estado manualmente.
-  - [ ] Al completarse `run_coding_task` en cualquier estado terminal (`success`/`failed`/`needs_human_input`/`timed_out`), llega un mensaje al mismo chat con el resumen y, si hay PR, el link.
-  - [ ] Verificado con al menos una ejecución real de principio a fin iniciada por Telegram, incluyendo el caso de una tarea de varios minutos (no solo una que responde al instante).
+  - [x] Al completarse `run_coding_task` en cualquier estado terminal (`success`/`failed`/`needs_human_input`/`timed_out`), llega un mensaje al mismo chat con el resumen y, si hay PR, el link.
+  - [x] Verificado con al menos una ejecución real de principio a fin iniciada por Telegram, incluyendo el caso de una tarea de varios minutos (no solo una que responde al instante). Confirmado por el Operador.
 - **US-3.5** — Como Operador, quiero que las mismas reglas de aislamiento y seguridad de `claude-code-runner-mcp` apliquen igual a las tareas iniciadas por Telegram que a las de GitHub, para que el canal de entrada nunca sea un atajo de seguridad.
-  - [ ] **SEC-1.4**: una tarea iniciada por Telegram pasa por el mismo `run_coding_task` (mismo aislamiento, mismo rate limiting) que una originada en GitHub — no hay una ruta alternativa sin aislamiento para el flujo conversacional.
-  - [ ] **SEC-0.3**: verificado que el dashboard de hermes-agent sigue atado a `127.0.0.1` y que el API server sigue desactivado.
+  - [x] **SEC-1.4**: una tarea iniciada por Telegram pasa por el mismo `run_coding_task` (mismo aislamiento, mismo rate limiting) que una originada en GitHub — no hay una ruta alternativa sin aislamiento para el flujo conversacional. El skill `run-task` llama a la misma (y única) tool MCP `run_coding_task` que `resolve-issue`; no existe una segunda ruta de ejecución.
+  - [x] **SEC-0.3**: verificado que el dashboard de hermes-agent sigue atado a `127.0.0.1` y que el API server sigue desactivado. `docker port personalai-hermes-1` → vacío (ningún puerto publicado) y `docker exec ... env | grep API_SERVER` → vacío (sin `API_SERVER_KEY`, que es lo que activaría el API server).
 
 ### Tareas técnicas
 
@@ -226,7 +260,7 @@ Etiqueto una issue real de un repo mío, y sin más intervención tengo un PR ab
 
 ### Definition of Done
 
-Puedo escribirle a mi bot de Telegram (solo yo, DM pairing verificado) pidiendo que resuelva algo de un repo, recibo confirmación inmediata, y recibo un aviso con el resultado cuando termina — sin haber tocado GitHub Issues ni el ordenador en ningún momento del ciclo.
+Puedo escribirle a mi bot de Telegram (solo yo, DM pairing verificado) pidiendo que resuelva algo de un repo, recibo confirmación inmediata, y recibo un aviso con el resultado cuando termina — sin haber tocado GitHub Issues ni el ordenador en ningún momento del ciclo. **Cumplida** — verificado end-to-end por el Operador desde su móvil, incluyendo el rechazo de una segunda cuenta no autorizada y el funcionamiento desde fuera de la red doméstica (SEC-0.1).
 
 ---
 
@@ -236,27 +270,40 @@ Puedo escribirle a mi bot de Telegram (solo yo, DM pairing verificado) pidiendo 
 
 **Depende de**: Fase 0.
 
+**Estado: completada.** Verificado end-to-end contra Postgres/pgvector real (`docker-compose.dev.yml`) y la Hugging Face Inference API real, con la API key del Operador: ingesta de una nota real → embedding calculado y persistido → consulta en lenguaje natural relacionada devuelve esa nota con score 0.56, mientras una nota distractora sin relación (receta de tortilla de patatas) puntúa 0.18 y queda por detrás; tras borrarla (`DELETE /v1/raw-events/:id`) deja de aparecer en absoluto. 30 tests unitarios/de integración HTTP en verde, más esta verificación manual con credenciales reales.
+
+**Bug real encontrado y corregido durante la verificación**: `api-inference.huggingface.co` (el dominio dedicado que documentaba la API de Hugging Face al escribir el código) ya no resuelve por DNS — Hugging Face lo retiró y consolidó la inferencia serverless bajo un router único, `router.huggingface.co`, con el proveedor explícito en la ruta (`hf-inference` = el servicio propio de HF, gratuito). Además, la ruta raíz del router (`/hf-inference/models/{model}`) resuelve `bge-m3` a la tarea "sentence-similarity" por defecto (payload distinto, falla con "missing sentences") en vez de "feature-extraction" — hace falta la ruta explícita `/hf-inference/models/{model}/pipeline/feature-extraction`. Corregido en `apps/brain/src/embeddings.ts`, con la URL nueva verificada en vivo (1024 dimensiones, como se esperaba) antes de tocar el código.
+
+**Segundo hallazgo, de entorno, no de diseño**: el Postgres de `docker-compose.dev.yml` (`personalai-dev-postgres-1`) tenía la contraseña real desincronizada del `POSTGRES_PASSWORD` actual del `.env` — igual que el hallazgo de Postgres de la Fase 3, cambiar la variable de entorno no repite `initdb` sobre un volumen ya inicializado. Corregido con `ALTER USER ... WITH PASSWORD` en caliente, sin perder el volumen. Además, la conexión desde el host a `localhost:5432` (el puerto publicado) fallaba con un error de autenticación mientras que la misma contraseña funcionaba perfectamente desde otro contenedor en la misma red Docker — un problema de red específico de este entorno (WSL2/Docker Desktop) enrutando mal `localhost` hacia el puerto publicado, no un problema de Postgres. Verificado el servicio arrancándolo dentro de un contenedor en la red `personalai-dev_default` en vez de depender de ese puerto publicado del host.
+
+**Decisión de arquitectura (tomada al construir la fase)**: proveedor de embeddings = **Hugging Face Inference API**, modelo `BAAI/bge-m3` (multilingüe, 1024 dimensiones) — decisión explícita del Operador, resuelve la pregunta abierta de [personal-brain/spec.md §11](personal-brain/spec.md#11-preguntas-abiertas). La API HTTP usa `node:http` nativo (sin Fastify/Express) para seguir la misma convención sin-framework que `apps/claude-code-runner-mcp`.
+
 ### User stories
 
 - **US-4.1** — Como Operador, quiero un endpoint/CLI para ingestar manualmente un documento de texto (nota markdown, descripción de PR pegada a mano) como `RawEvent`, para empezar a poblar Brain sin depender de conectores automáticos.
-  - [ ] `POST /v1/ingest` (o CLI equivalente) acepta `{ source, sourceAuthority, text, externalRef? }` y persiste un `RawEvent`.
-  - [ ] Valida que `sourceAuthority` sea `canonical` o `supporting` (rechaza cualquier otro valor).
+  - [x] `POST /v1/ingest` acepta `{ source, sourceAuthority, text, externalRef? }` y persiste un `RawEvent`. Implementado en `apps/brain/src/httpServer.ts`, verificado con tests de integración HTTP reales (`httpServer.test.ts`) contra `db.ts` mockeado.
+  - [x] Valida que `sourceAuthority` sea `canonical` o `supporting` (rechaza cualquier otro valor). Zod enum en `apps/brain/src/validation.ts`, verificado en `validation.test.ts` y `httpServer.test.ts` ("rechaza un sourceAuthority inválido... sin tocar la base de datos").
+  - [x] **Añadido, no pedido explícitamente por la US pero exigido por [personal-brain/spec.md §7](personal-brain/spec.md#7-permisos-y-privacidad-aunque-sea-single-user)**: filtro de sanitización que rechaza (400) texto que parece contener un secreto (patrones conocidos de GitHub/OpenAI/Anthropic/AWS/Slack/claves PEM + detector genérico de alta entropía) antes de persistir nada. `apps/brain/src/sanitize.ts`, 8 tests (`sanitize.test.ts`) sin falsos positivos verificados sobre prosa/URLs/commit SHAs reales.
 - **US-4.2** — Como Sistema, quiero generar y almacenar el embedding de cada `RawEvent` ingestado en pgvector, para poder hacer búsqueda por similitud más adelante.
-  - [ ] Cada `RawEvent` ingestado genera un embedding (proveedor configurable) y se persiste junto al texto.
+  - [x] Cada `RawEvent` ingestado genera un embedding (proveedor configurable vía `EmbeddingProvider`, `apps/brain/src/embeddings.ts`) y se persiste junto al texto. Se calcula de forma asíncrona tras responder (spec §5.1) — inserta la fila sin embedding, responde `201`, y actualiza la fila cuando el embedding llega (`updateEmbedding`). Verificado contra Postgres/pgvector real: la fila queda con `embedding is not null` tras ~1-2s, confirmado por consulta directa (`select id, embedding is null from brain.raw_events`).
 - **US-4.3** — Como Operador, quiero consultar `POST /v1/query` con una pregunta en lenguaje natural y recibir los fragmentos más relevantes por similitud semántica, para validar que la recuperación básica funciona.
-  - [ ] La respuesta incluye los `k` fragmentos más similares (k configurable) con su score (`{ fragments: [{ id, text, score, source, sourceAuthority, occurredAt }] }` — ver [personal-brain/spec.md §5](personal-brain/spec.md#5-api)).
-  - [ ] Documentado explícitamente en el spec y en el README que esto es "vector store simple sobre notas propias", no observations consolidadas ni un company brain — evita vender de más en el portfolio.
+  - [x] La respuesta incluye los `k` fragmentos más similares (k configurable, por defecto 5) con su score (`{ fragments: [{ id, text, score, source, sourceAuthority, occurredAt }] }`, `querySimilar` en `apps/brain/src/db.ts` sobre `embedding <=> $1::vector`, coseno). Verificado con tests de integración HTTP y con la consulta real de arriba.
+  - [x] Documentado explícitamente en `personal-brain/spec.md §1/§4.3` que esto es "vector store simple sobre notas propias", no observations consolidadas ni un company brain.
+  - [x] Verificado con una consulta real: "¿qué patrón de nombres siguen las ramas de Hermes?" devuelve la nota ingestada sobre convenciones de branches de Hermes (score 0.56) por delante de una nota distractora sin relación (score 0.18) — no es un resultado casual, la relación semántica real determina el orden.
 
 ### Tareas técnicas
 
-- `apps/brain/src/ingestion`: normalización a `RawEvent` + endpoint/CLI de ingesta manual.
-- `apps/brain/src/retrieval`: similarity search sobre pgvector — semántica pura, sin entidad/temporal/grafo (esas estrategias dependen de la capa de consolidación, fuera de alcance de este proyecto).
+- `apps/brain/src/httpServer.ts` + `validation.ts`: API HTTP (`/health`, `/v1/ingest`, `/v1/query`, `/v1/observations`, `DELETE /v1/raw-events/:id`), autenticación Bearer (`auth.ts`, mismo patrón que el runner).
+- `apps/brain/src/db.ts`: esquema `brain.raw_events` (pgvector, índice HNSW coseno) + inserción/consulta por similitud/borrado.
+- `apps/brain/src/embeddings.ts`: `EmbeddingProvider` + implementación Hugging Face Inference API (`BAAI/bge-m3`).
+- `apps/brain/src/sanitize.ts`: filtro de secretos antes de persistir (spec §7).
+- Sin CLI separada: el endpoint HTTP cubre la US-4.1 ("endpoint/CLI", se eligió el endpoint).
 - Sin MCP todavía — API HTTP interna únicamente (`brain-mcp` llega en la Fase 5).
 - **No se crea** `apps/brain/src/consolidation` en este proyecto — el directorio queda documentado como diseño futuro en el spec, no como código a escribir aquí.
 
 ### Definition of Done
 
-Puedo pegarle una nota por API/CLI y preguntarle algo relacionado, y me devuelve el fragmento relevante por similitud. Sin consolidación, sin MCP, sin conectores automáticos — y el README/spec de Brain dice esto explícitamente, incluyendo que la consolidación es trabajo futuro fuera de este proyecto.
+Puedo pegarle una nota por API y preguntarle algo relacionado, y me devuelve el fragmento relevante por similitud. Sin consolidación, sin MCP, sin conectores automáticos — y el spec de Brain dice esto explícitamente, incluyendo que la consolidación es trabajo futuro fuera de este proyecto. **Cumplida** — 30 tests en verde más verificación end-to-end real (Postgres/pgvector + Hugging Face reales) descrita arriba.
 
 ---
 
@@ -266,29 +313,37 @@ Puedo pegarle una nota por API/CLI y preguntarle algo relacionado, y me devuelve
 
 **Depende de**: Fase 2, Fase 3, Fase 4.
 
+**Estado: completada.** Verificado end-to-end con una ejecución real y completa de `resolve-issue` contra una issue real (`SantiDiana1/PersonalAI#14`), incluyendo un caso "antes/después" genuino para US-5.4 (no fabricado a propósito — surgió de un bug real encontrado en el proceso, ver abajo) y el cierre del bucle completo hasta un PR real (`#15`) con los datos exactos que solo existían en Brain.
+
+**Bug real encontrado y corregido durante la verificación**: en el primer intento real, `brain_query` dio timeout a los 10s (el default de `BRAIN_REQUEST_TIMEOUT_MS`) por un "cold start" genuino de la Hugging Face Inference API — el modelo llevaba un rato sin usarse y su infra serverless tardó más de 10s en volver a cargarlo. Hermes se comportó exactamente como pide US-5.2 (siguió sin contexto, sin bloquearse), y como consecuencia Claude Code no pudo inventar el nombre en clave del proyecto y devolvió correctamente `needs_human_input` en vez de alucinar un dato — comportamiento correcto dado lo que vio, el problema era el timeout, no la lógica. Subido `BRAIN_REQUEST_TIMEOUT_MS` de 10s a 25s (`apps/brain-mcp/src/brainClient.ts`) y el `timeout` del servidor MCP `brain-mcp` en hermes de 15s a 30s (mismo patrón que el ajuste de timeout del runner en Fase 2). Con el fix desplegado, el **cron nativo** (disparado solo, sin invocación manual, mientras un segundo intento manual esperaba una reconexión del proveedor) procesó la misma issue ya re-etiquetada con éxito: `brain_query` resolvió en 363ms, inyectó el contexto real, y Claude Code escribió el dato exacto (`Proyecto Cronos`, `#7C3AED`) en el PR — dato que no podía conocer de ninguna otra forma, verificado leyendo el diff real del PR.
+
 ### User stories
 
 - **US-5.1** — Como Hermes, quiero llamar a la tool `brain_query` antes de `run_coding_task`, para inyectar contexto relevante (convenciones, decisiones previas) en el prompt de Claude Code.
-  - [ ] El Skill `resolve-issue` llama a `brain_query` con el título/descripción de la issue antes de delegar la ejecución.
-  - [ ] El resultado de `brain_query` se inyecta como `brainContext` en `run_coding_task`.
+  - [x] El Skill `resolve-issue` llama a `brain_query` con el título/descripción de la issue antes de delegar la ejecución (Paso 3 de `hermes/skills/resolve-issue/SKILL.md`); `run-task` hace lo mismo dentro de su prompt de cronjob autocontenido.
+  - [x] El resultado de `brain_query` se inyecta como `brainContext` en `run_coding_task`.
+  - [x] Verificado dos veces: primero de forma aislada (chat directo `hermes chat -q`, sin mencionar la nota ingestada — Hermes llamó a `mcp_brain_mcp_brain_query` por su cuenta y respondió con el dato correcto), y después dentro del propio skill en una ejecución real completa de `resolve-issue` — ver US-5.4 para el caso completo.
 - **US-5.2** — Como Hermes, quiero que si `brain-mcp` no responde (caído, timeout), la tarea siga ejecutándose sin contexto en vez de bloquearse, para que una caída de Brain nunca tumbe el flujo principal.
-  - [ ] Con `brain-mcp` deliberadamente apagado, `resolve-issue` completa la tarea igualmente (loggeando el fallo de contexto).
+  - [x] Verificado real: con `brain`/`brain-mcp` parados (`docker stop`), Hermes detectó la caída al arrancar (3 reintentos con backoff en `errors.log`, "MCP server 'brain-mcp' failed initial connection... giving up"), no ofreció la tool, y completó igualmente la tarea de la consulta usando su propia memoria de sesión — sin bloquearse ni caerse. `brainClient.ts` además tiene su propio timeout corto (10s por defecto) del lado de brain-mcp, independiente del comportamiento de hermes-agent.
 - **US-5.3** — Como Sistema, quiero registrar el resultado de cada ejecución (éxito, fallo, resumen) en Brain vía `brain_record_observation`, para cerrar el bucle de aprendizaje descrito en el artículo de referencia.
-  - [ ] Tras cada ejecución del Skill (éxito o fallo), se crea un nuevo `RawEvent` en Brain de tipo `hermes_feedback` (persistido tal cual, sin extracción LLM — esa parte es la consolidación fuera de alcance).
+  - [x] El Skill `resolve-issue` (Paso 6) y `run-task` llaman a `brain_record_observation` tras cualquier resultado terminal (éxito o fallo), con el resumen y el link al PR si lo hay. Se persiste como `RawEvent` tipo `hermes_feedback`, `sourceAuthority: 'canonical'` siempre (fijado en el servidor, no confiado al cliente).
+  - [x] Verificado con la ejecución real de arriba: los **dos** intentos (el `needs_human_input` inicial y el éxito posterior) quedaron persistidos en Brain como `hermes_feedback`/`canonical` — confirmado con una consulta directa a `POST /v1/query` tras el PR, que devolvió ambos textos literales.
 - **US-5.4** — Como Operador, quiero poder demostrar, con un ejemplo concreto, que una tarea se resolvió mejor gracias al contexto de Brain que sin él, para tener la pieza central de la demo de portfolio.
-  - [ ] Existe al menos un caso documentado (antes/después) donde el contexto de Brain (fragmentos recuperados por similitud) cambió el resultado de la ejecución de forma verificable.
+  - [x] Caso real, no fabricado (surgió del bug de timeout de arriba): el **mismo issue, la misma tarea**, resuelta dos veces — sin contexto de Brain (timeout) → `needs_human_input`, Claude Code busca en todo el repo/git/su memoria y, correctamente, se niega a inventar el nombre en clave del proyecto; con contexto de Brain (tras el fix) → PR real con el dato exacto (`Proyecto Cronos`, `#7C3AED`). Es el caso antes/después más limpio posible: mismo input, mismo modelo, la única variable es si Brain respondió a tiempo.
 - **US-5.5** — Como Hermes, quiero que las tareas ad-hoc iniciadas por Telegram (Fase 3) también consulten a Brain antes de ejecutar y registren el resultado después, igual que las originadas en GitHub, para que el contexto beneficie a los dos canales de entrada por igual.
-  - [ ] Una tarea iniciada por Telegram llama a `brain_query` antes de `run_coding_task` y a `brain_record_observation` después, con el mismo comportamiento que el Skill `resolve-issue`.
+  - [x] El prompt autocontenido que programa `run-task` (Paso 3 de `hermes/skills/run-task/SKILL.md`) incluye explícitamente las llamadas a `brain_query` y `brain_record_observation`, con el mismo comportamiento no bloqueante que `resolve-issue` — mismas tools MCP, mismo `brainClient` ya verificado con el fix de timeout aplicado.
+  - [ ] No verificado con una ejecución real disparada específicamente desde Telegram (la verificación real de arriba fue vía GitHub/cron) — el mecanismo es idéntico y ya está probado, pero queda como demostración pendiente si se quiere el mismo nivel de evidencia en el canal conversacional.
 
 ### Tareas técnicas
 
-- `apps/brain-mcp`: servidor MCP con las tres tools (`brain_query`, `brain_ingest`, `brain_record_observation`) envolviendo la API HTTP de Brain (ver [personal-brain/spec.md §5.2](personal-brain/spec.md#52-api-vía-mcp-appsbrain-mcp-lo-que-realmente-consume-hermes)).
-- Registro de `brain-mcp` en la configuración de hermes-agent.
-- Ampliación del Skill `resolve-issue` con los pasos 2 y 6 (query antes, record after) descritos en [hermes/spec.md §5](hermes/spec.md#5-el-skill-resolve-issue).
+- `apps/brain-mcp`: servidor MCP con las tres tools (`brain_query`, `brain_ingest`, `brain_record_observation`) envolviendo la API HTTP de Brain (ver [personal-brain/spec.md §5.2](personal-brain/spec.md#52-api-vía-mcp-appsbrain-mcp-lo-que-realmente-consume-hermes)). Cliente HTTP propio (`brainClient.ts`) con timeout corto explícito (US-5.2). 10 tests en verde.
+- Registro de `brain-mcp` en la configuración de hermes-agent (`hermes/config/hermes.config.yaml` + `/opt/data/config.yaml` del despliegue real) — verificado con `hermes mcp list`/`hermes mcp test brain-mcp`: conectado, 3 tools descubiertas.
+- Despliegue: `apps/brain/Dockerfile` + `apps/brain-mcp/Dockerfile` (ambos no-root, sin privilegios especiales — a diferencia del runner, ninguno de los dos toca Docker), servicios `brain`/`brain-mcp` añadidos a `hermes/docker/docker-compose.yml`, reutilizando el Postgres existente con un esquema propio (`brain`, separado del `runner` del ejecutor).
+- Ampliación de los Skills `resolve-issue` (Pasos 3 y 6, renumerados) y `run-task` (dentro del prompt del cronjob) con las llamadas a `brain_query`/`brain_record_observation` — ver [hermes/spec.md §5](hermes/spec.md#5-el-skill-resolve-issue).
 
 ### Definition of Done
 
-Hermes consulta a Brain antes de actuar y le reporta el resultado después, de forma verificable con al menos un caso de ejemplo real. Este es el entregable que más vale enseñar en el portfolio, y cierra el **Milestone v1** (Fases 0 a 5).
+Hermes consulta a Brain antes de actuar y le reporta el resultado después, de forma verificable con al menos un caso de ejemplo real. **Cumplida** — issue real (`#14`) → PR real (`#15`) con datos que solo existían en Brain, más el caso antes/después de US-5.4 y el registro de ambos intentos en Brain (US-5.3). Cierra el **Milestone v1** (Fases 0 a 5).
 
 ---
 
@@ -296,14 +351,15 @@ Hermes consulta a Brain antes de actuar y le reporta el resultado después, de f
 
 Ideas y trabajo documentado que se queda deliberadamente fuera del Milestone v1, sin fecha ni compromiso — para retomar cuando el sistema básico ya esté funcionando de verdad en el día a día. No están numeradas como "Fase" porque no forman parte del roadmap secuencial: se puede picotear cualquiera de ellas en el orden que interese en su momento.
 
-### Futurible A — Ampliar fuentes (Notion, Jira)
+### Futurible A — Ampliar fuentes (Notion, Jira, Azure DevOps)
 
-**Qué sería**: que Hermes pueda coger tareas desde Notion y Jira además de GitHub, y que Brain pueda ingestar documentos de esas plataformas como fuente de contexto.
+**Qué sería**: que Hermes pueda coger tareas desde Notion, Jira y Azure DevOps además de GitHub, y que Brain pueda ingestar documentos de esas plataformas como fuente de contexto. **Nota de alcance (ver Futurible G)**: Jira aquí es personal (cuentas/proyectos propios del Operador); Azure DevOps es de la empresa del Operador y **no comparte despliegue** con el resto — su detalle de credenciales y aislamiento vive en el Futurible G, no aquí.
 
 - Registrar el servidor MCP oficial de Notion apuntando a una base de datos "Hermes Tasks" (`status = Ready for Hermes`).
-- Registrar un servidor MCP de Jira/Atlassian con un JQL fijo (`labels = hermes AND status = "To Do"`).
-- Generalizar el Skill conversacional/`resolve-issue` para listar y reportar en las tres plataformas indistintamente.
-- Etiquetar cada fuente de ingestion de Brain con su `source_authority` (`canonical`/`supporting`) para que un futuro retomar de la consolidación (Futurible C) parta de datos ya etiquetados.
+- Registrar un servidor MCP de Jira/Atlassian con un JQL fijo (`labels = hermes AND status = "To Do"`), sobre la cuenta/proyectos personales del Operador — instancia "Hermes personal" del Futurible G.
+- Registrar un servidor MCP de Azure DevOps (oficial o de comunidad — evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp) al implementar) con un filtro de work items equivalente (etiqueta/estado acordado), sobre la organización de Azure DevOps de la empresa del Operador — **exclusivamente** en la instancia "Hermes trabajo" del Futurible G, nunca en la personal.
+- Generalizar el Skill conversacional/`resolve-issue` para listar y reportar en todas las plataformas configuradas en esa instancia indistintamente (cada instancia solo ve las fuentes que le tocan — ver Futurible G).
+- Etiquetar cada fuente de ingestion de Brain con su `source_authority` (`canonical`/`supporting`) para que un futuro retomar de la consolidación (Futurible C) parta de datos ya etiquetados. Si Brain llega a usarse en la instancia de trabajo, es una base de datos y un despliegue de Brain **distintos** de los personales — mismo principio de no mezclar que en Futurible G.
 
 ### Futurible B — Pulido de portfolio
 
@@ -329,6 +385,41 @@ Usar el cron nativo de hermes-agent para mandar, sin que se le pida, un resumen 
 ### Futurible F — Voice memos vía Telegram
 
 hermes-agent soporta transcripción de notas de voz — se podría mandar una tarea hablada en vez de escrita desde el móvil, sin construir nada nuevo, solo verificar que el flujo conversacional de la Fase 3 funciona igual con audio transcrito.
+
+### Futurible G — Despliegue dual: instancia personal vs. instancia de trabajo
+
+**Qué sería**: dos instancias de Hermes completamente separadas — no dos bots configurados dentro del mismo despliegue, sino dos despliegues independientes (`docker compose` propio, `.env` propio, red Docker propia, volumen de estado propio) — porque mezclan dominios de riesgo distintos, no solo fuentes de datos distintas.
+
+**Por qué separadas de verdad, no solo "dos bots"**: este proyecto ya asume conscientemente un riesgo de ToS de consumidor de Anthropic para uso **personal** ([hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar)). Ese riesgo lo acepta el Operador para sí mismo. Meter credenciales/datos de la empresa del Operador (Azure DevOps, GitHub del trabajo) en la misma infraestructura arrastraría ese riesgo — y el propio dato de la empresa — a una decisión que no le corresponde a este proyecto tomar por él. Antes de construir esto, el Operador confirma con la política de seguridad/IT de su empresa qué está permitido, no se asume por defecto.
+
+- **Instancia "Hermes personal"** (la que ya existe): GitHub personal, Jira personal (Futurible A), Brain personal. Sigue usando la sesión Pro compartida del Operador (§0.1) — ese riesgo ya está aceptado para este ámbito.
+- **Instancia "Hermes trabajo"** (nueva, separada): Azure DevOps + GitHub de la empresa (Futurible A). **No reutiliza `hermes-claude-auth`** — necesita su propio mecanismo de auth con Anthropic (API key facturada normalmente, o la suscripción/cuenta que la empresa autorice), precisamente para no mezclar el riesgo de ToS personal con el uso profesional. Corre en su propio `docker-compose.yml`, con su propio `TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` (un bot de Telegram distinto), y sin acceso de red ni de volumen a la instancia personal.
+- Ambas pueden convivir en el mismo Mac Mini (contenedores en redes Docker separadas) o en máquinas distintas — a decidir según lo que permita la política de la empresa del Operador, no es una decisión puramente técnica.
+- **Explícitamente no se hace**: una única instancia con "modo personal" y "modo trabajo" conmutables, ni un mecanismo de multi-tenancy dentro del mismo proceso — eso es precisamente lo que la sección "Fuera de alcance" de este documento descarta para el proyecto en general, y aquí aplica con más razón porque cruza una frontera organizativa real, no solo de usuarios.
+
+**Seguridad**: los requisitos concretos de este aislamiento están numerados en [security.md §9 (SEC-7.1–SEC-7.5)](security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-post-v1-futurible-g) — no se despliega la instancia de trabajo sin verificarlos, con la misma disciplina de evidencia real que el resto del proyecto.
+
+### Futurible H — Comandos slash de Claude Code (`/design` y similares) vía `run_claude_command`
+
+**Qué sería**: que Hermes pueda pedirle a Claude Code no solo tareas de código (`run_coding_task`), sino comandos slash como `/design` o `/dataviz` que devuelven un **Artifact** publicado en claude.ai en vez de un commit — p.ej. "Hermes, diséñame una landing para mi proyecto X" por Telegram, y recibir el link al canvas de diseño resultante.
+
+- Diseño completo (contrato MCP, allowlist de comandos, entrega dual Telegram/issue) en [hermes/spec.md §3.7](hermes/spec.md#37-extensión-futura-post-v1-futurible-h-run_claude_command).
+- **Pregunta abierta central, a resolver antes de construir nada**: si `claude -p` en modo headless (el mecanismo no interactivo que usa todo `claude-code-runner-mcp`) puede completar el flujo de publicación de un Artifact igual que una sesión interactiva. Si no puede, este futurible se rediseña (devolver el HTML generado en vez de un link ya publicado) antes de implementar.
+- Tool nueva y separada de `run_coding_task` en `claude-code-runner-mcp` — mismo runner, mismo aislamiento de contenedor, misma sesión Pro compartida, misma cuota; solo un tipo de resultado distinto (`artifactUrl` en vez de `branchName`/`commitShas`).
+- Skill nuevo y dedicado, `run-design-task` (`hermes/skills/run-design-task/`), disparado por chat siguiendo el mismo patrón de confirmación inmediata + cronjob de un disparo que `run-task` (Fase 3) — no una extensión de `run-task`/`resolve-issue`. Distingue una petición de diseño de una de código antes de elegir la tool, preguntando si es ambiguo.
+
+### Futurible I — Consulta e ingesta directa a Brain por chat
+
+**Qué sería**: un skill nuevo (p.ej. `ask-brain`) que exponga `brain_query`/`brain_ingest` directamente en la conversación de Telegram, sin pasar por una tarea de código. Hoy Brain solo se toca como paso interno de `resolve-issue`/`run-task` (Fase 5) — nunca como algo que el Operador pueda pedir por sí solo ("Hermes, ¿qué sabíamos ya sobre X?", "recuerda que decidimos Y"). Dado que uno de los objetivos del proyecto ([hermes/spec.md §1](hermes/spec.md#1-objetivos)) es que Hermes sea "mi sistema de IA personal hablable", este es un hueco real en la superficie conversacional, no solo un nice-to-have.
+
+- Reutiliza `brain-mcp` tal cual (Fase 5) — sin cambios en `apps/brain`/`apps/brain-mcp`, solo un skill nuevo de orquestación.
+- Mismo principio de "el mensaje del Operador es instrucción, no dato no confiable" que ya aplica en `run-task` — no hace falta el tratamiento de prompt injection que sí exige `resolve-issue` sobre contenido de terceros.
+
+### Futurible J — Skill de estado/salud (sesión, cuota, resumen)
+
+**Qué sería**: un skill (p.ej. `status-report`) que responda "Hermes, ¿cómo estás?" con un resumen de: validez de la sesión OAuth compartida (§3.3 de `hermes/spec.md`), consumo aproximado de la ventana de 5h/semanal compartida entre chat y runner (pregunta abierta en [hermes/spec.md §10](hermes/spec.md#10-preguntas-abiertas)), y tareas recientes en `needs_human_input`. Hoy la única forma de enterarse de una sesión caducada o revocada es que se acumulen tareas sin resolver — este skill lo haría consultable a demanda, y conectaría con el Futurible E (resúmenes proactivos) dándole un contenido concreto que hoy no tiene.
+
+- Fuente de datos: la tabla `runner.task_runs` (§7 de `hermes/spec.md`) más el chequeo de sesión que ya usa `claude-code-runner-mcp` internamente (§3.2.1) — expuesto como tool de lectura, no como una tool nueva de ejecución.
 
 ---
 

@@ -72,6 +72,9 @@ desbloquean algo.
   scoped solo a los repos donde Hermes debe actuar.
 - Servidor MCP `claude-code-runner` registrado y conectado (por HTTP
   autenticado; ver `docs/hermes/spec.md` §3.5).
+- Servidor MCP `brain-mcp` registrado (Fase 5, `docs/personal-brain/spec.md`
+  §5.2). Opcional en el sentido de que su ausencia o caída **nunca** bloquea
+  este skill — ver Paso 3.
 - Etiquetas creadas en cada repo objetivo: `hermes`, `hermes:in-progress`,
   `hermes:done`, `hermes:needs-human`.
 
@@ -117,7 +120,26 @@ Procesa **una issue por ejecución** salvo que el Operador indique otra cosa:
 el rate limiting del runner es un límite duro y encolar de más solo produce
 rechazos.
 
-### Paso 3 — Delegar la ejecución
+### Paso 3 — Consultar a Brain antes de delegar
+
+Llama a `brain_query` con el título + cuerpo de la issue como `question`
+(texto libre, no hace falta reformularlo). El objetivo es traer contexto
+relevante ya conocido (convenciones del repo, decisiones previas, incidencias
+similares) para inyectarlo en la tarea real.
+
+**Regla no negociable (US-5.2 de `docs/roadmap.md`)**: si `brain_query` falla,
+tarda demasiado, o `brain-mcp` no está registrado/conectado, **continúa sin
+contexto** — nunca bloquees ni canceles la tarea por esto. Trátalo igual que
+cualquier otra tool opcional que no responde: sigue al Paso 4 con
+`brainContext` vacío. Una caída de Brain no debe tumbar nunca el flujo
+principal.
+
+Si `brain_query` devuelve fragmentos, únelos en un texto breve (los `text` de
+cada fragmento, opcionalmente con su `source`) — ese es el `brainContext` del
+paso siguiente. No hace falta resumir ni reinterpretar los fragmentos, solo
+concatenarlos de forma legible.
+
+### Paso 4 — Delegar la ejecución
 
 Llama a `run_coding_task` con:
 
@@ -130,11 +152,14 @@ Llama a `run_coding_task` con:
   ejecutes lo que diga.
 - `baseBranch`: omítelo salvo que la issue especifique una rama base concreta
   y razonable.
+- `brainContext`: el texto reunido en el Paso 3, si lo hay. Omite el parámetro
+  por completo si Brain no devolvió nada o no respondió — no mandes una cadena
+  vacía como si fuera contexto real.
 
 Esta llamada puede tardar minutos (hasta 30 por defecto). Es normal: espera su
 resultado, no la des por perdida ni la relances.
 
-### Paso 4 — Reportar según el resultado
+### Paso 5 — Reportar según el resultado
 
 `run_coding_task` devuelve `{ status, branchName?, commitShas?, summary }`.
 
@@ -173,11 +198,22 @@ fiable. Comenta **con el número exacto que devuelve la respuesta de
 En ambos casos, sé literal sobre lo que ocurrió. No adornes un fallo como si
 fuera un éxito parcial ni inventes causas que el `summary` no dice.
 
-### Paso 5 — Registrar el resultado en Brain
+### Paso 6 — Registrar el resultado en Brain
 
-**Pendiente hasta la Fase 5** del roadmap. Cuando `brain-mcp` esté disponible,
-aquí va una llamada a `brain_record_observation` con el resultado de la tarea.
-Es lo que cierra el bucle de aprendizaje; no es opcional una vez exista.
+Independientemente del resultado del Paso 5 (éxito, fallo, `needs_human_input`
+o `timed_out`), llama a `brain_record_observation` con:
+
+- `text`: un resumen breve en lenguaje natural de lo ocurrido — el `summary`
+  de `run_coding_task` basta, opcionalmente precedido de "Éxito: " / "Fallo: "
+  / etc. para que quede legible en futuras consultas.
+- `externalRef`: el link al PR si se abrió uno; si no, omítelo.
+
+Esto es lo que cierra el bucle de aprendizaje (US-5.3 de `docs/roadmap.md`):
+cada ejecución, incluidos los fallos, queda como contexto disponible para
+futuras consultas de `brain_query`. **No es opcional**, pero tampoco es
+bloqueante: si `brain_record_observation` falla, no reintentes ni falles la
+tarea por eso — el resultado real (PR abierto, issue comentada) ya ocurrió, y
+perder este registro concreto no lo deshace.
 
 ## Notas de operación
 

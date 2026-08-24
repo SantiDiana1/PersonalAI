@@ -85,6 +85,55 @@ services:
       CLAUDE_CODE_RUNNER_MAX_CONCURRENT: ${CLAUDE_CODE_RUNNER_MAX_CONCURRENT:-2}
       CLAUDE_CODE_RUNNER_MAX_PER_HOUR: ${CLAUDE_CODE_RUNNER_MAX_PER_HOUR:-10}
 
+  brain:
+    build:
+      context: ../..
+      dockerfile: apps/brain/Dockerfile
+    image: brain:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Igual que claude-code-runner: sin `ports:`, solo red interna de Compose.
+    # Ningún privilegio especial (no toca Docker) — se mantiene sin publicar
+    # de todos modos, por consistencia y porque no hace falta.
+    networks: [personalai]
+    environment:
+      BRAIN_HTTP_PORT: '8090'
+      # Autoridad propia (SEC-6.4: "un secreto, un propósito"), distinta de
+      # CLAUDE_CODE_RUNNER_AUTH_TOKEN — solo la llama brain-mcp.
+      BRAIN_API_TOKEN: ${BRAIN_API_TOKEN:?falta BRAIN_API_TOKEN}
+      # Esquema propio (`brain`) en el MISMO Postgres que usa el runner
+      # (esquema `runner`) — evita levantar una segunda base de datos para un
+      # proyecto personal. Ver docs/personal-brain/spec.md §6.
+      DATABASE_URL: postgres://${POSTGRES_USER:-personalai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-personalai}
+      # Proveedor de embeddings (docs/personal-brain/spec.md §11): Hugging
+      # Face Inference API, BAAI/bge-m3 por defecto.
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:?falta HUGGINGFACE_API_KEY}
+
+  brain-mcp:
+    build:
+      context: ../..
+      dockerfile: apps/brain-mcp/Dockerfile
+    image: brain-mcp:local
+    restart: unless-stopped
+    depends_on:
+      brain:
+        condition: service_healthy
+    # Mismo patrón que claude-code-runner (SEC-3.1 aplicado por consistencia,
+    # aunque este servicio no tenga privilegios especiales): sin `ports:`.
+    networks: [personalai]
+    environment:
+      BRAIN_MCP_TRANSPORT: http
+      BRAIN_MCP_HTTP_PORT: '8091'
+      # Autoridad del canal hermes -> brain-mcp. Genéralo con
+      # `openssl rand -hex 32`; distinto de BRAIN_API_TOKEN y de
+      # CLAUDE_CODE_RUNNER_AUTH_TOKEN (SEC-6.4).
+      BRAIN_MCP_AUTH_TOKEN: ${BRAIN_MCP_AUTH_TOKEN:?falta BRAIN_MCP_AUTH_TOKEN}
+      BRAIN_URL: http://brain:8090
+      # Canal brain-mcp -> brain: MISMO valor que BRAIN_API_TOKEN de arriba.
+      BRAIN_API_TOKEN: ${BRAIN_API_TOKEN:?falta BRAIN_API_TOKEN}
+
   hermes:
     build:
       # Checkout de NousResearch/hermes-agent. No modificamos su código: se
@@ -95,6 +144,8 @@ services:
     depends_on:
       claude-code-runner:
         condition: service_healthy
+      brain-mcp:
+        condition: service_healthy
     # SEC-2.2: sin `network_mode: host` (el compose upstream lo usa por
     # comodidad). Con red de Compose, hermes no ve la red doméstica ni los
     # servicios del Mac Mini — solo lo que necesita: salida a internet y el
@@ -103,15 +154,23 @@ services:
     volumes:
       # SEC-2.1: aquí NO se monta /var/run/docker.sock. Nunca.
       - ${HERMES_HOME:-~/.hermes}:/opt/data
-      # El skill resolve-issue se carga desde el repo (fuente de verdad
-      # versionada) vía `skills.external_dirs`, en vez de copiarlo a
-      # ~/.hermes/skills/ y tener dos copias divergiendo. Solo lectura.
+      # Los skills resolve-issue y run-task se cargan desde el repo (fuente de
+      # verdad versionada) vía `skills.external_dirs`, en vez de copiarlos a
+      # ~/.hermes/skills/ y tener copias divergiendo. Solo lectura. Al montar
+      # el directorio padre, un skill nuevo bajo hermes/skills/ no necesita
+      # ningún cambio aquí para que hermes lo vea.
       - ../skills:/opt/data/skills-repo:ro
     environment:
       HERMES_UID: ${HERMES_UID:-10000}
       HERMES_GID: ${HERMES_GID:-10000}
       # Misma sesión Pro que el runner, un único secreto compartido.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?falta CLAUDE_CODE_OAUTH_TOKEN}
+      # SEC-1.3: secreto de primer nivel — quien lo tenga puede leer todo lo
+      # que se le escribe al bot y suplantarlo. Sin esta variable, el
+      # adaptador de Telegram del gateway ni siquiera se activa
+      # (gateway/config.py::_apply_env_overrides solo activa Platform.TELEGRAM
+      # si TELEGRAM_BOT_TOKEN no está vacío).
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       # SEC-1.1/SEC-1.2: allowlist explícita para el gateway. Los flags
       # GATEWAY_ALLOW_ALL_USERS / TELEGRAM_ALLOW_ALL_USERS no se ponen jamás.
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}

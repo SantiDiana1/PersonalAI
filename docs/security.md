@@ -256,7 +256,53 @@ que el modelo esté completo en un solo sitio.
   es revocada, se renueva a mano. **No se automatiza** la extracción de tokens
   (ver [hermes/spec.md §3.3](hermes/spec.md#33-limitación-conocida-expiración-o-revocación-de-sesión)).
 
-## 9. Lo que este modelo NO protege — léelo
+## 9. Capa 7 — Aislamiento entre instancia personal y de trabajo (post-v1, Futurible G)
+
+Esta capa solo aplica **si y cuando** se construya el [Futurible G del roadmap](roadmap.md#futurible-g--despliegue-dual-instancia-personal-vs-instancia-de-trabajo) (Azure DevOps u otra fuente de la empresa del Operador). No existe en v1. Se recoge aquí, con numeración propia, para que la decisión de aislamiento no dependa de que alguien se acuerde de leer el roadmap el día que se implemente.
+
+El principio de fondo es el mismo que en §0, aplicado a un límite distinto: **el riesgo que el Operador acepta para sí mismo (§0.2, ToS de la sesión Pro) no se traslada por defecto a datos o credenciales de su empleador.**
+
+- **SEC-7.1 (innegociable) — Despliegues físicamente separados.** La instancia
+  "Hermes trabajo" corre en su propio `docker compose` (propio `docker-compose.yml`,
+  propia red Docker, propio volumen de estado). **No** comparte red Docker,
+  volumen, ni proceso con la instancia personal — ni siquiera si ambas viven en
+  el mismo Mac Mini. Un contenedor de una instancia no debe poder alcanzar por
+  red a un contenedor de la otra.
+  - _Verificación_: `docker network inspect` de la red de cada instancia no debe
+    listar contenedores de la otra; `docker exec` en un contenedor de la
+    instancia de trabajo no debe poder resolver ni alcanzar por nombre ningún
+    servicio de la instancia personal (y viceversa).
+
+- **SEC-7.2 (innegociable) — Sin autenticación de Anthropic compartida.** La
+  instancia de trabajo **nunca** usa `hermes-claude-auth` (el token OAuth de la
+  suscripción Pro personal, §0.1). Usa su propio mecanismo de auth con
+  Anthropic — API key facturada normalmente, o lo que la empresa del Operador
+  autorice explícitamente. Mezclar aquí no es solo un problema de aislamiento
+  técnico: es extender un riesgo de ToS aceptado a título personal (§0.2) a
+  código y datos de un tercero (el empleador) sin su consentimiento informado.
+
+- **SEC-7.3 (innegociable) — Credenciales de empresa en su propio secreto,
+  nunca en el `.env` personal.** El token/credencial de Azure DevOps (y
+  cualquier GitHub/GitLab de la empresa) vive exclusivamente en el `.env` de la
+  instancia de trabajo. No se copian a `hermes/docker/.env` (personal) "para no
+  tener que levantar otro compose", ni se meten como credencial adicional del
+  runner personal.
+
+- **SEC-7.4 (innegociable) — Bot de Telegram y allowlist propios.** La
+  instancia de trabajo registra su propio `TELEGRAM_BOT_TOKEN` y su propio
+  `TELEGRAM_ALLOWED_USERS` (SEC-1.1–SEC-1.3 aplican igual, por instancia). Un
+  mismo bot de Telegram no sirve a las dos instancias.
+
+- **SEC-7.5 — Confirmación explícita de política de empresa antes de
+  desplegar.** Antes de que la instancia de trabajo procese cualquier dato o
+  credencial real de la empresa del Operador, el Operador confirma qué permite
+  la política de seguridad/IT de su empleador (uso de infraestructura personal,
+  qué proveedor de modelo está autorizado, etc.). No es un requisito verificable
+  en código — es una condición de gobernanza que precede a la implementación, y
+  se deja constancia de ella (fecha, con quién se confirmó) antes de escribir la
+  primera línea de este despliegue.
+
+## 10. Lo que este modelo NO protege — léelo
 
 Un modelo de seguridad que no enumera sus límites es propaganda. Estos riesgos
 quedan **aceptados conscientemente**:
@@ -280,14 +326,15 @@ quedan **aceptados conscientemente**:
 - **Compromiso del propio Mac Mini por otra vía.** Este modelo protege el equipo
   de _este_ sistema; no es un endurecimiento general del Mac Mini.
 
-## 10. Checklist de verificación por fase
+## 11. Checklist de verificación por fase
 
 Ninguna fase se cierra sin ejecutar estas comprobaciones **de verdad**, con
 evidencia pegada en el roadmap.
 
-| Fase      | Requisitos a verificar                                                                   |
-| --------- | ---------------------------------------------------------------------------------------- |
-| 1 (hecha) | SEC-4.3, SEC-5.1 – SEC-5.6, SEC-6.3                                                      |
-| 2         | SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1, SEC-6.2 |
-| 3         | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
-| 4–5       | Revisión de que Brain no reintroduce superficie (API solo en red interna, token propio)  |
+| Fase                  | Requisitos a verificar                                                                   |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| 1 (hecha)             | SEC-4.3, SEC-5.1 – SEC-5.6, SEC-6.3                                                      |
+| 2                     | SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1, SEC-6.2 |
+| 3                     | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
+| 4–5                   | Revisión de que Brain no reintroduce superficie (API solo en red interna, token propio)  |
+| Futurible G (post-v1) | SEC-7.1 – SEC-7.5, en cuanto exista una instancia "Hermes trabajo"                       |
