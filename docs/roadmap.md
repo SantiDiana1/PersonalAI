@@ -340,3 +340,10 @@ Esto no son ideas aparcadas para "más adelante" — son cosas que este proyecto
 - Alta disponibilidad / multi-región — un único servidor local (Mac Mini) es suficiente para el objetivo de uso personal.
 - Automatizar la reautenticación de la sesión de Claude Code cuando expira o es revocada (§0.2/§3.3 de hermes/spec.md) — es y seguirá siendo un paso manual del Operador.
 - Ofrecer este sistema como servicio a terceros — uso estrictamente personal, dado el riesgo de ToS asumido en la autenticación compartida.
+
+---
+
+## Nombre en clave
+
+- Nombre en clave del proyecto de portfolio: **Proyecto Cronos**.
+- Color corporativo de referencia para diagramas de arquitectura: `#7C3AED` (morado).
