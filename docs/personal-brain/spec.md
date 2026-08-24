@@ -210,7 +210,7 @@ create table raw_events (
   source_authority text not null check (source_authority in ('canonical','supporting')),
   external_ref text,
   text text not null,
-  embedding vector(1536),
+  embedding vector(1024),
   occurred_at timestamptz not null,
   ingested_at timestamptz not null default now()
 );
@@ -228,7 +228,7 @@ create table observations (
   source_authority text not null,
   valid_from timestamptz not null,
   superseded_by uuid references observations(id),
-  embedding vector(1536),
+  embedding vector(1024),
   created_at timestamptz not null default now()
 );
 
@@ -236,7 +236,7 @@ create table mental_models (
   id uuid primary key default gen_random_uuid(),
   entity text not null,
   summary text not null,
-  embedding vector(1536),
+  embedding vector(1024),
   updated_at timestamptz not null default now()
 );
 
@@ -267,8 +267,8 @@ Aunque v1 es de un único usuario, el spec deja el diseño listo para generaliza
 
 - TypeScript + Node.js.
 - Postgres + `pgvector` para embeddings y datos estructurados en el mismo motor (evita operar dos bases de datos distintas para un proyecto personal).
-- Un proveedor de embeddings vía API (OpenAI o Anthropic) para la búsqueda por similitud — configurable, no atado a un único proveedor. En v1 no hace falta un LLM de extracción/consolidación (eso es §4.2, fuera de alcance).
-- Fastify o Express para la API HTTP.
+- Hugging Face Inference API (`BAAI/bge-m3` por defecto) para embeddings — decisión explícita del Operador (Fase 4), ver §11. La abstracción `EmbeddingProvider` (`apps/brain/src/embeddings.ts`) no ata el resto del código a este proveedor concreto. En v1 no hace falta un LLM de extracción/consolidación (eso es §4.2, fuera de alcance).
+- Node.js `http` nativo (sin Fastify/Express) para la API HTTP — decisión tomada en Fase 4 para seguir la misma convención que `apps/claude-code-runner-mcp` (cero dependencias de framework, zod para validación) en vez de introducir una segunda forma de montar un servidor HTTP en el monorepo.
 
 ## 10. Métricas de éxito (v1 — adaptadas del paso 5 del artículo, a escala personal)
 
@@ -279,4 +279,4 @@ Aunque v1 es de un único usuario, el spec deja el diseño listo para generaliza
 ## 11. Preguntas abiertas
 
 - ¿Notion/Obsidian export como fuente principal de notas, o directamente un vault de Obsidian sincronizado por filesystem? Afecta al conector de ingestion de la Fase 4.
-- ¿Qué proveedor de embeddings se usa por defecto? Recomendado: mismo proveedor que usa Claude Code para minimizar el número de credenciales a gestionar en el servidor local.
+- ~~¿Qué proveedor de embeddings se usa por defecto?~~ **Resuelto (Fase 4)**: Hugging Face Inference API, modelo `BAAI/bge-m3` por defecto (multilingüe — incluye español, fuerte en retrieval según MTEB, hasta 8192 tokens de contexto), 1024 dimensiones. Decisión explícita del Operador (no el proveedor "mismo que Claude Code" que sugería originalmente esta pregunta — Anthropic no ofrece una API de embeddings propia). Configurable vía `HUGGINGFACE_API_KEY`/`BRAIN_EMBEDDING_MODEL`/`BRAIN_EMBEDDING_DIMENSIONS` — ver `apps/brain/src/embeddings.ts`. El esquema de `raw_events.embedding` (§6) usa `vector(1024)`, no `vector(1536)` como en un borrador anterior de este documento (ese número asumía OpenAI `text-embedding-3-small`, no usado aquí).
