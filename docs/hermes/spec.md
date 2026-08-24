@@ -170,15 +170,67 @@ Al meter el runner en un contenedor, esto **se rompe en silencio**: el runner pe
 
 **Nota operativa**: como el contenedor del runner corre como root (ver el razonamiento en su `Dockerfile`), los directorios de workspace aparecen en el host propiedad de root. No es un problema de funcionamiento — quien los crea y los borra es el propio runner, que es root dentro de su contenedor — pero conviene saberlo al inspeccionar o limpiar esa raíz a mano desde el host.
 
-## 4. Servidores MCP de terceros (GitHub, Notion, Jira)
+### 3.7 Extensión futura (post-v1, [roadmap.md — Futurible H](../roadmap.md#futurible-h--comandos-slash-de-claude-code-design-y-similares)): `run_claude_command`
+
+**No es parte del Milestone v1.** Documentado aquí para que el diseño quede listo cuando se retome, sin bloquear las fases activas.
+
+**Motivación**: `run_coding_task` asume que el resultado de una tarea es código — una rama con commits. Pero Claude Code trae comandos slash que no producen un diff, sino un **Artifact** publicado en claude.ai (`/design` para canvases de diseño, `/dataviz` para visualizaciones, y otros que vayan apareciendo). Hermes no tiene hoy forma de pedir "diséñame una landing para X" y recibir ese tipo de entregable — solo sabe pedir código.
+
+**Contrato MCP propuesto**, tool nueva y separada de `run_coding_task` (para no mezclar dos formas de resultado — rama con commits vs. link a Artifact — en el mismo contrato):
+
+```ts
+// tool: run_claude_command
+//
+// Misma auth, mismo aislamiento de contenedor y mismo rate limiting que
+// run_coding_task (§3.2–§3.4) — comparte infraestructura, no es un
+// componente nuevo, solo una segunda forma de invocar el mismo runner.
+interface RunClaudeCommandInput {
+  slashCommand: string; // p.ej. "/design", "/dataviz" — validado contra un allowlist fijo, NO cualquier comando arbitrario
+  prompt: string; // texto libre tras el comando (p.ej. "landing page para mi proyecto X")
+  repo?: string; // opcional: solo si el comando necesita contexto de un repo concreto
+  brainContext?: string; // igual que en run_coding_task
+  timeoutSeconds?: number;
+}
+
+interface RunClaudeCommandOutput {
+  status: 'success' | 'failed' | 'needs_human_input' | 'timed_out';
+  artifactUrl?: string; // link al Artifact publicado en claude.ai, si el comando produjo uno
+  summary: string;
+  logsUrl?: string;
+}
+```
+
+Puntos de diseño a resolver **al implementar**, no asumidos aquí:
+
+- **Allowlist de comandos, no comandos libres.** El input no acepta cualquier string tras `/`: se valida contra una lista fija de slash commands aprobados (`/design`, `/dataviz`, ampliable). Mismo principio que "la superficie MCP sigue siendo exactamente una tool" (SEC-3.3) — aquí se traduce en "la superficie de comandos ejecutables es exactamente esta lista", no un intérprete de comandos arbitrario expuesto a texto no confiable (issues, mensajes de Telegram).
+- **Pendiente de verificar empíricamente, no confirmado**: si `claude -p` en modo headless (no interactivo, sin sesión de navegador) puede completar el flujo de publicación de un Artifact igual que en una sesión interactiva de Claude Code. Si no puede, esta tool no es viable tal cual y hay que rediseñar (p.ej. devolver el `.dc.html`/HTML generado en vez de un `artifactUrl` ya publicado, y que sea el Operador quien lo publique a mano). No se da esto por sentado — es la primera pregunta a responder al retomar este futurible, con evidencia real como el resto del spec.
+- **Sin commit, sin PR.** A diferencia de `run_coding_task`, esta tool no clona el repo en busca de cambios que empujar (salvo que el propio `repo` se use como contexto de entrada) — el entregable es el `artifactUrl`, punto.
+- El aislamiento de contenedor (SEC-5.\*), la sesión compartida (§0.1) y el rate limiting (SEC-4.3) aplican igual que a `run_coding_task` — comparten el mismo runner y la misma cuota de la ventana de 5h/semanal (§10, pregunta abierta sobre reparto de cuota).
+
+**Entrega del resultado — dual según origen** (decisión tomada al diseñar este futurible, mismo patrón que ya existe entre `resolve-issue` y `run-task`):
+
+- **Origen Telegram** (petición conversacional, p.ej. "diséñame una landing para mi proyecto X"): se reutiliza el mecanismo de confirmación inmediata + cronjob de un disparo de §9.3 — el mensaje final al chat incluye el `artifactUrl`. No hace falta ningún mecanismo de entrega nuevo.
+- **Origen issue/ticket** (p.ej. una issue etiquetada pidiendo un mockup): el Skill correspondiente comenta en la issue original con el `artifactUrl`, igual que `resolve-issue` comenta con el link al PR — nunca abre PR en este caso, porque no hay commits.
+- **Skill nuevo y dedicado: `run-design-task`** (`hermes/skills/run-design-task/`), no una extensión de `run-task`/`resolve-issue`. Decisión tomada al diseñar este futurible: mezclar "tarea de código" y "tarea de Artifact" en el mismo skill obligaría a esa lógica de discriminación a vivir dentro de un skill ya complejo; separarlo mantiene cada skill enfocado en una tool y un tipo de resultado, igual que `run_coding_task`/`run_claude_command` están separadas a nivel de tool (más arriba en esta sección). Disparado por chat (Telegram), siguiendo el mismo patrón de `run-task` (§9.3: confirmación inmediata + `cronjob(repeat: 1)` para no bloquear el turno) — la variante disparada por issue/ticket se deja para cuando exista un caso de uso real, no se construye especulativamente. El Operador tiene que dejar claro qué comando quiere (o el skill pregunta si es ambiguo, mismo principio que §9.2) antes de llamar a `run_claude_command`.
+
+## 4. Servidores MCP de terceros (GitHub, Notion, Jira, Azure DevOps)
 
 Se usan servidores MCP ya existentes y mantenidos, no conectores propios:
 
 - **GitHub**: [github/github-mcp-server](https://github.com/github/github-mcp-server) (oficial). Se autentica con un GitHub App o PAT fine-grained, scoped solo a los repos donde quiero que Hermes actúe (`issues:write`, `contents:write`, `pull_requests:write` — nada más).
 - **Notion**: servidor MCP oficial de Notion. Apunta a una base de datos concreta ("Hermes Tasks") filtrando por una propiedad `status`.
-- **Jira**: servidor MCP de Atlassian/comunidad, configurado con un JQL fijo (por defecto `labels = hermes AND status = "To Do"`).
+- **Jira**: servidor MCP de Atlassian/comunidad, configurado con un JQL fijo (por defecto `labels = hermes AND status = "To Do"`). Fuente **personal** del Operador (post-v1, [roadmap.md — Futurible A](../roadmap.md#futurible-a--ampliar-fuentes-notion-jira-azure-devops)).
+- **Azure DevOps**: servidor MCP oficial o de comunidad (evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp) al implementar), con un filtro de work items equivalente al JQL de Jira. Fuente **de la empresa** del Operador — **nunca** registrado en la misma instancia de hermes-agent que las fuentes personales. Ver §4.1.
 
-Registro en hermes-agent (`hermes/config/hermes.config.yaml` + `hermes mcp add <server>`), cada uno con sus propias credenciales de mínimo privilegio. Estas credenciales (GitHub/Notion/Jira) sí son API keys/tokens convencionales — solo la parte de modelo Anthropic usa la sesión Pro compartida (§0.1).
+Registro en hermes-agent (`hermes/config/hermes.config.yaml` + `hermes mcp add <server>`), cada uno con sus propias credenciales de mínimo privilegio. Estas credenciales (GitHub/Notion/Jira/Azure DevOps) sí son API keys/tokens convencionales — solo la parte de modelo Anthropic usa la sesión Pro compartida (§0.1), y solo en la instancia personal (§4.1).
+
+### 4.1 Despliegue dual: instancia personal vs. instancia de trabajo (post-v1)
+
+**Decisión de arquitectura** (detalle completo y motivación en [roadmap.md — Futurible G](../roadmap.md#futurible-g--despliegue-dual-instancia-personal-vs-instancia-de-trabajo)): en cuanto Azure DevOps (u otra fuente de la empresa del Operador) entra en juego, **no** se añade como un servidor MCP más a la instancia de hermes-agent ya desplegada. Se despliega una **segunda instancia completa**, aislada de la primera: `docker-compose.yml` propio, `.env` propio, red Docker propia, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos), y — crucialmente — **auth propia con Anthropic**, no `hermes-claude-auth`. El riesgo de ToS descrito en §0.2 se asume explícitamente para uso personal; no se traslada sin más a datos y credenciales de un empleador.
+
+Consecuencia directa para `claude-code-runner-mcp`: si la instancia de trabajo llega a necesitar ejecutar tareas de código, es un **despliegue separado** del componente (su propio contenedor, su propio `CLAUDE_CODE_RUNNER_AUTH_TOKEN`, su propia base de Postgres) — no un parámetro de "cliente" añadido al runner personal. El aislamiento de §3.4 aplica igual, pero por partida doble.
+
+Requisitos numerados y verificables en [security.md §9 (SEC-7.1–SEC-7.5)](../security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-post-v1-futurible-g).
 
 ## 5. El Skill `resolve-issue`
 
@@ -244,16 +296,25 @@ Hermes no es solo "un bot que cierra issues de GitHub" — el objetivo de este p
 
 ### 9.2 De mensaje a tarea
 
-Un mensaje conversacional del tipo "resuelve la issue #42 de mi-repo" o "arregla X en el repo Y" se traduce en los mismos parámetros (`repo`, `taskTitle`, `taskDescription`) que consume `run_coding_task` — es la misma tool que usa el Skill `resolve-issue` (sección 5), solo que el disparador es un mensaje de chat en vez del cron de GitHub. Si el mensaje no deja claro el repo o el alcance de la tarea, Hermes pregunta antes de ejecutar — nunca asume un repo por defecto ni interpreta de más una petición ambigua.
+Un mensaje conversacional del tipo "resuelve la issue #42 de mi-repo" o "arregla X en el repo Y" se traduce en los mismos parámetros (`repo`, `taskTitle`, `taskDescription`) que consume `run_coding_task` — es la misma tool que usa el Skill `resolve-issue` (sección 5), solo que el disparador es un mensaje de chat en vez del cron de GitHub. El skill que implementa esto es `run-task` (`hermes/skills/run-task/SKILL.md`), disponible en cualquier turno interactivo (no solo en cron) vía el mecanismo estándar de progressive disclosure de hermes-agent (`skills_list()`/`skill_view()`). Si el mensaje no deja claro el repo o el alcance de la tarea, Hermes pregunta antes de ejecutar — nunca asume un repo por defecto ni interpreta de más una petición ambigua.
 
 ### 9.3 Confirmación inmediata y notificación de finalización
 
-`run_coding_task` puede tardar hasta el timeout configurado (por defecto 30 minutos, §3.1) — no es razonable dejar la conversación de Telegram bloqueada esperando la respuesta de la tool en el mismo turno. El diseño de dos pasos:
+`run_coding_task` puede tardar hasta el timeout configurado (por defecto 30 minutos, §3.1) — no es razonable dejar la conversación de Telegram bloqueada esperando la respuesta de la tool en el mismo turno.
 
-1. **Confirmación inmediata**: en cuanto se acepta la tarea (antes de que `run_coding_task` devuelva nada), Hermes responde con algo como "Vale, me pongo con ello — tarea `<id>`, te aviso cuando termine".
-2. **Notificación de finalización** — dos mecanismos posibles, en orden de preferencia (a decidir empíricamente durante la Fase 3 del roadmap, y documentar aquí cuál se usó):
-   - **Preferido**: delegar la llamada a `run_coding_task` en un subagente de hermes-agent (su mecanismo nativo de "delegación de subagentes para paralelizar trabajo", §0). El chat principal queda libre mientras tanto, y el resultado se reporta de vuelta al hilo original de Telegram cuando el subagente termina. Hay que verificar en la práctica que esto funciona para tareas largas (hasta 30 min) antes de asumirlo como mecanismo definitivo.
-   - **Fallback**: si la delegación de subagentes no resulta viable para esperas largas, un job de `hermes cron` consulta periódicamente `runner.task_runs` (sección 7) por tareas que hayan pasado a un estado terminal desde la última comprobación, y envía un mensaje al `chat_id` del Operador vía el gateway con el resultado.
+**Mecanismo elegido: un cronjob de un solo disparo (`cronjob(action='create', repeat=1)`), sin `deliver` explícito.** Implementado en el skill `run-task` (`hermes/skills/run-task/SKILL.md`).
+
+El diseño original de esta sección planteaba dos opciones a decidir empíricamente durante la Fase 3: delegación de subagentes (`delegate_task`) como preferida, y polling de `runner.task_runs` vía cron como fallback. **Ninguna de las dos se usó**, tras leer el código fuente de hermes-agent (`tools/delegate_tool.py`, `tools/cronjob_tools.py`) dentro del propio contenedor desplegado:
+
+- **`delegate_task` queda descartado, no es una alternativa viable.** Su propia descripción de tool lo dice explícitamente: se ejecuta _síncronamente_ dentro del turno padre, y si el turno padre se interrumpe (el Operador manda otro mensaje, `/stop`, `/new`) el hijo se cancela y su trabajo se descarta — "children cannot continue in the background". Eso es justo lo contrario de lo que piden US-3.3/US-3.4: una tarea de hasta 30 minutos donde es más que probable que el Operador escriba algo más mientras tanto. La propia documentación de la tool recomienda, para "trabajo duradero que debe sobrevivir al turno actual", usar `cronjob(action='create')` — que es lo que se implementó.
+- El polling de `runner.task_runs` no hizo falta: el mecanismo de entrega de cronjobs de hermes-agent ya resuelve esto de forma nativa. Si se omite el parámetro `deliver` al crear el job, `tools/cronjob_tools.py::_origin_from_env()` captura `platform`/`chat_id`/`thread_id` de la sesión activa (vía `gateway.session_context.get_session_env`) y los usa como destino por defecto — es el mismo mecanismo (`cron.wrap_response: true`) que ya usa cualquier cronjob de hermes-agent, no un canal construido a medida para este proyecto.
+
+Flujo resultante, en dos turnos separados:
+
+1. **Turno interactivo (Telegram → Hermes)**: reconoce la petición, aclara si hace falta (§9.2), y en cuanto tiene `repo`/`taskTitle`/`taskDescription` claros, llama a `cronjob(action='create', prompt=<autocontenido>, schedule=<pocos segundos en el futuro>, repeat=1)` sin fijar `deliver`. Responde de inmediato — "Vale, me pongo con ello — te aviso en este mismo chat cuando termine" — sin esperar a que el cronjob se dispare. Este turno termina aquí; el chat queda libre.
+2. **Turno del cronjob (independiente, minutos después)**: el prompt autocontenido (el sub-turno no tiene memoria de la conversación original) instruye llamar a `run_coding_task` y, si `status === 'success'`, abrir PR con `create_pull_request` del MCP de GitHub. Su respuesta final se entrega automáticamente al chat/hilo de origen — sin ninguna llamada explícita a `send_message` ni lógica de entrega propia.
+
+Verificación pendiente (Fase 3, US-3.3/US-3.4): al menos una ejecución real de principio a fin, incluyendo una tarea de varios minutos, confirmando que la confirmación llega en segundos y el aviso de finalización llega al mismo hilo sin intervención manual.
 
 ### 9.4 Seguridad
 

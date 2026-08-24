@@ -41,6 +41,27 @@ mcp_servers:
     # hubiera comentado "timed_out" y cerrado el ciclo, dejando la rama sin PR.
     timeout: 1900
 
+  # Nuestro adaptador de memoria (Fase 5). Igual que claude-code-runner: por
+  # URL/HTTP, no por `command` — brain-mcp no tiene ningún privilegio especial
+  # (no toca Docker), pero se mantiene el mismo patrón por consistencia y para
+  # no acoplar código propio como subproceso del contenedor de hermes.
+  #
+  # `brain-mcp` es el nombre del servicio en docker-compose.yml.
+  brain-mcp:
+    url: http://brain-mcp:8091/mcp
+    # El valor real vive en ~/.hermes/.env como MCP_BRAIN_MCP_API_KEY y debe
+    # coincidir con BRAIN_MCP_AUTH_TOKEN del compose.
+    headers:
+      Authorization: Bearer ${MCP_BRAIN_MCP_API_KEY}
+    # Corto a propósito (US-5.2 de docs/roadmap.md): si Brain no responde, la
+    # tarea debe poder seguir sin contexto en vez de bloquearse. Debe ser
+    # MAYOR que el timeout interno de brainClient.ts (BRAIN_REQUEST_TIMEOUT_MS,
+    # 25s por defecto — subido desde 10s tras verificar en vivo que un "cold
+    # start" real de la Hugging Face Inference API puede tardar más de eso),
+    # o hermes cortaría la llamada antes de que brain-mcp complete su propio
+    # timeout.
+    timeout: 30
+
   # GitHub. Servidor de terceros ya existente — no escribimos conector propio.
   #
   # Se usa la implementación stdio en TypeScript, ejecutada con npx dentro del
