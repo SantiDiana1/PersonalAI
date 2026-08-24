@@ -88,11 +88,13 @@ export async function runTaskContainer(options: RunContainerOptions): Promise<Ru
 
     const timeoutMs = options.timeoutSeconds * 1000;
     const waitPromise = container.wait();
+    let timeoutHandle!: NodeJS.Timeout;
     const timeoutPromise = new Promise<'timeout'>((resolve) => {
-      setTimeout(() => resolve('timeout'), timeoutMs);
+      timeoutHandle = setTimeout(() => resolve('timeout'), timeoutMs);
     });
 
     const outcome = await Promise.race([waitPromise, timeoutPromise]);
+    clearTimeout(timeoutHandle);
     let exitCode: number | null = null;
     if (outcome === 'timeout') {
       timedOut = true;
