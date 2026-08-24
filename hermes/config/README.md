@@ -124,3 +124,18 @@ hermes cron tick     # ejecuta los jobs pendientes una vez, sin esperar
 5. El skill `run-task` (`../skills/run-task/`) ya está disponible en cuanto
    pasa el paso 4 de esta guía — no necesita registro de cron, se activa igual
    que cualquier otro skill en un turno interactivo normal.
+
+## 7. Identidad del agente (`SOUL.md`)
+
+Sin esto, hermes-agent usa la plantilla por defecto (vacía) y se comporta
+como un asistente genérico — ver `docs/hermes/spec.md §10`.
+
+```bash
+cp SOUL.md ~/.hermes/SOUL.md   # o la ruta de HERMES_HOME que uses
+```
+
+Se lee en caliente (no hace falta reiniciar el contenedor de hermes). Si lo
+editas en vivo desde el propio chat de Hermes, trae el cambio de vuelta a
+este `SOUL.md` del repo para que no se pierda en el siguiente despliegue —
+este fichero es la fuente de verdad versionada, `~/.hermes/SOUL.md` es la
+copia operativa.
