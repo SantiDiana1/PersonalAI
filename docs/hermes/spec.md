@@ -170,7 +170,7 @@ Al meter el runner en un contenedor, esto **se rompe en silencio**: el runner pe
 
 **Nota operativa**: como el contenedor del runner corre como root (ver el razonamiento en su `Dockerfile`), los directorios de workspace aparecen en el host propiedad de root. No es un problema de funcionamiento — quien los crea y los borra es el propio runner, que es root dentro de su contenedor — pero conviene saberlo al inspeccionar o limpiar esa raíz a mano desde el host.
 
-### 3.7 Extensión futura (post-v1, [roadmap.md — Fase 10](../roadmap.md#fase-10--comandos-de-claude-code-vía-chat-run_claude_command)): `run_claude_command`
+### 3.7 Extensión futura (post-v1, [roadmap.md — Fase 8](../roadmap.md#fase-8--comandos-de-claude-code-vía-chat-run_claude_command)): `run_claude_command`
 
 **No es parte del Milestone v1.** Documentado aquí para que el diseño quede listo cuando se retome, sin bloquear las fases activas.
 
@@ -203,7 +203,7 @@ interface RunClaudeCommandOutput {
 Puntos de diseño a resolver **al implementar**, no asumidos aquí:
 
 - **Allowlist de comandos, no comandos libres.** El input no acepta cualquier string tras `/`: se valida contra una lista fija de slash commands aprobados (`/design`, `/dataviz`, ampliable). Mismo principio que "la superficie MCP sigue siendo exactamente una tool" (SEC-3.3) — aquí se traduce en "la superficie de comandos ejecutables es exactamente esta lista", no un intérprete de comandos arbitrario expuesto a texto no confiable (issues, mensajes de Telegram).
-- **Pendiente de verificar empíricamente, no confirmado**: si `claude -p` en modo headless (no interactivo, sin sesión de navegador) puede completar el flujo de publicación de un Artifact igual que en una sesión interactiva de Claude Code. Si no puede, esta tool no es viable tal cual y hay que rediseñar (p.ej. devolver el `.dc.html`/HTML generado en vez de un `artifactUrl` ya publicado, y que sea el Operador quien lo publique a mano). No se da esto por sentado — es la primera pregunta a responder al retomar esta fase (US-10.1), con evidencia real como el resto del spec.
+- **Pendiente de verificar empíricamente, no confirmado**: si `claude -p` en modo headless (no interactivo, sin sesión de navegador) puede completar el flujo de publicación de un Artifact igual que en una sesión interactiva de Claude Code. Si no puede, esta tool no es viable tal cual y hay que rediseñar (p.ej. devolver el `.dc.html`/HTML generado en vez de un `artifactUrl` ya publicado, y que sea el Operador quien lo publique a mano). No se da esto por sentado — es la primera pregunta a responder al retomar esta fase (US-8.1), con evidencia real como el resto del spec.
 - **Sin commit, sin PR.** A diferencia de `run_coding_task`, esta tool no clona el repo en busca de cambios que empujar (salvo que el propio `repo` se use como contexto de entrada) — el entregable es el `artifactUrl`, punto.
 - El aislamiento de contenedor (SEC-5.\*), la sesión compartida (§0.1) y el rate limiting (SEC-4.3) aplican igual que a `run_coding_task` — comparten el mismo runner y la misma cuota de la ventana de 5h/semanal (§10, pregunta abierta sobre reparto de cuota).
 
@@ -219,18 +219,18 @@ Se usan servidores MCP ya existentes y mantenidos, no conectores propios:
 
 - **GitHub**: [github/github-mcp-server](https://github.com/github/github-mcp-server) (oficial). Se autentica con un GitHub App o PAT fine-grained, scoped solo a los repos donde quiero que Hermes actúe (`issues:write`, `contents:write`, `pull_requests:write` — nada más).
 - **Notion**: servidor MCP oficial de Notion. Apunta a una base de datos concreta ("Hermes Tasks") filtrando por una propiedad `status`.
-- **Jira**: servidor MCP de Atlassian/comunidad, configurado con un JQL fijo (por defecto `labels = hermes AND status = "To Do"`). Fuente **personal** del Operador (post-v1, [roadmap.md — Fase 9](../roadmap.md#fase-9--ampliar-fuentes-y-canales)).
+- **Jira**: servidor MCP de Atlassian/comunidad, configurado con un JQL fijo (por defecto `labels = hermes AND status = "To Do"`). Fuente **personal** del Operador (post-v1, [roadmap.md — Fase 7](../roadmap.md#fase-7--ampliar-fuentes-y-canales)).
 - **Azure DevOps**: servidor MCP oficial o de comunidad (evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp) al implementar), con un filtro de work items equivalente al JQL de Jira. Fuente **de la empresa** del Operador — **nunca** registrado en la misma instancia de hermes-agent que las fuentes personales. Ver §4.1.
 
 Registro en hermes-agent (`hermes/config/hermes.config.yaml` + `hermes mcp add <server>`), cada uno con sus propias credenciales de mínimo privilegio. Estas credenciales (GitHub/Notion/Jira/Azure DevOps) sí son API keys/tokens convencionales — solo la parte de modelo Anthropic usa la sesión Pro compartida (§0.1), y solo en la instancia personal (§4.1).
 
 ### 4.1 Despliegue dual: instancia personal vs. instancia de trabajo (post-v1)
 
-**Decisión de arquitectura** (detalle completo y motivación en [roadmap.md — Fase 8](../roadmap.md#fase-8--despliegue-dual-instancia-personal-vs-instancia-de-trabajo)): en cuanto Azure DevOps (u otra fuente de la empresa del Operador) entra en juego, **no** se añade como un servidor MCP más a la instancia de hermes-agent ya desplegada. Se despliega una **segunda instancia completa**, aislada de la primera: `docker-compose.yml` propio, `.env` propio, red Docker propia, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos), y — crucialmente — **auth propia con Anthropic**, no `hermes-claude-auth`. El riesgo de ToS descrito en §0.2 se asume explícitamente para uso personal; no se traslada sin más a datos y credenciales de un empleador.
+**Decisión de arquitectura** (detalle completo y motivación en [roadmap.md — Fase 10](../roadmap.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo)): en cuanto Azure DevOps (u otra fuente de la empresa del Operador) entra en juego, **no** se añade como un servidor MCP más a la instancia de hermes-agent ya desplegada. Se despliega una **segunda instancia completa**, aislada de la primera: `docker-compose.yml` propio, `.env` propio, red Docker propia, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos), y — crucialmente — **auth propia con Anthropic**, no `hermes-claude-auth`. El riesgo de ToS descrito en §0.2 se asume explícitamente para uso personal; no se traslada sin más a datos y credenciales de un empleador.
 
 Consecuencia directa para `claude-code-runner-mcp`: si la instancia de trabajo llega a necesitar ejecutar tareas de código, es un **despliegue separado** del componente (su propio contenedor, su propio `CLAUDE_CODE_RUNNER_AUTH_TOKEN`, su propia base de Postgres) — no un parámetro de "cliente" añadido al runner personal. El aislamiento de §3.4 aplica igual, pero por partida doble.
 
-Requisitos numerados y verificables en [security.md §9 (SEC-7.1–SEC-7.5)](../security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-fase-8-de-v2).
+Requisitos numerados y verificables en [security.md §9 (SEC-7.1–SEC-7.5)](../security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-fase-10-de-v2).
 
 ## 5. El Skill `resolve-issue`
 

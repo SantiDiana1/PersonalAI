@@ -42,7 +42,7 @@ Fuentes soportadas, por prioridad:
 
 1. **Notas personales** (Markdown — de un vault de Obsidian/Notion export, o archivos sueltos) — vía import manual/CLI en Fase 4, vía sync automático en trabajo futuro.
 2. **GitHub** — descripciones de PR, comentarios de review y commits de mis propios repos (fuente canónica para "por qué se hizo X en el código").
-3. **Notion / Jira** — páginas/tickets marcados como fuente de contexto (no todas las tareas, solo documentos de referencia: decisiones, runbooks) — Fase 9 de v2 (post-v1, ver `docs/roadmap.md`).
+3. **Notion / Jira** — páginas/tickets marcados como fuente de contexto (no todas las tareas, solo documentos de referencia: decisiones, runbooks) — Fase 7 de v2 (post-v1, ver `docs/roadmap.md`).
 4. **Resultados de Hermes** — cada llamada a `brain_record_observation` (vía `brain-mcp`, ver sección 5.2) que hermes-agent hace tras ejecutar una tarea (por GitHub o por Telegram) es, en sí mismo, una fuente de ingestion (la más valiosa, porque es feedback directo de una acción real) — Fase 5. En v1 esto se persiste tal cual como `RawEvent` (`source: 'hermes_feedback'`), sin extracción LLM.
 
 Filtro de canonicidad (tomado del artículo, sí se construye): cada fuente se etiqueta con una `source_authority` (`canonical` | `supporting`). Un PR description es `canonical`; una nota rápida sin revisar es `supporting`. En v1 este campo se persiste y se puede usar para ordenar/filtrar resultados, pero no hay lógica de reconciliación que lo use activamente (eso es consolidación, fuera de alcance).

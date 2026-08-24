@@ -24,7 +24,7 @@ Este proyecto es, ante todo, mi sistema de IA personal — backed by Claude Code
 
 Lo que en la primera versión de este documento vivía como una lista suelta de "Futuribles" (ideas sin fecha, sin orden, sin criterios de aceptación) pasa aquí a ser **Fases 6 a 11**, con la misma disciplina que v1: objetivo, user stories verificables, y Definition of Done con evidencia real — nada se da por cerrado por diseño, igual que en v1.
 
-**Orden decidido**: primero cerrar los cabos sueltos operativos de v1 y dar a Hermes una superficie conversacional completa (Fase 6) — es la base sobre la que se apoyan casi todas las demás. Después, en paralelo si se quiere: pulido de portfolio (Fase 7, no depende de nada más que v1), el despliegue dual para uso profesional (Fase 8, la única con una puerta de gobernanza no técnica — SEC-7.5), ampliar fuentes y canales (Fase 9), comandos de Claude Code vía chat (Fase 10), y por último la pieza más grande y menos urgente — la consolidación real de Brain (Fase 11), que tiene sentido dejar para cuando el uso diario de v1 haya enseñado qué merece la pena consolidar de verdad.
+**Orden decidido**: primero cerrar los cabos sueltos operativos de v1 y dar a Hermes una superficie conversacional completa (Fase 6) — es la base sobre la que se apoyan casi todas las demás. Después, con prioridad explícita sobre el pulido y el despliegue dual: ampliar fuentes y canales (Fase 7) y comandos de Claude Code vía chat (Fase 8) — son las que más amplían lo que Hermes puede hacer de verdad. Solo después, pulido de portfolio (Fase 9, no depende de nada más que v1) y el despliegue dual para uso profesional (Fase 10, la única con una puerta de gobernanza no técnica — SEC-7.5). Por último, deliberadamente al final por ser la pieza más grande y menos urgente — la consolidación real de Brain (Fase 11), que tiene sentido dejar para cuando el uso diario de v1 haya enseñado qué merece la pena consolidar de verdad.
 
 v2 no tiene una fecha de "cumplido" única como v1 — es la cola de trabajo priorizada, no un hito con Definition of Done propia. Cada fase se cierra por su cuenta cuando su Definition of Done se cumple.
 
@@ -43,20 +43,20 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 
 ## Vista general
 
-| Fase | Nombre                                                  | Objetivo en una frase                                                                            | Depende de                    |
-| ---- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------- |
-| 0    | Fundación del monorepo + auth compartida                | Monorepo instalable + sesión de Claude Pro compartida lista para usarse                          | —                             |
-| 1    | `claude-code-runner-mcp` en solitario                   | Puedo delegar una tarea de código a Claude Code en un contenedor aislado, sin Hermes todavía     | Fase 0                        |
-| 2    | hermes-agent en local + Skill `resolve-issue` (GitHub)  | Etiqueto una issue y Hermes abre un PR sin que yo haga nada más                                  | Fase 0, 1                     |
-| 3    | Interacción conversacional vía Telegram                 | Le mando una tarea a Hermes por Telegram y me avisa cuando termina                               | Fase 2                        |
-| 4    | Brain básico (ingest + retrieval)                       | Puedo preguntarle algo a Brain y me devuelve el fragmento relevante                              | Fase 0                        |
-| 5    | Integrar Brain vía `brain-mcp`                          | Hermes resuelve tareas mejor (GitHub y Telegram) porque consulta a Brain antes de actuar         | Fase 2, 3, 4                  |
-| 6    | Cierre operativo y superficie conversacional            | Cierro los últimos huecos de evidencia de v1 y Hermes es consultable/proactivo, no solo reactivo | Fase 5                        |
-| 7    | Pulido de portfolio                                     | El proyecto se entiende y se ve funcionar sin que yo esté delante                                | Fase 5                        |
-| 8    | Despliegue dual personal/trabajo                        | Una segunda instancia de Hermes para mi empresa, sin compartir riesgo ni infraestructura         | Fase 6                        |
-| 9    | Ampliar fuentes y canales                               | Hermes coge tareas y avisa por más sitios (Jira, Notion, Azure DevOps, otro canal, voz)          | Fase 6 (Azure DevOps: Fase 8) |
-| 10   | Comandos de Claude Code vía chat (`run_claude_command`) | Le pido a Hermes un diseño/artifact por Telegram, no solo código                                 | Fase 6                        |
-| 11   | Company Brain completo (consolidación real)             | Brain deja de ser un vector store simple y cumple las 4 propiedades de un company brain real     | Fase 4                        |
+| Fase | Nombre                                                  | Objetivo en una frase                                                                            | Depende de                     |
+| ---- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------ |
+| 0    | Fundación del monorepo + auth compartida                | Monorepo instalable + sesión de Claude Pro compartida lista para usarse                          | —                              |
+| 1    | `claude-code-runner-mcp` en solitario                   | Puedo delegar una tarea de código a Claude Code en un contenedor aislado, sin Hermes todavía     | Fase 0                         |
+| 2    | hermes-agent en local + Skill `resolve-issue` (GitHub)  | Etiqueto una issue y Hermes abre un PR sin que yo haga nada más                                  | Fase 0, 1                      |
+| 3    | Interacción conversacional vía Telegram                 | Le mando una tarea a Hermes por Telegram y me avisa cuando termina                               | Fase 2                         |
+| 4    | Brain básico (ingest + retrieval)                       | Puedo preguntarle algo a Brain y me devuelve el fragmento relevante                              | Fase 0                         |
+| 5    | Integrar Brain vía `brain-mcp`                          | Hermes resuelve tareas mejor (GitHub y Telegram) porque consulta a Brain antes de actuar         | Fase 2, 3, 4                   |
+| 6    | Cierre operativo y superficie conversacional            | Cierro los últimos huecos de evidencia de v1 y Hermes es consultable/proactivo, no solo reactivo | Fase 5                         |
+| 7    | Ampliar fuentes y canales                               | Hermes coge tareas y avisa por más sitios (Jira, Notion, Azure DevOps, otro canal, voz)          | Fase 6 (Azure DevOps: Fase 10) |
+| 8    | Comandos de Claude Code vía chat (`run_claude_command`) | Le pido a Hermes un diseño/artifact por Telegram, no solo código                                 | Fase 6                         |
+| 9    | Pulido de portfolio                                     | El proyecto se entiende y se ve funcionar sin que yo esté delante                                | Fase 5                         |
+| 10   | Despliegue dual personal/trabajo                        | Una segunda instancia de Hermes para mi empresa, sin compartir riesgo ni infraestructura         | Fase 6                         |
+| 11   | Company Brain completo (consolidación real)             | Brain deja de ser un vector store simple y cumple las 4 propiedades de un company brain real     | Fase 4                         |
 
 **Milestone v1 = Fases 0 a 5. Cumplido.** Ver más abajo [Milestone v2](#milestone-v2--qué-es-la-segunda-versión) para las Fases 6 a 11 — lo que antes vivía como Futuribles sueltos, ahora secuenciado igual que v1.
 
@@ -396,7 +396,63 @@ US-5.5 queda verificada con evidencia real (no solo por diseño), el warning de 
 
 ---
 
-## Fase 7 — Pulido de portfolio
+## Fase 7 — Ampliar fuentes y canales
+
+**Objetivo**: Hermes coge tareas y avisa por más sitios, reutilizando el mismo Skill conversacional/`resolve-issue` en vez de construir conectores nuevos desde cero.
+
+**Depende de**: Fase 6. La parte de Azure DevOps (US-7.3) depende además de Fase 10.
+
+### User stories
+
+- **US-7.1** — Como Operador, quiero que Hermes pueda coger tareas desde Jira (mi cuenta personal), para no depender solo de GitHub Issues.
+  - [ ] Servidor MCP de Jira/Atlassian registrado, JQL fijo (`labels = hermes AND status = "To Do"`), sobre proyectos personales del Operador.
+  - [ ] `resolve-issue` generalizado para listar/reportar en Jira igual que en GitHub.
+- **US-7.2** — Como Operador, quiero que Hermes pueda coger tareas y contexto desde Notion, para poder usar mis páginas de Notion como fuente.
+  - [ ] Servidor MCP oficial de Notion registrado, apuntando a una base de datos "Hermes Tasks" (`status = Ready for Hermes`).
+  - [ ] Fuentes de ingestion de Brain desde Notion/Jira etiquetadas con su `source_authority` correcta, para que una futura consolidación (Fase 11) parta de datos ya etiquetados.
+- **US-7.3** — Como Operador, quiero que la instancia de trabajo (Fase 10) pueda coger tareas desde Azure DevOps, para poder usar Hermes también en mi día a día profesional.
+  - [ ] Servidor MCP de Azure DevOps (evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp)) registrado **exclusivamente** en la instancia "Hermes trabajo" — nunca en la personal.
+- **US-7.4** — Como Operador, quiero al menos un canal de mensajería adicional a Telegram, para no depender de una sola app.
+  - [ ] Uno de Discord/Slack/WhatsApp/Signal (los que hermes-agent ya trae de fábrica) habilitado y verificado con un mensaje real, reutilizando el mismo Skill conversacional de la Fase 3 sin cambios.
+- **US-7.5** — Como Operador, quiero poder mandarle una tarea hablada por Telegram en vez de escrita, para poder usar Hermes con las manos ocupadas.
+  - [ ] Verificado que una nota de voz transcrita por hermes-agent dispara `run-task` igual que un mensaje de texto — sin construir nada nuevo, solo confirmar que el flujo ya funciona con audio.
+
+### Tareas técnicas
+
+- Registro de servidores MCP (Jira, Notion, Azure DevOps) en la configuración de hermes-agent correspondiente.
+- Configuración del gateway nativo de hermes-agent para el canal adicional (US-7.4) — sin código propio.
+
+### Definition of Done
+
+Al menos Jira (US-7.1) y un canal de mensajería adicional (US-7.4) funcionando end-to-end con evidencia real. Azure DevOps (US-7.3) queda condicionada a que exista la Fase 10.
+
+---
+
+## Fase 8 — Comandos de Claude Code vía chat (`run_claude_command`)
+
+**Objetivo**: que Hermes pueda pedirle a Claude Code no solo tareas de código (`run_coding_task`), sino comandos slash como `/design` o `/dataviz` que devuelven un **Artifact** publicado en vez de un commit — p. ej. "Hermes, diséñame una landing para mi proyecto X" por Telegram, y recibir el link al resultado.
+
+**Depende de**: Fase 6.
+
+Diseño completo (contrato MCP, allowlist de comandos, entrega dual Telegram/issue) ya en [hermes/spec.md §3.7](hermes/spec.md#37-extensión-futura-post-v1-fase-8-run_claude_command).
+
+### User stories
+
+- **US-8.1** — Como Operador, quiero saber si `claude -p` en modo headless puede completar un flujo de publicación de Artifact igual que una sesión interactiva, antes de construir nada más.
+  - [ ] **Pregunta abierta central de esta fase, resuelta antes de continuar**: verificado empíricamente si el modo no interactivo (el mismo mecanismo que usa todo `claude-code-runner-mcp`) puede terminar de publicar un Artifact. Si no puede, esta fase se rediseña (devolver el HTML generado en vez de un link ya publicado) antes de seguir con las US siguientes.
+- **US-8.2** — Como Hermes, quiero una tool `run_claude_command` separada de `run_coding_task`, para pedir comandos slash sin mezclar su contrato con el de tareas de código.
+  - [ ] Tool nueva en `claude-code-runner-mcp` — mismo runner, mismo aislamiento de contenedor, misma sesión Pro compartida, misma cuota; resultado tipado con `artifactUrl` en vez de `branchName`/`commitShas`.
+- **US-8.3** — Como Operador, quiero un Skill dedicado (`run-design-task`) que distinga una petición de diseño de una de código, para que Hermes no intente `run_coding_task` cuando lo que pido es un Artifact.
+  - [ ] Skill nuevo, mismo patrón de confirmación inmediata + cronjob de un disparo que `run-task` (Fase 3) — no una extensión de `run-task`/`resolve-issue`.
+  - [ ] Si la petición es ambigua (¿código o diseño?), pregunta antes de elegir la tool.
+
+### Definition of Done
+
+Puedo pedirle a Hermes por Telegram un diseño/artifact, y recibo el link al resultado publicado — con la pregunta de US-8.1 respondida y documentada antes de dar la fase por cerrada.
+
+---
+
+## Fase 9 — Pulido de portfolio
 
 **Objetivo**: que el proyecto sea presentable de principio a fin a un reclutador o cliente potencial, no solo funcional para el Operador.
 
@@ -404,13 +460,13 @@ US-5.5 queda verificada con evidencia real (no solo por diseño), el warning de 
 
 ### User stories
 
-- **US-7.1** — Como Operador, quiero una demo grabada de Hermes resolviendo una tarea real end-to-end, para poder enseñar el sistema sin tener que hacer una demo en vivo cada vez.
+- **US-9.1** — Como Operador, quiero una demo grabada de Hermes resolviendo una tarea real end-to-end, para poder enseñar el sistema sin tener que hacer una demo en vivo cada vez.
   - [ ] GIF/vídeo del flujo por GitHub (issue etiquetada → PR) y del flujo por Telegram (mensaje → aviso de resultado), embebidos en el README.
-- **US-7.2** — Como Operador, quiero métricas simples del uso real del sistema, para poder enseñar evidencia cuantitativa, no solo cualitativa.
+- **US-9.2** — Como Operador, quiero métricas simples del uso real del sistema, para poder enseñar evidencia cuantitativa, no solo cualitativa.
   - [ ] Comando CLI o dashboard mínimo con: nº de tareas resueltas, nº de eventos ingestados en Brain, tasa de éxito de `run_coding_task`.
-- **US-7.3** — Como Operador, quiero migrar de PAT fine-grained a una GitHub App real, para que las credenciales de GitHub sigan el modelo de mínimo privilegio recomendado, no un token personal.
+- **US-9.3** — Como Operador, quiero migrar de PAT fine-grained a una GitHub App real, para que las credenciales de GitHub sigan el modelo de mínimo privilegio recomendado, no un token personal.
   - [ ] GitHub App creada, instalada en los repos objetivo, y `resolve-issue` funcionando con sus credenciales en vez del PAT.
-- **US-7.4** — Como Operador, quiero un `docs/case-study.md` que explique las decisiones de diseño clave, para que quien lo lea entienda el porqué, no solo el qué.
+- **US-9.4** — Como Operador, quiero un `docs/case-study.md` que explique las decisiones de diseño clave, para que quien lo lea entienda el porqué, no solo el qué.
   - [ ] Documento explicando: por qué hermes-agent y no un orquestador propio, por qué la autenticación compartida y su riesgo de ToS asumido, por qué Brain se mantiene básico en v1, por qué Telegram como canal principal.
 
 ### Definition of Done
@@ -419,7 +475,7 @@ Alguien externo al proyecto puede entender qué hace el sistema, verlo funcionar
 
 ---
 
-## Fase 8 — Despliegue dual: instancia personal vs. instancia de trabajo
+## Fase 10 — Despliegue dual: instancia personal vs. instancia de trabajo
 
 **Objetivo**: una segunda instancia de Hermes, completamente separada de la personal, para uso profesional (Azure DevOps/GitHub de la empresa del Operador) — sin compartir riesgo de ToS, credenciales, ni infraestructura con la instancia personal.
 
@@ -427,83 +483,27 @@ Alguien externo al proyecto puede entender qué hace el sistema, verlo funcionar
 
 **Por qué separadas de verdad, no solo "dos bots"**: este proyecto ya asume conscientemente un riesgo de ToS de consumidor de Anthropic para uso **personal** ([hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar)). Meter credenciales/datos de la empresa del Operador en la misma infraestructura arrastraría ese riesgo — y el propio dato de la empresa — a una decisión que no le corresponde a este proyecto tomar por él.
 
-**Seguridad**: esta fase debe verificar SEC-7.1 a SEC-7.5 de [security.md §9](security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-fase-8-de-v2), ya diseñados.
+**Seguridad**: esta fase debe verificar SEC-7.1 a SEC-7.5 de [security.md §9](security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-fase-10-de-v2), ya diseñados.
 
 ### User stories
 
-- **US-8.1** — Como Operador, quiero confirmar explícitamente con la política de seguridad/IT de mi empresa qué está permitido antes de tocar una sola línea de despliegue, para no asumir por defecto algo que no me corresponde decidir solo.
+- **US-10.1** — Como Operador, quiero confirmar explícitamente con la política de seguridad/IT de mi empresa qué está permitido antes de tocar una sola línea de despliegue, para no asumir por defecto algo que no me corresponde decidir solo.
   - [ ] **SEC-7.5**: confirmación explícita documentada (fecha, con quién) antes de continuar con el resto de esta fase. Es una puerta de gobernanza, no un requisito de código — bloquea el resto de la fase hasta que se cumpla.
-- **US-8.2** — Como Operador, quiero una instancia "Hermes trabajo" completamente separada de la personal, para que un problema en una no pueda afectar a la otra.
+- **US-10.2** — Como Operador, quiero una instancia "Hermes trabajo" completamente separada de la personal, para que un problema en una no pueda afectar a la otra.
   - [ ] `docker-compose.yml` propio, red Docker propia, volumen de estado propio, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos).
   - [ ] **SEC-7.2**: auth con Anthropic propia (API key facturada o la que autorice la empresa) — nunca `hermes-claude-auth`.
   - [ ] **SEC-7.3**: credenciales de empresa (Azure DevOps, GitHub de trabajo) solo en el `.env` de esta instancia.
-- **US-8.3** — Como Operador, quiero verificar que las dos instancias no se alcanzan entre sí por red aunque convivan en el mismo Mac Mini, para que el aislamiento sea real y no solo nominal.
+- **US-10.3** — Como Operador, quiero verificar que las dos instancias no se alcanzan entre sí por red aunque convivan en el mismo Mac Mini, para que el aislamiento sea real y no solo nominal.
   - [ ] **SEC-7.1**: verificado que un contenedor de una instancia no puede resolver ni alcanzar por nombre ningún servicio de la otra.
 
 ### Tareas técnicas
 
 - `hermes-trabajo/docker/` (o equivalente): segundo árbol de despliegue, mismo patrón que `hermes/docker/` pero con su propia red y su propio Postgres.
-- Registro de Azure DevOps MCP (ver Fase 9, US-9.3) exclusivamente en esta instancia.
+- Registro de Azure DevOps MCP (ver Fase 7, US-7.3) exclusivamente en esta instancia.
 
 ### Definition of Done
 
 La instancia "Hermes trabajo" funciona de forma aislada, con SEC-7.1 a SEC-7.5 verificados con evidencia real — igual que el resto de requisitos `SEC-*` del proyecto.
-
----
-
-## Fase 9 — Ampliar fuentes y canales
-
-**Objetivo**: Hermes coge tareas y avisa por más sitios, reutilizando el mismo Skill conversacional/`resolve-issue` en vez de construir conectores nuevos desde cero.
-
-**Depende de**: Fase 6. La parte de Azure DevOps (US-9.3) depende además de Fase 8.
-
-### User stories
-
-- **US-9.1** — Como Operador, quiero que Hermes pueda coger tareas desde Jira (mi cuenta personal), para no depender solo de GitHub Issues.
-  - [ ] Servidor MCP de Jira/Atlassian registrado, JQL fijo (`labels = hermes AND status = "To Do"`), sobre proyectos personales del Operador.
-  - [ ] `resolve-issue` generalizado para listar/reportar en Jira igual que en GitHub.
-- **US-9.2** — Como Operador, quiero que Hermes pueda coger tareas y contexto desde Notion, para poder usar mis páginas de Notion como fuente.
-  - [ ] Servidor MCP oficial de Notion registrado, apuntando a una base de datos "Hermes Tasks" (`status = Ready for Hermes`).
-  - [ ] Fuentes de ingestion de Brain desde Notion/Jira etiquetadas con su `source_authority` correcta, para que una futura consolidación (Fase 11) parta de datos ya etiquetados.
-- **US-9.3** — Como Operador, quiero que la instancia de trabajo (Fase 8) pueda coger tareas desde Azure DevOps, para poder usar Hermes también en mi día a día profesional.
-  - [ ] Servidor MCP de Azure DevOps (evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp)) registrado **exclusivamente** en la instancia "Hermes trabajo" — nunca en la personal.
-- **US-9.4** — Como Operador, quiero al menos un canal de mensajería adicional a Telegram, para no depender de una sola app.
-  - [ ] Uno de Discord/Slack/WhatsApp/Signal (los que hermes-agent ya trae de fábrica) habilitado y verificado con un mensaje real, reutilizando el mismo Skill conversacional de la Fase 3 sin cambios.
-- **US-9.5** — Como Operador, quiero poder mandarle una tarea hablada por Telegram en vez de escrita, para poder usar Hermes con las manos ocupadas.
-  - [ ] Verificado que una nota de voz transcrita por hermes-agent dispara `run-task` igual que un mensaje de texto — sin construir nada nuevo, solo confirmar que el flujo ya funciona con audio.
-
-### Tareas técnicas
-
-- Registro de servidores MCP (Jira, Notion, Azure DevOps) en la configuración de hermes-agent correspondiente.
-- Configuración del gateway nativo de hermes-agent para el canal adicional (US-9.4) — sin código propio.
-
-### Definition of Done
-
-Al menos Jira (US-9.1) y un canal de mensajería adicional (US-9.4) funcionando end-to-end con evidencia real. Azure DevOps (US-9.3) queda condicionada a que exista la Fase 8.
-
----
-
-## Fase 10 — Comandos de Claude Code vía chat (`run_claude_command`)
-
-**Objetivo**: que Hermes pueda pedirle a Claude Code no solo tareas de código (`run_coding_task`), sino comandos slash como `/design` o `/dataviz` que devuelven un **Artifact** publicado en vez de un commit — p. ej. "Hermes, diséñame una landing para mi proyecto X" por Telegram, y recibir el link al resultado.
-
-**Depende de**: Fase 6.
-
-Diseño completo (contrato MCP, allowlist de comandos, entrega dual Telegram/issue) ya en [hermes/spec.md §3.7](hermes/spec.md#37-extensión-futura-post-v1-fase-10-run_claude_command).
-
-### User stories
-
-- **US-10.1** — Como Operador, quiero saber si `claude -p` en modo headless puede completar un flujo de publicación de Artifact igual que una sesión interactiva, antes de construir nada más.
-  - [ ] **Pregunta abierta central de esta fase, resuelta antes de continuar**: verificado empíricamente si el modo no interactivo (el mismo mecanismo que usa todo `claude-code-runner-mcp`) puede terminar de publicar un Artifact. Si no puede, esta fase se rediseña (devolver el HTML generado en vez de un link ya publicado) antes de seguir con las US siguientes.
-- **US-10.2** — Como Hermes, quiero una tool `run_claude_command` separada de `run_coding_task`, para pedir comandos slash sin mezclar su contrato con el de tareas de código.
-  - [ ] Tool nueva en `claude-code-runner-mcp` — mismo runner, mismo aislamiento de contenedor, misma sesión Pro compartida, misma cuota; resultado tipado con `artifactUrl` en vez de `branchName`/`commitShas`.
-- **US-10.3** — Como Operador, quiero un Skill dedicado (`run-design-task`) que distinga una petición de diseño de una de código, para que Hermes no intente `run_coding_task` cuando lo que pido es un Artifact.
-  - [ ] Skill nuevo, mismo patrón de confirmación inmediata + cronjob de un disparo que `run-task` (Fase 3) — no una extensión de `run-task`/`resolve-issue`.
-  - [ ] Si la petición es ambigua (¿código o diseño?), pregunta antes de elegir la tool.
-
-### Definition of Done
-
-Puedo pedirle a Hermes por Telegram un diseño/artifact, y recibo el link al resultado publicado — con la pregunta de US-10.1 respondida y documentada antes de dar la fase por cerrada.
 
 ---
 
