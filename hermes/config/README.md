@@ -55,6 +55,28 @@ hermes mcp list          # los tres deben aparecer conectados
 hermes mcp test github   # prueba de conexión
 ```
 
+**Fase 7 (Notion/Jira) — bloqueado hasta tener tokens propios**: los bloques
+`notion`/`jira` de `hermes.config.yaml` están comentados a propósito porque
+necesitan credenciales que solo el Operador puede generar:
+
+```bash
+# Notion: crear una integración interna en notion.so/my-integrations,
+# compartirla con la base de datos "Hermes Tasks", y guardar el token:
+#   NOTION_TOKEN=<secret> en ~/.hermes/.env
+hermes mcp add notion \
+  --command npx \
+  --args -y @notionhq/notion-mcp-server \
+  --env NOTION_TOKEN=$NOTION_TOKEN
+
+# Jira: generar un API token en id.atlassian.com/manage-profile/security/api-tokens.
+# El servidor MCP concreto (oficial por URL/OAuth vs. comunidad por API token)
+# queda por decidir al activarlo — ver el comentario en hermes.config.yaml.
+```
+
+En cuanto se registren, `resolve-issue` (`hermes/skills/resolve-issue/SKILL.md`
+§ "Generalización a Notion y Jira") ya sabe listarlos/reportarlos sin ningún
+otro cambio.
+
 ## 3. Fijar aprobaciones y modelo
 
 En `~/.hermes/config.yaml`, asegurar que existen (son los valores por defecto,
@@ -139,6 +161,22 @@ otro skill en un turno interactivo normal (ver paso 6).
    esta guía — no necesitan registro de cron, se activan igual que cualquier
    otro skill en un turno interactivo normal. `status-report` también
    responde a demanda sin cron, además de su mitad proactiva del paso 5.
+6. **Notas de voz (Fase 7, US-7.5)**: no requiere ningún cambio de
+   configuración — verificado en el despliegue real que el contenedor de
+   hermes trae `faster-whisper` instalado y `stt.enabled: true` con
+   `provider: local` por defecto en `~/.hermes/config.yaml` (transcripción
+   local, sin API key ni servicio externo). Una nota de voz enviada por
+   Telegram debería transcribirse y disparar `run-task`/`ask-brain`/etc.
+   igual que un mensaje de texto — **pendiente de una prueba real** con un
+   audio real del Operador, no verificado end-to-end todavía.
+7. **Canal de mensajería adicional (Fase 7, US-7.4)**: hermes-agent trae de
+   fábrica Discord/Slack/WhatsApp/Signal además de Telegram, pero activar
+   cualquiera de ellos necesita una cuenta/bot token nuevo en esa plataforma
+   que solo el Operador puede crear — bloqueado hasta que el Operador elija
+   plataforma y genere las credenciales. El mecanismo de activación es el
+   mismo patrón de los pasos 1–4 de esta sección, sustituyendo Telegram por
+   el gateway de la plataforma elegida (`hermes gateway setup`, ver su
+   `--help` para el flag por plataforma).
 
 ## 7. Identidad del agente (`SOUL.md`)
 

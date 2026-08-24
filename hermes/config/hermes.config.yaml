@@ -82,6 +82,39 @@ mcp_servers:
       # con permisos mínimos (contenidos, issues, pull requests).
       GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
 
+  # Notion (Fase 7, US-7.2 de docs/roadmap.md) — servidor MCP oficial de
+  # Notion, apuntando a la base de datos "Hermes Tasks" (propiedad `status =
+  # Ready for Hermes`), fuente personal del Operador.
+  #
+  # COMENTADO A PROPÓSITO: bloqueado en la práctica hasta que exista un
+  # NOTION_TOKEN real (integración interna creada por el Operador en
+  # notion.so/my-integrations, compartida con la base de datos "Hermes
+  # Tasks"). Descomentar y añadir `NOTION_TOKEN=<secret>` a `~/.hermes/.env`
+  # cuando exista. `resolve-issue` (§ "Generalización a Notion y Jira" de
+  # hermes/skills/resolve-issue/SKILL.md) ya sabe usarlo en cuanto se
+  # registre — no hace falta ningún otro cambio de código.
+  # notion:
+  #   command: npx
+  #   args: ['-y', '@notionhq/notion-mcp-server']
+  #   env:
+  #     NOTION_TOKEN: ${NOTION_TOKEN}
+
+  # Jira (Fase 7, US-7.1 de docs/roadmap.md) — servidor MCP de Atlassian/
+  # comunidad, JQL fijo `labels = hermes AND status = "To Do"`, sobre
+  # proyectos personales del Operador (nunca proyectos de empresa — esos
+  # esperan a Azure DevOps + la instancia de trabajo separada de la Fase 10).
+  #
+  # COMENTADO A PROPÓSITO: bloqueado hasta que exista un token de API de
+  # Atlassian real del Operador (id.atlassian.com/manage-profile/security/
+  # api-tokens) y su URL de sitio Jira. El paquete/servidor MCP concreto
+  # queda por evaluar al activar esto — hay implementaciones oficiales
+  # (Atlassian Remote MCP, por URL/OAuth) y de comunidad (stdio, API token);
+  # se elige el que exija menos infraestructura nueva.
+  # jira:
+  #   url: https://mcp.atlassian.com/v1/sse # o el endpoint que se elija al activar
+  #   headers:
+  #     Authorization: Bearer ${JIRA_API_TOKEN}
+
 # ---------------------------------------------------------------------------
 # Skills
 # ---------------------------------------------------------------------------

@@ -1,15 +1,37 @@
-import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const execFileAsync = promisify(execFile);
-
-// Mockeamos todo lo que tocaría Docker/Postgres para poder verificar, sin
-// contenedores reales, que el rate limiter impide un segundo `docker run`
-// de tarea cuando el límite ya está ocupado — ver docs/hermes/spec.md §6.
+// Mockeamos todo lo que tocaría Docker/Postgres/git real para poder
+// verificar, de forma determinista y sin contenedores/subprocesos reales,
+// que el rate limiter impide un segundo `docker run` de tarea cuando el
+// límite ya está ocupado — ver docs/hermes/spec.md §6.
+//
+// git.js se mockea también (no solo Docker/Postgres): shallowClone() hacía
+// un `git clone` real por llamada, y bajo Promise.all() la variabilidad de
+// timing de dos subprocesos de git concurrentes (más pronunciada en
+// runners de CI compartidos) hacía que las dos llamadas a runCodingTask no
+// llegaran a solaparse de forma fiable en el tryAcquire() del rate
+// limiter — test flaky, verificado localmente (fallaba ~1 de cada 3
+// ejecuciones). El mock crea el repo con llamadas SÍNCRONAS (execFileSync/
+// mkdtempSync) — sin huecos async de por medio donde el event loop pueda
+// intercalar las dos invocaciones en un orden no determinista — y sigue
+// dejando un repo git real y válido (necesario: runCodingTask hace un
+// `git rev-parse HEAD` real sobre el workspace justo después de clonar).
+vi.mock('./git.js', () => ({
+  shallowClone: vi.fn(async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rate-limit-workspace-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', dir]);
+    execFileSync('git', ['-C', dir, 'config', 'user.email', 'test@test.local']);
+    execFileSync('git', ['-C', dir, 'config', 'user.name', 'Test']);
+    execFileSync('git', ['-C', dir, 'commit', '-qm', 'initial', '--allow-empty']);
+    return dir;
+  }),
+  cleanupClone: vi.fn(async (dir: string) => rm(dir, { recursive: true, force: true })),
+}));
 vi.mock('./db.js', () => ({
   insertTaskRun: vi.fn().mockResolvedValue(null),
   finishTaskRun: vi.fn().mockResolvedValue(undefined),
@@ -28,13 +50,9 @@ describe('rate limiting (integración, sin Docker real)', () => {
   let repoDir: string;
 
   beforeEach(async () => {
+    // Ya no necesita ser un repo git real (shallowClone está mockeado) —
+    // solo un `repo` no vacío para el input de la tool.
     repoDir = await mkdtemp(join(tmpdir(), 'rate-limit-repo-'));
-    await execFileAsync('git', ['init', '-q', '-b', 'main', repoDir]);
-    await execFileAsync('git', ['-C', repoDir, 'config', 'user.email', 'test@test.local']);
-    await execFileAsync('git', ['-C', repoDir, 'config', 'user.name', 'Test']);
-    await writeFile(join(repoDir, 'README.md'), '# demo\n');
-    await execFileAsync('git', ['-C', repoDir, 'add', '.']);
-    await execFileAsync('git', ['-C', repoDir, 'commit', '-qm', 'initial']);
 
     runTaskContainer.mockReset();
     runTaskContainer.mockImplementation(

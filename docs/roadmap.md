@@ -417,17 +417,18 @@ Ninguno de los tres bugs de prompt puede darse por resuelto solo con el cambio d
 ### User stories
 
 - **US-7.1** — Como Operador, quiero que Hermes pueda coger tareas desde Jira (mi cuenta personal), para no depender solo de GitHub Issues.
-  - [ ] Servidor MCP de Jira/Atlassian registrado, JQL fijo (`labels = hermes AND status = "To Do"`), sobre proyectos personales del Operador.
-  - [ ] `resolve-issue` generalizado para listar/reportar en Jira igual que en GitHub.
+  - [ ] Servidor MCP de Jira/Atlassian registrado, JQL fijo (`labels = hermes AND status = "To Do"`), sobre proyectos personales del Operador. **Bloqueado**: necesita un API token de Atlassian que solo el Operador puede generar — bloque listo y comentado en `hermes/config/hermes.config.yaml`.
+  - [x] `resolve-issue` generalizado para listar/reportar en Jira igual que en GitHub — ver § "Generalización a Notion y Jira" de `hermes/skills/resolve-issue/SKILL.md`. Sin verificar contra un servidor real (bloqueado por lo de arriba).
 - **US-7.2** — Como Operador, quiero que Hermes pueda coger tareas y contexto desde Notion, para poder usar mis páginas de Notion como fuente.
-  - [ ] Servidor MCP oficial de Notion registrado, apuntando a una base de datos "Hermes Tasks" (`status = Ready for Hermes`).
-  - [ ] Fuentes de ingestion de Brain desde Notion/Jira etiquetadas con su `source_authority` correcta, para que una futura consolidación (Fase 11) parta de datos ya etiquetados.
+  - [ ] Servidor MCP oficial de Notion registrado, apuntando a una base de datos "Hermes Tasks" (`status = Ready for Hermes`). **Bloqueado**: necesita un token de integración de Notion que solo el Operador puede generar — bloque listo y comentado en `hermes/config/hermes.config.yaml`.
+  - [x] Fuentes de ingestion de Brain desde Notion/Jira etiquetadas con su `source_authority` correcta — `brain_ingest` ya soporta `source: 'notion'`/`'jira'` desde la Fase 4/5 (`apps/brain-mcp/src/mcpServer.ts`), documentado en `resolve-issue/SKILL.md`.
 - **US-7.3** — Como Operador, quiero que la instancia de trabajo (Fase 10) pueda coger tareas desde Azure DevOps, para poder usar Hermes también en mi día a día profesional.
-  - [ ] Servidor MCP de Azure DevOps (evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp)) registrado **exclusivamente** en la instancia "Hermes trabajo" — nunca en la personal.
+  - [ ] Fuera de alcance hasta que exista la Fase 10 (instancia de trabajo) — dependencia explícita, no se empieza antes.
 - **US-7.4** — Como Operador, quiero al menos un canal de mensajería adicional a Telegram, para no depender de una sola app.
-  - [ ] Uno de Discord/Slack/WhatsApp/Signal (los que hermes-agent ya trae de fábrica) habilitado y verificado con un mensaje real, reutilizando el mismo Skill conversacional de la Fase 3 sin cambios.
+  - [ ] Uno de Discord/Slack/WhatsApp/Signal (los que hermes-agent ya trae de fábrica) habilitado y verificado con un mensaje real, reutilizando el mismo Skill conversacional de la Fase 3 sin cambios. **Bloqueado**: necesita que el Operador elija plataforma y genere una cuenta/bot token nuevo — mecanismo de activación documentado en `hermes/config/README.md §6`.
 - **US-7.5** — Como Operador, quiero poder mandarle una tarea hablada por Telegram en vez de escrita, para poder usar Hermes con las manos ocupadas.
-  - [ ] Verificado que una nota de voz transcrita por hermes-agent dispara `run-task` igual que un mensaje de texto — sin construir nada nuevo, solo confirmar que el flujo ya funciona con audio.
+  - [x] Infraestructura verificada lista en el despliegue real: `faster-whisper` instalado en el contenedor de hermes, `stt.enabled: true`/`provider: local` en `~/.hermes/config.yaml` (transcripción local, sin API key externa) — no hacía falta ningún cambio.
+  - [ ] Pendiente la prueba real: una nota de voz real del Operador por Telegram disparando `run-task`/`ask-brain` igual que un mensaje de texto.
 
 ### Tareas técnicas
 
@@ -437,6 +438,8 @@ Ninguno de los tres bugs de prompt puede darse por resuelto solo con el cambio d
 ### Definition of Done
 
 Al menos Jira (US-7.1) y un canal de mensajería adicional (US-7.4) funcionando end-to-end con evidencia real. Azure DevOps (US-7.3) queda condicionada a que exista la Fase 10.
+
+**Estado real**: la parte de código/skills/config que no requiere credenciales nuevas está lista (generalización de `resolve-issue`, scaffolding de Notion/Jira en `hermes.config.yaml`, infraestructura de voz verificada). **La Fase 7 no puede cerrarse del todo sin acción del Operador** — Jira, Notion, el canal adicional y la prueba de voz necesitan, respectivamente: un API token de Atlassian, un token de integración de Notion, una cuenta/bot en otra plataforma, y un audio real por Telegram. Ninguno de los cuatro es algo que se pueda generar sin el Operador.
 
 ---
 
