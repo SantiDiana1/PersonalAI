@@ -159,7 +159,16 @@ services:
       # ~/.hermes/skills/ y tener copias divergiendo. Solo lectura. Al montar
       # el directorio padre, un skill nuevo bajo hermes/skills/ no necesita
       # ningún cambio aquí para que hermes lo vea.
-      - ../skills:/opt/data/skills-repo:ro
+      #
+      # Deliberadamente FUERA de $HERMES_HOME (/opt/data), no debajo de él
+      # (US-6.2 de docs/roadmap.md): el entrypoint de hermes-agent hace
+      # `chown -R hermes:hermes $HERMES_HOME` en cada arranque, y como este
+      # mount es `:ro`, ese chown fallaba en él ("Read-only file system"),
+      # produciendo el warning "chown failed (rootless container?)" en cada
+      # arranque — engañoso, porque no tiene nada que ver con Podman rootless,
+      # es simplemente este sub-mount de solo lectura. Montándolo fuera de
+      # $HERMES_HOME el chown recursivo no lo toca y el warning desaparece.
+      - ../skills:/opt/skills-repo:ro
     environment:
       HERMES_UID: ${HERMES_UID:-10000}
       HERMES_GID: ${HERMES_GID:-10000}

@@ -2,6 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { logger } from './logger.js';
 import { runCodingTask, type RunCodingTaskDeps } from './runCodingTask.js';
+import { checkSessionValid } from './session.js';
+import { getRunnerStatusSummary } from './db.js';
+import { ensureIsolation } from './docker/network.js';
 import type { RunCodingTaskInput } from './types.js';
 
 const RUN_CODING_TASK_INPUT_SHAPE = {
@@ -42,15 +45,21 @@ export function loadDeps(): RunCodingTaskDeps {
 }
 
 /**
- * Construye una instancia del servidor MCP con la única tool que este servidor
- * expone.
+ * Construye una instancia del servidor MCP con las dos tools que este
+ * servidor expone.
  *
- * La superficie es deliberadamente mínima — exactamente una tool, con
- * parámetros tipados y validados (SEC-3.3 de docs/security.md). No existe, ni
- * debe existir, ninguna tool de propósito general tipo "ejecuta este comando":
- * este proceso es el único del sistema con acceso al socket de Docker, así que
- * cualquier operación que exponga es, en la práctica, ejecutable por quien
- * controle al cliente MCP.
+ * La superficie sigue siendo deliberadamente mínima y tipada (SEC-3.3 de
+ * docs/security.md): no existe, ni debe existir, ninguna tool de propósito
+ * general tipo "ejecuta este comando" — este proceso es el único del sistema
+ * con acceso al socket de Docker, así que cualquier operación que exponga es,
+ * en la práctica, ejecutable por quien controle al cliente MCP.
+ *
+ * `get_runner_status` (US-6.3/US-6.4 de docs/roadmap.md — Fase 6) es la
+ * segunda tool, añadida deliberadamente como excepción acotada a "una sola
+ * tool": es de solo lectura (no lanza contenedores de tarea, no toca
+ * `/var/run/docker.sock` salvo el mismo contenedor de comprobación de sesión
+ * efímero que ya usa `run_coding_task`) y sin parámetros — no amplía la
+ * superficie de ataque de la misma forma que un `run_shell_command` genérico.
  */
 export function createMcpServer(): McpServer {
   const server = new McpServer({ name: 'claude-code-runner-mcp', version: '0.1.0' });
@@ -76,6 +85,45 @@ export function createMcpServer(): McpServer {
         ...(input.timeoutSeconds !== undefined ? { timeoutSeconds: input.timeoutSeconds } : {}),
       };
       const output = await runCodingTask(taskInput, deps);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(output) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'get_runner_status',
+    {
+      title: 'get_runner_status',
+      description:
+        'Resumen de solo lectura del estado operativo del runner: validez de la sesión ' +
+        'de Claude Code compartida (hermes-claude-auth), tareas recientes en ' +
+        'needs_human_input/failed, y consumo aproximado (número de tareas lanzadas, no ' +
+        'telemetría real de Anthropic) de las ventanas de 5h/7 días. Usado por los skills ' +
+        'status-report (a demanda) y por el cron de resumen periódico (US-6.3/US-6.4).',
+      inputSchema: {},
+    },
+    async () => {
+      logger.info('get_runner_status recibida');
+      const deps = loadDeps();
+      const isolation = await ensureIsolation().catch((err: unknown) => {
+        logger.warn(
+          { err },
+          'no se pudo calcular el aislamiento de red para la comprobación de sesión',
+        );
+        return {};
+      });
+      const [sessionCheck, summary] = await Promise.all([
+        checkSessionValid(deps.claudeCodeOauthToken, isolation),
+        getRunnerStatusSummary(),
+      ]);
+      const output = {
+        session: sessionCheck,
+        persistenceAvailable: summary !== null,
+        tasksNeedingAttention: summary?.tasksNeedingAttention ?? [],
+        tasksStartedLast5h: summary?.tasksStartedLast5h ?? null,
+        tasksStartedLast7d: summary?.tasksStartedLast7d ?? null,
+      };
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(output) }],
       };

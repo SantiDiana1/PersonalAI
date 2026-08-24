@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { logger } from './logger.js';
-import type { RunCodingTaskOutput, TaskRunStatus } from './types.js';
+import type { RunCodingTaskOutput, TaskRunStatus, TaskRunSummary } from './types.js';
 
 const { Pool } = pg;
 
@@ -67,4 +67,61 @@ export async function finishTaskRun(
     `update runner.task_runs set status = $2, result = $3, branch_name = $4, finished_at = now() where id = $1`,
     [id, status, JSON.stringify(result), result.branchName ?? null],
   );
+}
+
+/**
+ * Lectura para `get_runner_status` (US-6.3/US-6.4 de docs/roadmap.md — Fase
+ * 6). Devuelve `null` si no hay persistencia configurada, en vez de lanzar —
+ * este tool es de solo lectura para un resumen operativo, no debe romper el
+ * flujo de status-report/cron por un `DATABASE_URL` ausente en un despliegue
+ * de pruebas.
+ */
+export async function getRunnerStatusSummary(): Promise<{
+  tasksNeedingAttention: TaskRunSummary[];
+  tasksStartedLast5h: number;
+  tasksStartedLast7d: number;
+} | null> {
+  const p = getPool();
+  if (!p) return null;
+
+  const attention = await p.query<{
+    id: string;
+    repo: string;
+    task_title: string;
+    status: TaskRunStatus;
+    started_at: Date;
+    finished_at: Date | null;
+  }>(
+    `select id, repo, task_title, status, started_at, finished_at
+     from runner.task_runs
+     where status in ('needs_human_input', 'failed')
+       and started_at > now() - interval '7 days'
+     order by started_at desc
+     limit 20`,
+  );
+
+  // Aproximación, no telemetría real de la cuota de Anthropic (que no expone
+  // API): cuenta de tareas que este runner lanzó en las ventanas de 5h/7
+  // días, como proxy de "cuánto se ha usado la cuota Pro compartida
+  // recientemente". Documentado explícitamente como aproximado en el mensaje
+  // que consume esto — ver hermes/skills/status-report/SKILL.md.
+  const windows = await p.query<{ last_5h: string; last_7d: string }>(
+    `select
+       count(*) filter (where started_at > now() - interval '5 hours') as last_5h,
+       count(*) filter (where started_at > now() - interval '7 days') as last_7d
+     from runner.task_runs`,
+  );
+
+  return {
+    tasksNeedingAttention: attention.rows.map((row) => ({
+      id: row.id,
+      repo: row.repo,
+      taskTitle: row.task_title,
+      status: row.status,
+      startedAt: row.started_at.toISOString(),
+      ...(row.finished_at ? { finishedAt: row.finished_at.toISOString() } : {}),
+    })),
+    tasksStartedLast5h: Number.parseInt(windows.rows[0]?.last_5h ?? '0', 10),
+    tasksStartedLast7d: Number.parseInt(windows.rows[0]?.last_7d ?? '0', 10),
+  };
 }

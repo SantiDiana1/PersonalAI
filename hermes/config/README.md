@@ -71,13 +71,13 @@ model:
 Y que **no** hay `ANTHROPIC_API_KEY` en `~/.hermes/.env`: si la hay,
 hermes-agent la usará en lugar de la sesión Pro compartida.
 
-## 4. Cargar los skills `resolve-issue` y `run-task`
+## 4. Cargar los skills
 
-Viven en [`../skills/resolve-issue/`](../skills/resolve-issue/) y
-[`../skills/run-task/`](../skills/run-task/) — el primero para el flujo
-automático de issues de GitHub (Fase 2), el segundo para peticiones
-conversacionales por Telegram (Fase 3, ver `docs/hermes/spec.md §9`). Dos
-formas de que hermes los vea:
+Viven en [`../skills/`](../skills/): `resolve-issue` (flujo automático de
+issues de GitHub, Fase 2), `run-task` (peticiones conversacionales por
+Telegram, Fase 3, ver `docs/hermes/spec.md §9`), y `status-report`/`ask-brain`
+(cierre operativo y superficie conversacional, Fase 6). Dos formas de que
+hermes los vea:
 
 - **Recomendada** — montar el directorio del repo en el contenedor y apuntar
   `skills.external_dirs` ahí. La fuente de verdad sigue siendo el repo, sin
@@ -85,25 +85,38 @@ formas de que hermes los vea:
 
   ```yaml
   volumes:
-    - ../skills:/opt/data/skills-repo:ro
+    - ../skills:/opt/skills-repo:ro
   ```
 
-- **Alternativa** — copiar `hermes/skills/resolve-issue` a `~/.hermes/skills/`
-  y dejar `external_dirs` vacío. Más simple, pero hay que reconciliar a mano
-  cada cambio.
+  Deliberadamente **fuera** de `/opt/data` (`$HERMES_HOME`), no debajo — ver
+  el comentario en `hermes/docker/docker-compose.yml` (US-6.2 de
+  `docs/roadmap.md`): montarlo bajo `$HERMES_HOME` hacía que el `chown -R`
+  recursivo del entrypoint fallara en él (es `:ro`), produciendo en cada
+  arranque el warning "chown failed (rootless container?)" — engañoso, no
+  tiene nada que ver con Podman rootless.
 
-Comprobar: `hermes skills list` debe mostrar tanto `resolve-issue` como
-`run-task`.
+- **Alternativa** — copiar cada skill de `hermes/skills/` a
+  `~/.hermes/skills/` y dejar `external_dirs` vacío. Más simple, pero hay que
+  reconciliar a mano cada cambio.
+
+Comprobar: `hermes skills list` debe mostrar `resolve-issue`, `run-task`,
+`status-report` y `ask-brain`.
 
 ## 5. Programar el cron
 
 ```bash
 hermes cron create '30m' --name resolve-issues --skill resolve-issue
+# US-6.3: resumen proactivo, necesita --deliver explícito (no hay chat de
+# origen propio en un cronjob recurrente) — ver hermes/skills/status-report/SKILL.md.
+hermes cron create 'every 24h' --name status-report --skill status-report \
+  --deliver telegram:<tu_chat_id>
 hermes cron list
 hermes cron tick     # ejecuta los jobs pendientes una vez, sin esperar
 ```
 
 `hermes cron tick` es la forma de probar el ciclo sin esperar al intervalo real.
+`run-task` y `ask-brain` no necesitan cron — se activan igual que cualquier
+otro skill en un turno interactivo normal (ver paso 6).
 
 ## 6. Telegram (Fase 3)
 
@@ -121,9 +134,11 @@ hermes cron tick     # ejecuta los jobs pendientes una vez, sin esperar
 4. Verifica desde tu cuenta de Telegram que el bot responde, y desde una
    **segunda cuenta** no listada en `TELEGRAM_ALLOWED_USERS` que el mensaje se
    rechaza (SEC-1.1, verificado, no asumido).
-5. El skill `run-task` (`../skills/run-task/`) ya está disponible en cuanto
-   pasa el paso 4 de esta guía — no necesita registro de cron, se activa igual
-   que cualquier otro skill en un turno interactivo normal.
+5. Los skills `run-task` y `ask-brain` (`../skills/run-task/`,
+   `../skills/ask-brain/`) ya están disponibles en cuanto pasa el paso 4 de
+   esta guía — no necesitan registro de cron, se activan igual que cualquier
+   otro skill en un turno interactivo normal. `status-report` también
+   responde a demanda sin cron, además de su mitad proactiva del paso 5.
 
 ## 7. Identidad del agente (`SOUL.md`)
 
