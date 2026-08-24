@@ -256,9 +256,9 @@ que el modelo esté completo en un solo sitio.
   es revocada, se renueva a mano. **No se automatiza** la extracción de tokens
   (ver [hermes/spec.md §3.3](hermes/spec.md#33-limitación-conocida-expiración-o-revocación-de-sesión)).
 
-## 9. Capa 7 — Aislamiento entre instancia personal y de trabajo (Fase 8 de v2)
+## 9. Capa 7 — Aislamiento entre instancia personal y de trabajo (Fase 10 de v2)
 
-Esta capa solo aplica **si y cuando** se construya la [Fase 8 del roadmap](roadmap.md#fase-8--despliegue-dual-instancia-personal-vs-instancia-de-trabajo) (Azure DevOps u otra fuente de la empresa del Operador). No existe en v1. Se recoge aquí, con numeración propia, para que la decisión de aislamiento no dependa de que alguien se acuerde de leer el roadmap el día que se implemente.
+Esta capa solo aplica **si y cuando** se construya la [Fase 10 del roadmap](roadmap.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo) (Azure DevOps u otra fuente de la empresa del Operador). No existe en v1. Se recoge aquí, con numeración propia, para que la decisión de aislamiento no dependa de que alguien se acuerde de leer el roadmap el día que se implemente.
 
 El principio de fondo es el mismo que en §0, aplicado a un límite distinto: **el riesgo que el Operador acepta para sí mismo (§0.2, ToS de la sesión Pro) no se traslada por defecto a datos o credenciales de su empleador.**
 
@@ -331,10 +331,10 @@ quedan **aceptados conscientemente**:
 Ninguna fase se cierra sin ejecutar estas comprobaciones **de verdad**, con
 evidencia pegada en el roadmap.
 
-| Fase         | Requisitos a verificar                                                                   |
-| ------------ | ---------------------------------------------------------------------------------------- |
-| 1 (hecha)    | SEC-4.3, SEC-5.1 – SEC-5.6, SEC-6.3                                                      |
-| 2            | SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1, SEC-6.2 |
-| 3            | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
-| 4–5          | Revisión de que Brain no reintroduce superficie (API solo en red interna, token propio)  |
-| Fase 8 de v2 | SEC-7.1 – SEC-7.5, en cuanto exista una instancia "Hermes trabajo"                       |
+| Fase          | Requisitos a verificar                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| 1 (hecha)     | SEC-4.3, SEC-5.1 – SEC-5.6, SEC-6.3                                                      |
+| 2             | SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1, SEC-6.2 |
+| 3             | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
+| 4–5           | Revisión de que Brain no reintroduce superficie (API solo en red interna, token propio)  |
+| Fase 10 de v2 | SEC-7.1 – SEC-7.5, en cuanto exista una instancia "Hermes trabajo"                       |
