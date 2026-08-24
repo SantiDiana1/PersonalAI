@@ -417,7 +417,7 @@ hermes-agent soporta transcripción de notas de voz — se podría mandar una ta
 
 ### Futurible J — Skill de estado/salud (sesión, cuota, resumen)
 
-**Qué sería**: un skill (p.ej. `status-report`) que responda "Hermes, ¿cómo estás?" con un resumen de: validez de la sesión OAuth compartida (§3.3 de `hermes/spec.md`), consumo aproximado de la ventana de 5h/semanal compartida entre chat y runner (pregunta abierta en [hermes/spec.md §10](hermes/spec.md#10-preguntas-abiertas)), y tareas recientes en `needs_human_input`. Hoy la única forma de enterarse de una sesión caducada o revocada es que se acumulen tareas sin resolver — este skill lo haría consultable a demanda, y conectaría con el Futurible E (resúmenes proactivos) dándole un contenido concreto que hoy no tiene.
+**Qué sería**: un skill (p.ej. `status-report`) que responda "Hermes, ¿cómo estás?" con un resumen de: validez de la sesión OAuth compartida (§3.3 de `hermes/spec.md`), consumo aproximado de la ventana de 5h/semanal compartida entre chat y runner (pregunta abierta en [hermes/spec.md §11](hermes/spec.md#11-preguntas-abiertas)), y tareas recientes en `needs_human_input`. Hoy la única forma de enterarse de una sesión caducada o revocada es que se acumulen tareas sin resolver — este skill lo haría consultable a demanda, y conectaría con el Futurible E (resúmenes proactivos) dándole un contenido concreto que hoy no tiene.
 
 - Fuente de datos: la tabla `runner.task_runs` (§7 de `hermes/spec.md`) más el chequeo de sesión que ya usa `claude-code-runner-mcp` internamente (§3.2.1) — expuesto como tool de lectura, no como una tool nueva de ejecución.
 
