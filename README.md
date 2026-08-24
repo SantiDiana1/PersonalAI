@@ -46,3 +46,7 @@ Este repo se desarrolla siguiendo un enfoque _spec-first_: antes de escribir có
 - **Alcance**: personal, no multi-tenant — pero el modelo de datos de Brain se diseña para que el patrón generalice a un "company brain" real en el futuro (ver spec de Brain, sección de permisos).
 - **Brain se mantiene básico en este proyecto**: ingestión + búsqueda por similitud, sin capa de consolidación (extracción de hechos vía LLM, reconciliación, mental models). Esa capa está diseñada en el spec como referencia, pero no se construye aquí — es trabajo futuro que haré yo por mi cuenta.
 - **Orden de las fases (Milestone v1 = Fases 0 a 5)**: fundación (0), `claude-code-runner-mcp` (1), hermes-agent en local + GitHub (2), Telegram (3), Brain básico (4), integración Brain↔Hermes (5). Notion/Jira y pulido de portfolio son futuribles post-v1. Ver [docs/roadmap.md](docs/roadmap.md).
+
+## Licencia
+
+Este proyecto es de uso personal y no está licenciado para redistribución.
