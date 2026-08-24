@@ -13,6 +13,14 @@ No son dos demos aisladas: **Hermes consulta a Brain (vía MCP) antes de actuar*
 
 Este proyecto es, ante todo, **mi sistema de IA personal** — un TODO-EN-1 backed by Claude Code, desplegado en un servidor local (Mac Mini), hablable desde el móvil. También es una pieza de portfolio técnico (demuestra que sé diseñar y construir agentes autónomos y el patrón de integración Hermes ↔ MCP ↔ memoria), pero eso es secundario al uso real. **v1** — ver [docs/roadmap.md §Milestone v1](docs/roadmap.md#milestone-v1--qué-es-la-primera-versión) — es Hermes desplegado en local resolviendo issues de GitHub, hablable por Telegram, con un Brain básico consultado antes de actuar. Notion/Jira, el pulido de portfolio y el Company Brain completo (consolidación real) quedan como **futuribles**, explícitamente post-v1 y sin bloquear el hito.
 
+## Requisitos previos
+
+Para trabajar en este monorepo necesitas:
+
+- **Node.js 20** o superior
+- **pnpm 9** (el repo fija `packageManager` en el `package.json` raíz)
+- **Docker** y **Docker Compose**
+
 ## Estructura de la documentación (spec-driven development)
 
 Este repo se desarrolla siguiendo un enfoque _spec-first_: antes de escribir código, se definen specs detalladas para que Claude Code (u otro coding agent) tenga contexto suficiente para implementar sin ambigüedad.
