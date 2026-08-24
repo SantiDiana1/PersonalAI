@@ -12,7 +12,7 @@ Recordatorio: "Hermes" = [NousResearch/hermes-agent](https://github.com/NousRese
 
 ## Milestone v1 — qué es la "primera versión"
 
-**Estado: Fases 0-5 completadas.** Único cabo suelto, no bloqueante: US-5.5 (Brain en el canal de Telegram) está implementado y usa el mismo mecanismo ya verificado por GitHub, pero no se ha disparado todavía con una tarea real iniciada desde Telegram — ver la nota en Fase 5.
+**Estado: cumplido. Fases 0-5 completadas.**
 
 Este proyecto es, ante todo, mi sistema de IA personal — backed by Claude Code, desplegado en un servidor local (Mac Mini, ver [architecture.md §Despliegue](architecture.md#despliegue)). v1 es la primera versión **utilizable de verdad para uso personal**, no un portfolio pulido. Se considera cumplido cuando las **Fases 0 a 5** están terminadas:
 
@@ -20,7 +20,13 @@ Este proyecto es, ante todo, mi sistema de IA personal — backed by Claude Code
 - Hermes hablable desde Telegram: puedo mandarle una tarea ad-hoc por chat, me confirma que la ha aceptado, y me avisa con el resultado cuando termina (Fase 3).
 - Brain básico (ingesta + búsqueda semántica, sin consolidación) integrado vía `brain-mcp` y consultado antes de actuar tanto en el flujo de GitHub como en el conversacional de Telegram (Fase 4, Fase 5).
 
-Todo lo que no está en esas 6 fases — Notion/Jira, pulido de portfolio, Company Brain completo (consolidación real), otros canales de mensajería, notificaciones proactivas, GitHub App, etc. — es explícitamente **post-v1**. Vive en la sección [Futuribles](#futuribles-post-v1) al final de este documento y **no bloquea** el hito de v1: son ideas para retomar después, con prioridad a decidir más adelante, no compromisos de este roadmap.
+## Milestone v2 — qué es la segunda versión
+
+Lo que en la primera versión de este documento vivía como una lista suelta de "Futuribles" (ideas sin fecha, sin orden, sin criterios de aceptación) pasa aquí a ser **Fases 6 a 11**, con la misma disciplina que v1: objetivo, user stories verificables, y Definition of Done con evidencia real — nada se da por cerrado por diseño, igual que en v1.
+
+**Orden decidido**: primero cerrar los cabos sueltos operativos de v1 y dar a Hermes una superficie conversacional completa (Fase 6) — es la base sobre la que se apoyan casi todas las demás. Después, en paralelo si se quiere: pulido de portfolio (Fase 7, no depende de nada más que v1), el despliegue dual para uso profesional (Fase 8, la única con una puerta de gobernanza no técnica — SEC-7.5), ampliar fuentes y canales (Fase 9), comandos de Claude Code vía chat (Fase 10), y por último la pieza más grande y menos urgente — la consolidación real de Brain (Fase 11), que tiene sentido dejar para cuando el uso diario de v1 haya enseñado qué merece la pena consolidar de verdad.
+
+v2 no tiene una fecha de "cumplido" única como v1 — es la cola de trabajo priorizada, no un hito con Definition of Done propia. Cada fase se cierra por su cuenta cuando su Definition of Done se cumple.
 
 ## Cómo leer este documento
 
@@ -37,16 +43,22 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 
 ## Vista general
 
-| Fase | Nombre                                                 | Objetivo en una frase                                                                        | Depende de   |
-| ---- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------ |
-| 0    | Fundación del monorepo + auth compartida               | Monorepo instalable + sesión de Claude Pro compartida lista para usarse                      | —            |
-| 1    | `claude-code-runner-mcp` en solitario                  | Puedo delegar una tarea de código a Claude Code en un contenedor aislado, sin Hermes todavía | Fase 0       |
-| 2    | hermes-agent en local + Skill `resolve-issue` (GitHub) | Etiqueto una issue y Hermes abre un PR sin que yo haga nada más                              | Fase 0, 1    |
-| 3    | Interacción conversacional vía Telegram                | Le mando una tarea a Hermes por Telegram y me avisa cuando termina                           | Fase 2       |
-| 4    | Brain básico (ingest + retrieval)                      | Puedo preguntarle algo a Brain y me devuelve el fragmento relevante                          | Fase 0       |
-| 5    | Integrar Brain vía `brain-mcp`                         | Hermes resuelve tareas mejor (GitHub y Telegram) porque consulta a Brain antes de actuar     | Fase 2, 3, 4 |
+| Fase | Nombre                                                  | Objetivo en una frase                                                                            | Depende de                    |
+| ---- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------- |
+| 0    | Fundación del monorepo + auth compartida                | Monorepo instalable + sesión de Claude Pro compartida lista para usarse                          | —                             |
+| 1    | `claude-code-runner-mcp` en solitario                   | Puedo delegar una tarea de código a Claude Code en un contenedor aislado, sin Hermes todavía     | Fase 0                        |
+| 2    | hermes-agent en local + Skill `resolve-issue` (GitHub)  | Etiqueto una issue y Hermes abre un PR sin que yo haga nada más                                  | Fase 0, 1                     |
+| 3    | Interacción conversacional vía Telegram                 | Le mando una tarea a Hermes por Telegram y me avisa cuando termina                               | Fase 2                        |
+| 4    | Brain básico (ingest + retrieval)                       | Puedo preguntarle algo a Brain y me devuelve el fragmento relevante                              | Fase 0                        |
+| 5    | Integrar Brain vía `brain-mcp`                          | Hermes resuelve tareas mejor (GitHub y Telegram) porque consulta a Brain antes de actuar         | Fase 2, 3, 4                  |
+| 6    | Cierre operativo y superficie conversacional            | Cierro los últimos huecos de evidencia de v1 y Hermes es consultable/proactivo, no solo reactivo | Fase 5                        |
+| 7    | Pulido de portfolio                                     | El proyecto se entiende y se ve funcionar sin que yo esté delante                                | Fase 5                        |
+| 8    | Despliegue dual personal/trabajo                        | Una segunda instancia de Hermes para mi empresa, sin compartir riesgo ni infraestructura         | Fase 6                        |
+| 9    | Ampliar fuentes y canales                               | Hermes coge tareas y avisa por más sitios (Jira, Notion, Azure DevOps, otro canal, voz)          | Fase 6 (Azure DevOps: Fase 8) |
+| 10   | Comandos de Claude Code vía chat (`run_claude_command`) | Le pido a Hermes un diseño/artifact por Telegram, no solo código                                 | Fase 6                        |
+| 11   | Company Brain completo (consolidación real)             | Brain deja de ser un vector store simple y cumple las 4 propiedades de un company brain real     | Fase 4                        |
 
-**Milestone v1 = Fases 0 a 5.** Ver la sección [Futuribles](#futuribles-post-v1) al final de este documento para consolidación real de Brain, Notion/Jira, pulido de portfolio, y otras ideas post-v1 — ninguna de ellas bloquea v1.
+**Milestone v1 = Fases 0 a 5. Cumplido.** Ver más abajo [Milestone v2](#milestone-v2--qué-es-la-segunda-versión) para las Fases 6 a 11 — lo que antes vivía como Futuribles sueltos, ahora secuenciado igual que v1.
 
 ---
 
@@ -347,79 +359,175 @@ Hermes consulta a Brain antes de actuar y le reporta el resultado después, de f
 
 ---
 
-## Futuribles (post-v1)
+## Fase 6 — Cierre operativo y superficie conversacional
 
-Ideas y trabajo documentado que se queda deliberadamente fuera del Milestone v1, sin fecha ni compromiso — para retomar cuando el sistema básico ya esté funcionando de verdad en el día a día. No están numeradas como "Fase" porque no forman parte del roadmap secuencial: se puede picotear cualquiera de ellas en el orden que interese en su momento.
+**Objetivo**: cerrar el único cabo suelto de evidencia que dejó v1 (US-5.5 sin verificar por Telegram), resolver un warning operativo sin diagnosticar, y dar a Hermes una superficie conversacional completa — que se le pueda preguntar por su propio estado y por lo que Brain ya sabe, no solo delegarle tareas de código.
 
-### Futurible A — Ampliar fuentes (Notion, Jira, Azure DevOps)
+**Depende de**: Fase 5.
 
-**Qué sería**: que Hermes pueda coger tareas desde Notion, Jira y Azure DevOps además de GitHub, y que Brain pueda ingestar documentos de esas plataformas como fuente de contexto. **Nota de alcance (ver Futurible G)**: Jira aquí es personal (cuentas/proyectos propios del Operador); Azure DevOps es de la empresa del Operador y **no comparte despliegue** con el resto — su detalle de credenciales y aislamiento vive en el Futurible G, no aquí.
+### User stories
 
-- Registrar el servidor MCP oficial de Notion apuntando a una base de datos "Hermes Tasks" (`status = Ready for Hermes`).
-- Registrar un servidor MCP de Jira/Atlassian con un JQL fijo (`labels = hermes AND status = "To Do"`), sobre la cuenta/proyectos personales del Operador — instancia "Hermes personal" del Futurible G.
-- Registrar un servidor MCP de Azure DevOps (oficial o de comunidad — evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp) al implementar) con un filtro de work items equivalente (etiqueta/estado acordado), sobre la organización de Azure DevOps de la empresa del Operador — **exclusivamente** en la instancia "Hermes trabajo" del Futurible G, nunca en la personal.
-- Generalizar el Skill conversacional/`resolve-issue` para listar y reportar en todas las plataformas configuradas en esa instancia indistintamente (cada instancia solo ve las fuentes que le tocan — ver Futurible G).
-- Etiquetar cada fuente de ingestion de Brain con su `source_authority` (`canonical`/`supporting`) para que un futuro retomar de la consolidación (Futurible C) parta de datos ya etiquetados. Si Brain llega a usarse en la instancia de trabajo, es una base de datos y un despliegue de Brain **distintos** de los personales — mismo principio de no mezclar que en Futurible G.
+- **US-6.1** — Como Operador, quiero verificar con una ejecución real disparada desde Telegram que `run-task` también consulta y registra en Brain, para que US-5.5 tenga la misma evidencia real que el resto del roadmap.
+  - [ ] Un mensaje real de Telegram dispara `run-task`; el log confirma la llamada a `brain_query` (con o sin contexto disponible) y, al terminar, a `brain_record_observation`.
+  - [ ] Si en el momento de la prueba Brain está sano, se documenta también un caso con `brain-mcp` caído para confirmar que este canal se comporta igual que GitHub ante un fallo (US-5.2).
+- **US-6.2** — Como Operador, quiero entender y resolver el warning `chown failed (rootless container?)` que aparece en cada arranque de `hermes`, para no arrastrar hacia delante un problema de permisos sin diagnosticar.
+  - [ ] Causa raíz identificada (por qué falla el `chown` de `/opt/data` al arrancar) y, si tiene arreglo razonable, corregida.
+  - [ ] Si no tiene arreglo razonable (p. ej. es inherente a cómo Docker gestiona UIDs en este entorno), documentado explícitamente como benigno, con evidencia de que no está causando pérdida de datos ni de permisos silenciosa (mismo patrón que el hallazgo real de `auth.json`/`cron/jobs.json` de la Fase 2 — verificar que esto no es una repetición de lo mismo).
+- **US-6.3** — Como Operador, quiero un resumen periódico (diario o semanal) por Telegram sin tener que pedirlo, para enterarme de una sesión de Claude Code caducada/revocada o de tareas en `needs_human_input` sin ir a mirar manualmente.
+  - [ ] Job de `hermes cron` que manda, sin que se le pida, un mensaje con: validez de la sesión OAuth compartida, tareas recientes en `runner.task_runs` con estado `needs_human_input`/`failed`, y consumo aproximado de la ventana de 5h/semanal compartida.
+  - [ ] Verificado con al menos un envío real recibido en Telegram.
+- **US-6.4** — Como Operador, quiero poder preguntarle a Hermes por su propio estado a demanda ("¿cómo estás?"), no solo recibirlo por sorpresa, para consultarlo en el momento que a mí me interese.
+  - [ ] Skill nuevo (`status-report`) que responde con el mismo contenido que US-6.3, pero disparado por un mensaje del Operador en vez de por cron.
+  - [ ] Reutiliza como fuente de datos la tabla `runner.task_runs` y el chequeo de sesión que ya usa `claude-code-runner-mcp` internamente — sin tool nueva de ejecución, solo de lectura.
+- **US-6.5** — Como Operador, quiero poder preguntarle a Brain algo directamente por chat ("¿qué sabíamos ya sobre X?") o pedirle que recuerde algo ("anota que decidimos Y"), sin que tenga que ser un paso interno de una tarea de código.
+  - [ ] Skill nuevo (`ask-brain`) que expone `brain_query`/`brain_ingest` en la conversación de Telegram, reutilizando `brain-mcp` tal cual — sin cambios en `apps/brain`/`apps/brain-mcp`.
+  - [ ] El mensaje del Operador se trata como instrucción legítima (igual que en `run-task`), no como dato no confiable — no hace falta el tratamiento de prompt injection que sí exige `resolve-issue` sobre contenido de terceros.
+  - [ ] Verificado con al menos un ciclo real: ingesta algo por chat → lo recupera con una pregunta posterior.
 
-### Futurible B — Pulido de portfolio
+### Tareas técnicas
 
-**Qué sería**: que el proyecto sea presentable de principio a fin a un reclutador o cliente potencial, no solo funcional para mí.
+- `hermes/skills/status-report/`, `hermes/skills/ask-brain/`: skills nuevos, siguiendo el mismo formato que `resolve-issue`/`run-task`.
+- Job de `hermes cron` para US-6.3, registrado en `hermes/config/hermes.config.yaml`.
+- Diagnóstico del warning de `chown` — revisar `docker/entrypoint.sh` de hermes-agent upstream y el modelo de UID/GID del compose (`HERMES_UID`/`HERMES_GID`).
 
-- README con demo grabada (GIF/vídeo) de Hermes resolviendo una tarea real end-to-end (por GitHub y/o por Telegram).
-- Métricas simples (nº de tareas resueltas, nº de eventos ingestados en Brain, tasa de éxito) en un comando CLI o dashboard mínimo.
-- Migrar de PAT fine-grained a un GitHub App real.
-- `docs/case-study.md` explicando las decisiones de diseño clave: por qué hermes-agent y no un orquestador propio, por qué la autenticación compartida y su riesgo de ToS asumido, por qué Brain se mantiene básico, por qué Telegram como canal principal de interacción.
+### Definition of Done
 
-### Futurible C — Company Brain completo (consolidación real)
+US-5.5 queda verificada con evidencia real (no solo por diseño), el warning de `chown` está diagnosticado y resuelto o documentado como benigno, y Hermes responde tanto de forma proactiva como a demanda sobre su propio estado y lo que Brain sabe.
 
-**Qué sería**: retomar la capa de consolidación ya diseñada en [personal-brain/spec.md §4.2](personal-brain/spec.md#42-consolidation--fuera-de-alcance-de-este-proyecto-diseño-de-referencia-únicamente) — extracción de `Observation` vía LLM, reconciliación de contradicciones, `MentalModel` agregados — para que Brain deje de ser un vector store simple y pase a cumplir de verdad las 4 propiedades del patrón "company brain" (shared, enforceable, evolving, agent-readable). Es la pieza que más deliberadamente se ha dejado fuera de v1: el spec ya existe, falta construirla cuando el Operador quiera.
+---
 
-### Futurible D — Otros canales de mensajería de hermes-agent
+## Fase 7 — Pulido de portfolio
 
-hermes-agent ya soporta de fábrica Discord, Slack, WhatsApp y Signal además de Telegram — habilitar cualquiera de ellos es, en principio, solo configuración adicional del mismo gateway, reutilizando el mismo Skill conversacional de la Fase 3.
+**Objetivo**: que el proyecto sea presentable de principio a fin a un reclutador o cliente potencial, no solo funcional para el Operador.
 
-### Futurible E — Notificaciones proactivas / resúmenes periódicos
+**Depende de**: Fase 5 (Milestone v1).
 
-Usar el cron nativo de hermes-agent para mandar, sin que se le pida, un resumen diario/semanal por Telegram (tareas resueltas, issues pendientes, estado de la sesión de Claude Code) — el mismo patrón que "daily reports, nightly backups, weekly audits" que ya trae hermes-agent de fábrica.
+### User stories
 
-### Futurible F — Voice memos vía Telegram
+- **US-7.1** — Como Operador, quiero una demo grabada de Hermes resolviendo una tarea real end-to-end, para poder enseñar el sistema sin tener que hacer una demo en vivo cada vez.
+  - [ ] GIF/vídeo del flujo por GitHub (issue etiquetada → PR) y del flujo por Telegram (mensaje → aviso de resultado), embebidos en el README.
+- **US-7.2** — Como Operador, quiero métricas simples del uso real del sistema, para poder enseñar evidencia cuantitativa, no solo cualitativa.
+  - [ ] Comando CLI o dashboard mínimo con: nº de tareas resueltas, nº de eventos ingestados en Brain, tasa de éxito de `run_coding_task`.
+- **US-7.3** — Como Operador, quiero migrar de PAT fine-grained a una GitHub App real, para que las credenciales de GitHub sigan el modelo de mínimo privilegio recomendado, no un token personal.
+  - [ ] GitHub App creada, instalada en los repos objetivo, y `resolve-issue` funcionando con sus credenciales en vez del PAT.
+- **US-7.4** — Como Operador, quiero un `docs/case-study.md` que explique las decisiones de diseño clave, para que quien lo lea entienda el porqué, no solo el qué.
+  - [ ] Documento explicando: por qué hermes-agent y no un orquestador propio, por qué la autenticación compartida y su riesgo de ToS asumido, por qué Brain se mantiene básico en v1, por qué Telegram como canal principal.
 
-hermes-agent soporta transcripción de notas de voz — se podría mandar una tarea hablada en vez de escrita desde el móvil, sin construir nada nuevo, solo verificar que el flujo conversacional de la Fase 3 funciona igual con audio transcrito.
+### Definition of Done
 
-### Futurible G — Despliegue dual: instancia personal vs. instancia de trabajo
+Alguien externo al proyecto puede entender qué hace el sistema, verlo funcionar (grabado), y entender por qué se tomó cada decisión de diseño importante — sin que el Operador tenga que estar delante explicándolo.
 
-**Qué sería**: dos instancias de Hermes completamente separadas — no dos bots configurados dentro del mismo despliegue, sino dos despliegues independientes (`docker compose` propio, `.env` propio, red Docker propia, volumen de estado propio) — porque mezclan dominios de riesgo distintos, no solo fuentes de datos distintas.
+---
 
-**Por qué separadas de verdad, no solo "dos bots"**: este proyecto ya asume conscientemente un riesgo de ToS de consumidor de Anthropic para uso **personal** ([hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar)). Ese riesgo lo acepta el Operador para sí mismo. Meter credenciales/datos de la empresa del Operador (Azure DevOps, GitHub del trabajo) en la misma infraestructura arrastraría ese riesgo — y el propio dato de la empresa — a una decisión que no le corresponde a este proyecto tomar por él. Antes de construir esto, el Operador confirma con la política de seguridad/IT de su empresa qué está permitido, no se asume por defecto.
+## Fase 8 — Despliegue dual: instancia personal vs. instancia de trabajo
 
-- **Instancia "Hermes personal"** (la que ya existe): GitHub personal, Jira personal (Futurible A), Brain personal. Sigue usando la sesión Pro compartida del Operador (§0.1) — ese riesgo ya está aceptado para este ámbito.
-- **Instancia "Hermes trabajo"** (nueva, separada): Azure DevOps + GitHub de la empresa (Futurible A). **No reutiliza `hermes-claude-auth`** — necesita su propio mecanismo de auth con Anthropic (API key facturada normalmente, o la suscripción/cuenta que la empresa autorice), precisamente para no mezclar el riesgo de ToS personal con el uso profesional. Corre en su propio `docker-compose.yml`, con su propio `TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` (un bot de Telegram distinto), y sin acceso de red ni de volumen a la instancia personal.
-- Ambas pueden convivir en el mismo Mac Mini (contenedores en redes Docker separadas) o en máquinas distintas — a decidir según lo que permita la política de la empresa del Operador, no es una decisión puramente técnica.
-- **Explícitamente no se hace**: una única instancia con "modo personal" y "modo trabajo" conmutables, ni un mecanismo de multi-tenancy dentro del mismo proceso — eso es precisamente lo que la sección "Fuera de alcance" de este documento descarta para el proyecto en general, y aquí aplica con más razón porque cruza una frontera organizativa real, no solo de usuarios.
+**Objetivo**: una segunda instancia de Hermes, completamente separada de la personal, para uso profesional (Azure DevOps/GitHub de la empresa del Operador) — sin compartir riesgo de ToS, credenciales, ni infraestructura con la instancia personal.
 
-**Seguridad**: los requisitos concretos de este aislamiento están numerados en [security.md §9 (SEC-7.1–SEC-7.5)](security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-post-v1-futurible-g) — no se despliega la instancia de trabajo sin verificarlos, con la misma disciplina de evidencia real que el resto del proyecto.
+**Depende de**: Fase 6.
 
-### Futurible H — Comandos slash de Claude Code (`/design` y similares) vía `run_claude_command`
+**Por qué separadas de verdad, no solo "dos bots"**: este proyecto ya asume conscientemente un riesgo de ToS de consumidor de Anthropic para uso **personal** ([hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar)). Meter credenciales/datos de la empresa del Operador en la misma infraestructura arrastraría ese riesgo — y el propio dato de la empresa — a una decisión que no le corresponde a este proyecto tomar por él.
 
-**Qué sería**: que Hermes pueda pedirle a Claude Code no solo tareas de código (`run_coding_task`), sino comandos slash como `/design` o `/dataviz` que devuelven un **Artifact** publicado en claude.ai en vez de un commit — p.ej. "Hermes, diséñame una landing para mi proyecto X" por Telegram, y recibir el link al canvas de diseño resultante.
+**Seguridad**: esta fase debe verificar SEC-7.1 a SEC-7.5 de [security.md §9](security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-fase-8-de-v2), ya diseñados.
 
-- Diseño completo (contrato MCP, allowlist de comandos, entrega dual Telegram/issue) en [hermes/spec.md §3.7](hermes/spec.md#37-extensión-futura-post-v1-futurible-h-run_claude_command).
-- **Pregunta abierta central, a resolver antes de construir nada**: si `claude -p` en modo headless (el mecanismo no interactivo que usa todo `claude-code-runner-mcp`) puede completar el flujo de publicación de un Artifact igual que una sesión interactiva. Si no puede, este futurible se rediseña (devolver el HTML generado en vez de un link ya publicado) antes de implementar.
-- Tool nueva y separada de `run_coding_task` en `claude-code-runner-mcp` — mismo runner, mismo aislamiento de contenedor, misma sesión Pro compartida, misma cuota; solo un tipo de resultado distinto (`artifactUrl` en vez de `branchName`/`commitShas`).
-- Skill nuevo y dedicado, `run-design-task` (`hermes/skills/run-design-task/`), disparado por chat siguiendo el mismo patrón de confirmación inmediata + cronjob de un disparo que `run-task` (Fase 3) — no una extensión de `run-task`/`resolve-issue`. Distingue una petición de diseño de una de código antes de elegir la tool, preguntando si es ambiguo.
+### User stories
 
-### Futurible I — Consulta e ingesta directa a Brain por chat
+- **US-8.1** — Como Operador, quiero confirmar explícitamente con la política de seguridad/IT de mi empresa qué está permitido antes de tocar una sola línea de despliegue, para no asumir por defecto algo que no me corresponde decidir solo.
+  - [ ] **SEC-7.5**: confirmación explícita documentada (fecha, con quién) antes de continuar con el resto de esta fase. Es una puerta de gobernanza, no un requisito de código — bloquea el resto de la fase hasta que se cumpla.
+- **US-8.2** — Como Operador, quiero una instancia "Hermes trabajo" completamente separada de la personal, para que un problema en una no pueda afectar a la otra.
+  - [ ] `docker-compose.yml` propio, red Docker propia, volumen de estado propio, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos).
+  - [ ] **SEC-7.2**: auth con Anthropic propia (API key facturada o la que autorice la empresa) — nunca `hermes-claude-auth`.
+  - [ ] **SEC-7.3**: credenciales de empresa (Azure DevOps, GitHub de trabajo) solo en el `.env` de esta instancia.
+- **US-8.3** — Como Operador, quiero verificar que las dos instancias no se alcanzan entre sí por red aunque convivan en el mismo Mac Mini, para que el aislamiento sea real y no solo nominal.
+  - [ ] **SEC-7.1**: verificado que un contenedor de una instancia no puede resolver ni alcanzar por nombre ningún servicio de la otra.
 
-**Qué sería**: un skill nuevo (p.ej. `ask-brain`) que exponga `brain_query`/`brain_ingest` directamente en la conversación de Telegram, sin pasar por una tarea de código. Hoy Brain solo se toca como paso interno de `resolve-issue`/`run-task` (Fase 5) — nunca como algo que el Operador pueda pedir por sí solo ("Hermes, ¿qué sabíamos ya sobre X?", "recuerda que decidimos Y"). Dado que uno de los objetivos del proyecto ([hermes/spec.md §1](hermes/spec.md#1-objetivos)) es que Hermes sea "mi sistema de IA personal hablable", este es un hueco real en la superficie conversacional, no solo un nice-to-have.
+### Tareas técnicas
 
-- Reutiliza `brain-mcp` tal cual (Fase 5) — sin cambios en `apps/brain`/`apps/brain-mcp`, solo un skill nuevo de orquestación.
-- Mismo principio de "el mensaje del Operador es instrucción, no dato no confiable" que ya aplica en `run-task` — no hace falta el tratamiento de prompt injection que sí exige `resolve-issue` sobre contenido de terceros.
+- `hermes-trabajo/docker/` (o equivalente): segundo árbol de despliegue, mismo patrón que `hermes/docker/` pero con su propia red y su propio Postgres.
+- Registro de Azure DevOps MCP (ver Fase 9, US-9.3) exclusivamente en esta instancia.
 
-### Futurible J — Skill de estado/salud (sesión, cuota, resumen)
+### Definition of Done
 
-**Qué sería**: un skill (p.ej. `status-report`) que responda "Hermes, ¿cómo estás?" con un resumen de: validez de la sesión OAuth compartida (§3.3 de `hermes/spec.md`), consumo aproximado de la ventana de 5h/semanal compartida entre chat y runner (pregunta abierta en [hermes/spec.md §11](hermes/spec.md#11-preguntas-abiertas)), y tareas recientes en `needs_human_input`. Hoy la única forma de enterarse de una sesión caducada o revocada es que se acumulen tareas sin resolver — este skill lo haría consultable a demanda, y conectaría con el Futurible E (resúmenes proactivos) dándole un contenido concreto que hoy no tiene.
+La instancia "Hermes trabajo" funciona de forma aislada, con SEC-7.1 a SEC-7.5 verificados con evidencia real — igual que el resto de requisitos `SEC-*` del proyecto.
 
-- Fuente de datos: la tabla `runner.task_runs` (§7 de `hermes/spec.md`) más el chequeo de sesión que ya usa `claude-code-runner-mcp` internamente (§3.2.1) — expuesto como tool de lectura, no como una tool nueva de ejecución.
+---
+
+## Fase 9 — Ampliar fuentes y canales
+
+**Objetivo**: Hermes coge tareas y avisa por más sitios, reutilizando el mismo Skill conversacional/`resolve-issue` en vez de construir conectores nuevos desde cero.
+
+**Depende de**: Fase 6. La parte de Azure DevOps (US-9.3) depende además de Fase 8.
+
+### User stories
+
+- **US-9.1** — Como Operador, quiero que Hermes pueda coger tareas desde Jira (mi cuenta personal), para no depender solo de GitHub Issues.
+  - [ ] Servidor MCP de Jira/Atlassian registrado, JQL fijo (`labels = hermes AND status = "To Do"`), sobre proyectos personales del Operador.
+  - [ ] `resolve-issue` generalizado para listar/reportar en Jira igual que en GitHub.
+- **US-9.2** — Como Operador, quiero que Hermes pueda coger tareas y contexto desde Notion, para poder usar mis páginas de Notion como fuente.
+  - [ ] Servidor MCP oficial de Notion registrado, apuntando a una base de datos "Hermes Tasks" (`status = Ready for Hermes`).
+  - [ ] Fuentes de ingestion de Brain desde Notion/Jira etiquetadas con su `source_authority` correcta, para que una futura consolidación (Fase 11) parta de datos ya etiquetados.
+- **US-9.3** — Como Operador, quiero que la instancia de trabajo (Fase 8) pueda coger tareas desde Azure DevOps, para poder usar Hermes también en mi día a día profesional.
+  - [ ] Servidor MCP de Azure DevOps (evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp)) registrado **exclusivamente** en la instancia "Hermes trabajo" — nunca en la personal.
+- **US-9.4** — Como Operador, quiero al menos un canal de mensajería adicional a Telegram, para no depender de una sola app.
+  - [ ] Uno de Discord/Slack/WhatsApp/Signal (los que hermes-agent ya trae de fábrica) habilitado y verificado con un mensaje real, reutilizando el mismo Skill conversacional de la Fase 3 sin cambios.
+- **US-9.5** — Como Operador, quiero poder mandarle una tarea hablada por Telegram en vez de escrita, para poder usar Hermes con las manos ocupadas.
+  - [ ] Verificado que una nota de voz transcrita por hermes-agent dispara `run-task` igual que un mensaje de texto — sin construir nada nuevo, solo confirmar que el flujo ya funciona con audio.
+
+### Tareas técnicas
+
+- Registro de servidores MCP (Jira, Notion, Azure DevOps) en la configuración de hermes-agent correspondiente.
+- Configuración del gateway nativo de hermes-agent para el canal adicional (US-9.4) — sin código propio.
+
+### Definition of Done
+
+Al menos Jira (US-9.1) y un canal de mensajería adicional (US-9.4) funcionando end-to-end con evidencia real. Azure DevOps (US-9.3) queda condicionada a que exista la Fase 8.
+
+---
+
+## Fase 10 — Comandos de Claude Code vía chat (`run_claude_command`)
+
+**Objetivo**: que Hermes pueda pedirle a Claude Code no solo tareas de código (`run_coding_task`), sino comandos slash como `/design` o `/dataviz` que devuelven un **Artifact** publicado en vez de un commit — p. ej. "Hermes, diséñame una landing para mi proyecto X" por Telegram, y recibir el link al resultado.
+
+**Depende de**: Fase 6.
+
+Diseño completo (contrato MCP, allowlist de comandos, entrega dual Telegram/issue) ya en [hermes/spec.md §3.7](hermes/spec.md#37-extensión-futura-post-v1-fase-10-run_claude_command).
+
+### User stories
+
+- **US-10.1** — Como Operador, quiero saber si `claude -p` en modo headless puede completar un flujo de publicación de Artifact igual que una sesión interactiva, antes de construir nada más.
+  - [ ] **Pregunta abierta central de esta fase, resuelta antes de continuar**: verificado empíricamente si el modo no interactivo (el mismo mecanismo que usa todo `claude-code-runner-mcp`) puede terminar de publicar un Artifact. Si no puede, esta fase se rediseña (devolver el HTML generado en vez de un link ya publicado) antes de seguir con las US siguientes.
+- **US-10.2** — Como Hermes, quiero una tool `run_claude_command` separada de `run_coding_task`, para pedir comandos slash sin mezclar su contrato con el de tareas de código.
+  - [ ] Tool nueva en `claude-code-runner-mcp` — mismo runner, mismo aislamiento de contenedor, misma sesión Pro compartida, misma cuota; resultado tipado con `artifactUrl` en vez de `branchName`/`commitShas`.
+- **US-10.3** — Como Operador, quiero un Skill dedicado (`run-design-task`) que distinga una petición de diseño de una de código, para que Hermes no intente `run_coding_task` cuando lo que pido es un Artifact.
+  - [ ] Skill nuevo, mismo patrón de confirmación inmediata + cronjob de un disparo que `run-task` (Fase 3) — no una extensión de `run-task`/`resolve-issue`.
+  - [ ] Si la petición es ambigua (¿código o diseño?), pregunta antes de elegir la tool.
+
+### Definition of Done
+
+Puedo pedirle a Hermes por Telegram un diseño/artifact, y recibo el link al resultado publicado — con la pregunta de US-10.1 respondida y documentada antes de dar la fase por cerrada.
+
+---
+
+## Fase 11 — Company Brain completo (consolidación real)
+
+**Objetivo**: retomar la capa de consolidación ya diseñada en [personal-brain/spec.md §4.2](personal-brain/spec.md#42-consolidation--fuera-de-alcance-de-este-proyecto-diseño-de-referencia-únicamente) — extracción de `Observation` vía LLM, reconciliación de contradicciones, `MentalModel` agregados — para que Brain deje de ser un vector store simple y cumpla de verdad las 4 propiedades del patrón "company brain" (shared, enforceable, evolving, agent-readable).
+
+**Depende de**: Fase 4. Deliberadamente sin depender de las Fases 6-10 — puede construirse en paralelo si el Operador lo prioriza antes.
+
+### User stories
+
+- **US-11.1** — Como Sistema, quiero extraer `Observation`s estructuradas de cada `RawEvent` vía LLM, para dejar de guardar solo texto crudo.
+  - [ ] Un `RawEvent` nuevo dispara la extracción de una `Observation` (`statement`, `entity`, `sourceAuthority`, `validFrom`) — esquema ya diseñado en `personal-brain/spec.md §4.2`.
+- **US-11.2** — Como Sistema, quiero reconciliar una `Observation` nueva contra las existentes de la misma entidad, para que Brain no acumule contradicciones sin resolver.
+  - [ ] Política de reconciliación implementada (recency-weighted por defecto, source-authority-weighted como override configurable) — la observation "perdedora" se marca `superseded_by`, nunca se borra.
+  - [ ] Al menos un caso real documentado de una contradicción detectada y reconciliada.
+- **US-11.3** — Como Sistema, quiero agrupar `Observation`s relacionadas en `MentalModel`s sintetizados, para que `brain_query` pueda devolver un resumen en vez de fragmentos sueltos.
+  - [ ] Job periódico que agrupa observations por entidad/tema en un `MentalModel`, preferente sobre observations sueltas en el resultado de `POST /v1/query`.
+- **US-11.4** — Como Operador, quiero retrieval por entidad y temporal, ahora que existen `Observation`s con `entity`/`supersededBy`, para preguntas tipo "¿cuál es la convención actual de X?" frente a "¿qué se decidió en su momento?".
+  - [ ] `POST /v1/query` soporta filtrar por entidad y distinguir la observation vigente de las superseded.
+
+### Definition of Done
+
+`brain_query` devuelve mental models sintetizados, no solo fragmentos crudos por similitud, con al menos un caso real de reconciliación de contradicciones demostrado — Brain cumple las 4 propiedades del patrón "company brain", no solo 2 de 4 como en v1.
 
 ---
 
