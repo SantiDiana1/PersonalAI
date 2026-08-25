@@ -83,37 +83,51 @@ mcp_servers:
       GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
 
   # Notion (Fase 7, US-7.2 de docs/roadmap.md) — servidor MCP oficial de
-  # Notion, apuntando a la base de datos "Hermes Tasks" (propiedad `status =
-  # Ready for Hermes`), fuente personal del Operador.
+  # Notion, pensado para la base de datos "Hermes Tasks" (propiedad
+  # `status = Ready for Hermes`), fuente personal del Operador.
   #
-  # COMENTADO A PROPÓSITO: bloqueado en la práctica hasta que exista un
-  # NOTION_TOKEN real (integración interna creada por el Operador en
-  # notion.so/my-integrations, compartida con la base de datos "Hermes
-  # Tasks"). Descomentar y añadir `NOTION_TOKEN=<secret>` a `~/.hermes/.env`
-  # cuando exista. `resolve-issue` (§ "Generalización a Notion y Jira" de
-  # hermes/skills/resolve-issue/SKILL.md) ya sabe usarlo en cuanto se
-  # registre — no hace falta ningún otro cambio de código.
-  # notion:
-  #   command: npx
-  #   args: ['-y', '@notionhq/notion-mcp-server']
-  #   env:
-  #     NOTION_TOKEN: ${NOTION_TOKEN}
+  # ACTIVADO (registrado en ~/.hermes/config.yaml con el token real del
+  # Operador). `hermes mcp test notion` conecta y descubre 24 tools —
+  # verificado también con una llamada real a `POST /v1/search` (200 OK,
+  # token válido). Pendiente de un único paso manual del Operador: compartir
+  # la base de datos "Hermes Tasks" con esta integración desde la propia UI
+  # de Notion ("..." → Connections) — sin eso, `results` viene vacío aunque
+  # el token sea correcto. Ver `hermes/skills/resolve-issue/SKILL.md` §
+  # "Generalización a Notion y Jira (Fase 7)" → "Estado real".
+  notion:
+    command: npx
+    args: ['-y', '@notionhq/notion-mcp-server']
+    env:
+      # El valor real vive en ~/.hermes/.env como NOTION_TOKEN (integración
+      # interna creada por el Operador en notion.so/my-integrations).
+      NOTION_TOKEN: ${NOTION_TOKEN}
 
-  # Jira (Fase 7, US-7.1 de docs/roadmap.md) — servidor MCP de Atlassian/
-  # comunidad, JQL fijo `labels = hermes AND status = "To Do"`, sobre
-  # proyectos personales del Operador (nunca proyectos de empresa — esos
-  # esperan a Azure DevOps + la instancia de trabajo separada de la Fase 10).
+  # Jira (Fase 7, US-7.1 de docs/roadmap.md) — servidor MCP de comunidad
+  # (@aashari/mcp-server-atlassian-jira, stdio vía npx), JQL fijo
+  # `labels = hermes AND status = "To Do"`, sobre proyectos personales del
+  # Operador (nunca proyectos de empresa — esos esperan a Azure DevOps + la
+  # instancia de trabajo separada de la Fase 10).
   #
-  # COMENTADO A PROPÓSITO: bloqueado hasta que exista un token de API de
-  # Atlassian real del Operador (id.atlassian.com/manage-profile/security/
-  # api-tokens) y su URL de sitio Jira. El paquete/servidor MCP concreto
-  # queda por evaluar al activar esto — hay implementaciones oficiales
-  # (Atlassian Remote MCP, por URL/OAuth) y de comunidad (stdio, API token);
-  # se elige el que exija menos infraestructura nueva.
-  # jira:
-  #   url: https://mcp.atlassian.com/v1/sse # o el endpoint que se elija al activar
-  #   headers:
-  #     Authorization: Bearer ${JIRA_API_TOKEN}
+  # ACTIVADO (registrado en ~/.hermes/config.yaml con el token real del
+  # Operador). `hermes mcp test jira` conecta y descubre 5 tools
+  # (jira_get/post/put/patch/delete) — verificado también con una llamada
+  # real a la JQL del párrafo anterior (200 OK, 0 resultados porque aún no
+  # hay ningún issue con esa etiqueta+estado, no por fallo de auth). Elegido
+  # este paquete concreto (frente al remoto oficial de Atlassian, que exige
+  # OAuth) porque el Operador ya tenía un API token clásico, sin
+  # infraestructura OAuth adicional que montar.
+  jira:
+    command: npx
+    args: ['-y', '@aashari/mcp-server-atlassian-jira']
+    env:
+      # Subdominio de https://<site>.atlassian.net — no es secreto, pero
+      # vive en .env igual que el resto por consistencia con el patrón de
+      # este fichero (nada específico del Operador se commitea al repo).
+      ATLASSIAN_SITE_NAME: ${ATLASSIAN_SITE_NAME}
+      ATLASSIAN_USER_EMAIL: ${ATLASSIAN_USER_EMAIL}
+      # El valor real vive en ~/.hermes/.env como ATLASSIAN_TOKEN
+      # (id.atlassian.com/manage-profile/security/api-tokens).
+      ATLASSIAN_API_TOKEN: ${ATLASSIAN_TOKEN}
 
 # ---------------------------------------------------------------------------
 # Skills
