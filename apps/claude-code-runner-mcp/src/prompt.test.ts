@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrompt } from './prompt.js';
+import { buildCommandPrompt, buildPrompt } from './prompt.js';
 
 describe('buildPrompt', () => {
   it('incluye título y descripción de la tarea', () => {
@@ -57,5 +57,36 @@ describe('contrato de rama y push', () => {
     const prompt = buildPrompt(input);
     expect(prompt).toContain('No crees ramas nuevas');
     expect(prompt).toContain('No hagas `git push` ni abras Pull Requests');
+  });
+});
+
+describe('buildCommandPrompt', () => {
+  it('incluye el comando y el prompt del Operador', () => {
+    const prompt = buildCommandPrompt({ slashCommand: '/design', prompt: 'landing para Cronos' });
+    expect(prompt).toContain('# Comando: /design');
+    expect(prompt).toContain('landing para Cronos');
+  });
+
+  it('nunca pide publicar un Artifact — pide escribir artifact-output.html (Fase 8, US-8.1)', () => {
+    // No es cosmético: claude -p en modo headless no tiene la tool Artifact
+    // disponible (verificado empíricamente, ver docs/roadmap.md — Fase 8).
+    // Pedírselo solo le hace perder turnos intentando algo que va a fallar.
+    const prompt = buildCommandPrompt({ slashCommand: '/dataviz', prompt: 'dashboard de ventas' });
+    expect(prompt).toContain('No tienes disponible la tool `Artifact`');
+    expect(prompt).toContain('artifact-output.html');
+    expect(prompt).toContain('command-result.json');
+  });
+
+  it('incluye el contexto de Brain solo si se proporciona', () => {
+    const withContext = buildCommandPrompt({
+      slashCommand: '/design',
+      prompt: 'p',
+      brainContext: 'Usa el morado #7C3AED.',
+    });
+    expect(withContext).toContain('Contexto recuperado de Brain');
+    expect(withContext).toContain('Usa el morado #7C3AED.');
+
+    const withoutContext = buildCommandPrompt({ slashCommand: '/design', prompt: 'p' });
+    expect(withoutContext).not.toContain('Contexto recuperado de Brain');
   });
 });

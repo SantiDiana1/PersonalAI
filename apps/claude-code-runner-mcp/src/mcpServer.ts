@@ -2,16 +2,38 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { logger } from './logger.js';
 import { runCodingTask, type RunCodingTaskDeps } from './runCodingTask.js';
+import { runClaudeCommand, type RunClaudeCommandDeps } from './runClaudeCommand.js';
 import { checkSessionValid } from './session.js';
 import { getRunnerStatusSummary } from './db.js';
 import { ensureIsolation } from './docker/network.js';
-import type { RunCodingTaskInput } from './types.js';
+import {
+  ALLOWED_SLASH_COMMANDS,
+  type RunClaudeCommandInput,
+  type RunCodingTaskInput,
+} from './types.js';
 
 const RUN_CODING_TASK_INPUT_SHAPE = {
   repo: z.string().describe('owner/repo'),
   baseBranch: z.string().optional(),
   taskTitle: z.string(),
   taskDescription: z.string(),
+  brainContext: z.string().optional(),
+  timeoutSeconds: z.number().int().positive().optional(),
+};
+
+const RUN_CLAUDE_COMMAND_INPUT_SHAPE = {
+  slashCommand: z
+    .enum(ALLOWED_SLASH_COMMANDS)
+    .describe(`Comando slash a ejecutar. Allowlist fija: ${ALLOWED_SLASH_COMMANDS.join(', ')}.`),
+  prompt: z
+    .string()
+    .describe('Texto libre tras el comando, p.ej. "landing page para mi proyecto X".'),
+  repo: z
+    .string()
+    .optional()
+    .describe(
+      'owner/repo, solo si el comando necesita contexto de un repo (clonado read-only, sin push).',
+    ),
   brainContext: z.string().optional(),
   timeoutSeconds: z.number().int().positive().optional(),
 };
@@ -45,8 +67,8 @@ export function loadDeps(): RunCodingTaskDeps {
 }
 
 /**
- * Construye una instancia del servidor MCP con las dos tools que este
- * servidor expone.
+ * Construye una instancia del servidor MCP con las tools que este servidor
+ * expone.
  *
  * La superficie sigue siendo deliberadamente mínima y tipada (SEC-3.3 de
  * docs/security.md): no existe, ni debe existir, ninguna tool de propósito
@@ -54,12 +76,20 @@ export function loadDeps(): RunCodingTaskDeps {
  * con acceso al socket de Docker, así que cualquier operación que exponga es,
  * en la práctica, ejecutable por quien controle al cliente MCP.
  *
- * `get_runner_status` (US-6.3/US-6.4 de docs/roadmap.md — Fase 6) es la
- * segunda tool, añadida deliberadamente como excepción acotada a "una sola
- * tool": es de solo lectura (no lanza contenedores de tarea, no toca
- * `/var/run/docker.sock` salvo el mismo contenedor de comprobación de sesión
- * efímero que ya usa `run_coding_task`) y sin parámetros — no amplía la
- * superficie de ataque de la misma forma que un `run_shell_command` genérico.
+ * `get_runner_status` (US-6.3/US-6.4 de docs/roadmap.md — Fase 6) es una
+ * excepción acotada a "una sola tool": es de solo lectura (no lanza
+ * contenedores de tarea, no toca `/var/run/docker.sock` salvo el mismo
+ * contenedor de comprobación de sesión efímero que ya usa `run_coding_task`)
+ * y sin parámetros — no amplía la superficie de ataque de la misma forma que
+ * un `run_shell_command` genérico.
+ *
+ * `run_claude_command` (Fase 8, US-8.2) es la segunda tool que sí lanza
+ * contenedores — deliberadamente separada de `run_coding_task` (contrato de
+ * resultado distinto, HTML en vez de rama con commits — ver types.ts) pero
+ * con el mismo aislamiento, misma sesión compartida y mismo rate limiting.
+ * Su `slashCommand` está validado contra ALLOWED_SLASH_COMMANDS, no acepta
+ * texto libre — mismo principio de "superficie exactamente esta lista", no
+ * un intérprete de comandos arbitrario expuesto a texto no confiable.
  */
 export function createMcpServer(): McpServer {
   const server = new McpServer({ name: 'claude-code-runner-mcp', version: '0.1.0' });
@@ -85,6 +115,35 @@ export function createMcpServer(): McpServer {
         ...(input.timeoutSeconds !== undefined ? { timeoutSeconds: input.timeoutSeconds } : {}),
       };
       const output = await runCodingTask(taskInput, deps);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(output) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'run_claude_command',
+    {
+      title: 'run_claude_command',
+      description:
+        'Ejecuta un comando slash de Claude Code (allowlist fija: ' +
+        `${ALLOWED_SLASH_COMMANDS.join(', ')}) en un contenedor efímero, igual de aislado que ` +
+        'run_coding_task. Devuelve el HTML autocontenido generado (htmlContent), NUNCA un link ' +
+        'ya publicado a claude.ai — la tool Artifact no está disponible en modo headless. Ver ' +
+        'docs/hermes/spec.md §3.7.',
+      inputSchema: RUN_CLAUDE_COMMAND_INPUT_SHAPE,
+    },
+    async (input) => {
+      logger.info({ slashCommand: input.slashCommand }, 'run_claude_command recibida');
+      const deps: RunClaudeCommandDeps = loadDeps();
+      const commandInput: RunClaudeCommandInput = {
+        slashCommand: input.slashCommand,
+        prompt: input.prompt,
+        ...(input.repo !== undefined ? { repo: input.repo } : {}),
+        ...(input.brainContext !== undefined ? { brainContext: input.brainContext } : {}),
+        ...(input.timeoutSeconds !== undefined ? { timeoutSeconds: input.timeoutSeconds } : {}),
+      };
+      const output = await runClaudeCommand(commandInput, deps);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(output) }],
       };

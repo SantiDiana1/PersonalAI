@@ -1,6 +1,11 @@
 import pg from 'pg';
 import { logger } from './logger.js';
-import type { RunCodingTaskOutput, TaskRunStatus, TaskRunSummary } from './types.js';
+import type {
+  RunClaudeCommandOutput,
+  RunCodingTaskOutput,
+  TaskRunStatus,
+  TaskRunSummary,
+} from './types.js';
 
 const { Pool } = pg;
 
@@ -59,13 +64,17 @@ export async function insertTaskRun(params: {
 export async function finishTaskRun(
   id: string | null,
   status: TaskRunStatus,
-  result: RunCodingTaskOutput,
+  result: RunCodingTaskOutput | RunClaudeCommandOutput,
 ): Promise<void> {
   const p = getPool();
   if (!p || !id) return;
+  // branchName solo existe en el resultado de run_coding_task — para
+  // run_claude_command (Fase 8) queda null, que es el valor por defecto que
+  // ya soportaban tareas needs_human_input/failed sin rama de este mismo campo.
+  const branchName = 'branchName' in result ? (result.branchName ?? null) : null;
   await p.query(
     `update runner.task_runs set status = $2, result = $3, branch_name = $4, finished_at = now() where id = $1`,
-    [id, status, JSON.stringify(result), result.branchName ?? null],
+    [id, status, JSON.stringify(result), branchName],
   );
 }
 

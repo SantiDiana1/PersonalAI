@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger } from '../logger.js';
 import { resolveTaskUser, taskUserSpec } from '../taskUser.js';
-import type { ContainerResult } from '../types.js';
+import type { ContainerCommandResult, ContainerResult } from '../types.js';
 import { chownWorkspace } from '../workspace.js';
 
 export const RUNNER_IMAGE =
@@ -127,6 +127,118 @@ async function readResultJson(workspaceDir: string): Promise<ContainerResult | n
   try {
     const raw = await readFile(join(workspaceDir, 'result.json'), 'utf-8');
     return JSON.parse(raw) as ContainerResult;
+  } catch {
+    return null;
+  }
+}
+
+export interface RunCommandContainerOptions {
+  workspaceDir: string;
+  claudeCodeOauthToken: string;
+  timeoutSeconds: number;
+  networkMode?: string;
+  httpProxyUrl?: string;
+}
+
+export interface RunCommandContainerResult {
+  timedOut: boolean;
+  exitCode: number | null;
+  logs: string;
+  result: ContainerCommandResult | null;
+  /** Contenido de /workspace/artifact-output.html si el comando lo generó — ver prompt.ts::buildCommandPrompt. */
+  htmlContent: string | null;
+}
+
+/**
+ * Variante de `runTaskContainer` para `run_claude_command` (Fase 8, US-8.2):
+ * mismo runner/imagen/aislamiento, pero sin `taskBranchName` (no hay rama que
+ * crear — el entrypoint distingue el modo por la presencia de
+ * `command-prompt.md`, ver docker/runner/entrypoint.sh) y leyendo
+ * `command-result.json` + `artifact-output.html` en vez de `result.json`.
+ */
+export async function runClaudeCommandContainer(
+  options: RunCommandContainerOptions,
+): Promise<RunCommandContainerResult> {
+  const docker = new Docker();
+
+  // Mismas razones que en runTaskContainer: sin GITHUB_TOKEN, esta tool no
+  // hace commits ni PRs, así que no hace falta ni siquiera por descuido.
+  const env = [`CLAUDE_CODE_OAUTH_TOKEN=${options.claudeCodeOauthToken}`];
+  if (options.httpProxyUrl) {
+    env.push(`HTTP_PROXY=${options.httpProxyUrl}`, `HTTPS_PROXY=${options.httpProxyUrl}`);
+  }
+
+  const taskUser = resolveTaskUser();
+  await chownWorkspace(options.workspaceDir, taskUser.uid, taskUser.gid);
+
+  const container = await docker.createContainer({
+    Image: RUNNER_IMAGE,
+    Env: env,
+    User: taskUserSpec(taskUser),
+    HostConfig: {
+      Binds: [`${options.workspaceDir}:/workspace`],
+      NetworkMode: options.networkMode,
+      AutoRemove: false,
+      Memory: 2 * 1024 * 1024 * 1024,
+      NanoCpus: 2_000_000_000,
+    },
+    WorkingDir: '/workspace',
+  });
+
+  let timedOut = false;
+  try {
+    await container.start();
+
+    const timeoutMs = options.timeoutSeconds * 1000;
+    const waitPromise = container.wait();
+    let timeoutHandle!: NodeJS.Timeout;
+    const timeoutPromise = new Promise<'timeout'>((resolve) => {
+      timeoutHandle = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+
+    const outcome = await Promise.race([waitPromise, timeoutPromise]);
+    clearTimeout(timeoutHandle);
+    let exitCode: number | null = null;
+    if (outcome === 'timeout') {
+      timedOut = true;
+      logger.warn(
+        { workspaceDir: options.workspaceDir },
+        'contenedor de run_claude_command excedió el timeout, forzando parada',
+      );
+      await container.stop({ t: 5 }).catch(() => undefined);
+    } else {
+      exitCode = (outcome as { StatusCode: number }).StatusCode;
+    }
+
+    const logsBuffer = await container.logs({ stdout: true, stderr: true, tail: 500 });
+    const logs = Buffer.isBuffer(logsBuffer) ? logsBuffer.toString('utf-8') : String(logsBuffer);
+
+    const result = await readCommandResultJson(options.workspaceDir);
+    const htmlContent = await readArtifactHtml(options.workspaceDir);
+
+    return { timedOut, exitCode, logs, result, htmlContent };
+  } finally {
+    await container.remove({ force: true }).catch((err: unknown) => {
+      logger.error(
+        { err },
+        'fallo al eliminar el contenedor de run_claude_command — posible contenedor huérfano',
+      );
+    });
+  }
+}
+
+async function readCommandResultJson(workspaceDir: string): Promise<ContainerCommandResult | null> {
+  try {
+    const raw = await readFile(join(workspaceDir, 'command-result.json'), 'utf-8');
+    return JSON.parse(raw) as ContainerCommandResult;
+  } catch {
+    return null;
+  }
+}
+
+async function readArtifactHtml(workspaceDir: string): Promise<string | null> {
+  try {
+    return await readFile(join(workspaceDir, 'artifact-output.html'), 'utf-8');
   } catch {
     return null;
   }
