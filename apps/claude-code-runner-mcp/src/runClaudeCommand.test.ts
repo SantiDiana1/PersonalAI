@@ -20,7 +20,12 @@ const runClaudeCommandContainer = vi.fn();
 vi.mock('./docker/runContainer.js', () => ({
   runClaudeCommandContainer: (...args: unknown[]) => runClaudeCommandContainer(...args),
 }));
-vi.mock('node:fs/promises', () => ({ writeFile: vi.fn().mockResolvedValue(undefined) }));
+const fsWriteFile = vi.fn().mockResolvedValue(undefined);
+const fsMkdir = vi.fn().mockResolvedValue(undefined);
+vi.mock('node:fs/promises', () => ({
+  writeFile: (...args: unknown[]) => fsWriteFile(...args),
+  mkdir: (...args: unknown[]) => fsMkdir(...args),
+}));
 
 const deps = { claudeCodeOauthToken: 'fake-token', disableIsolation: true };
 
@@ -75,6 +80,50 @@ describe('runClaudeCommand', () => {
     const output = await runClaudeCommand({ slashCommand: '/design', prompt: 'landing' }, deps);
     expect(output.status).toBe('success');
     expect(output.htmlContent).toBe('<html>hola</html>');
+  });
+
+  it('escribe una copia persistente y devuelve htmlFilePath cuando artifactsDir está configurado', async () => {
+    // Corrección real (Fase 8, US-8.2 post-lanzamiento): la primera versión
+    // solo devolvía htmlContent, y run-design-task lo pegaba como texto en
+    // Telegram — el Operador no podía abrir el resultado. htmlFilePath deja
+    // que el skill entregue un adjunto .html real vía el tag MEDIA:.
+    runClaudeCommandContainer.mockResolvedValueOnce({
+      timedOut: false,
+      exitCode: 0,
+      logs: '',
+      result: { status: 'success', summary: 'landing generada' },
+      htmlContent: '<html>hola</html>',
+    });
+    const output = await runClaudeCommand(
+      { slashCommand: '/design', prompt: 'landing' },
+      { ...deps, artifactsDir: '/tmp/fake-artifacts' },
+    );
+    expect(output.status).toBe('success');
+    expect(fsMkdir).toHaveBeenCalledWith('/tmp/fake-artifacts', { recursive: true });
+    expect(fsWriteFile).toHaveBeenCalledWith(
+      expect.stringContaining('/tmp/fake-artifacts/'),
+      '<html>hola</html>',
+    );
+    expect(output.htmlFilePath).toMatch(/^\/tmp\/fake-artifacts\/.*\.html$/);
+  });
+
+  it('no escribe nada ni añade htmlFilePath si artifactsDir no está configurado', async () => {
+    runClaudeCommandContainer.mockResolvedValueOnce({
+      timedOut: false,
+      exitCode: 0,
+      logs: '',
+      result: { status: 'success', summary: 'landing generada' },
+      htmlContent: '<html>hola</html>',
+    });
+    fsMkdir.mockClear();
+    fsWriteFile.mockClear();
+    const output = await runClaudeCommand({ slashCommand: '/design', prompt: 'landing' }, deps);
+    expect(output.htmlFilePath).toBeUndefined();
+    expect(fsMkdir).not.toHaveBeenCalled();
+    // writeFile SÍ se llama (para command-prompt.md, ver Paso 3 del flujo),
+    // pero nunca con contenido de artefacto — esa es la llamada que solo
+    // ocurre cuando persistArtifact() tiene artifactsDir configurado.
+    expect(fsWriteFile).not.toHaveBeenCalledWith(expect.anything(), '<html>hola</html>');
   });
 
   it('propaga needs_human_input tal cual, sin exigir htmlContent', async () => {

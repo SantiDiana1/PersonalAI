@@ -71,6 +71,16 @@ export interface RunClaudeCommandOutput {
   status: TaskRunStatus;
   /** HTML/Markdown autocontenido generado por el comando, si tuvo éxito. Nunca un link ya publicado — ver nota de diseño arriba. */
   htmlContent?: string;
+  /**
+   * Ruta persistente (host, fuera del workspace efímero que se borra al
+   * terminar) donde queda una copia de `htmlContent`, si
+   * `CLAUDE_CODE_RUNNER_ARTIFACTS_DIR` está configurada — ver
+   * runClaudeCommand.ts. Pensada para que el Skill que llama a esta tool
+   * entregue el fichero como adjunto real de Telegram (tag `MEDIA:`, ver
+   * hermes/skills/run-design-task/SKILL.md) en vez de pegar `htmlContent`
+   * como texto plano, que el Operador no puede abrir desde el móvil.
+   */
+  htmlFilePath?: string;
   summary: string;
   logsUrl?: string;
 }

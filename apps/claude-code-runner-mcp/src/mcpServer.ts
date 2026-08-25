@@ -57,12 +57,17 @@ export function loadDeps(): RunCodingTaskDeps {
       'CLAUDE_CODE_RUNNER_DISABLE_ISOLATION=1 — aislamiento de red desactivado, NUNCA usar en producción',
     );
   }
+  // Solo la usa run_claude_command (ver RunClaudeCommandDeps::artifactsDir) —
+  // sin configurar, esa tool sigue funcionando, solo sin adjunto real de
+  // Telegram (cae al fallback de htmlContent como texto).
+  const artifactsDir = process.env['CLAUDE_CODE_RUNNER_ARTIFACTS_DIR'];
   return {
     claudeCodeOauthToken,
     ...(githubToken ? { githubToken } : {}),
     ...(networkMode ? { networkMode } : {}),
     ...(httpProxyUrl ? { httpProxyUrl } : {}),
     ...(disableIsolation ? { disableIsolation } : {}),
+    ...(artifactsDir ? { artifactsDir } : {}),
   };
 }
 
@@ -129,8 +134,10 @@ export function createMcpServer(): McpServer {
         'Ejecuta un comando slash de Claude Code (allowlist fija: ' +
         `${ALLOWED_SLASH_COMMANDS.join(', ')}) en un contenedor efímero, igual de aislado que ` +
         'run_coding_task. Devuelve el HTML autocontenido generado (htmlContent), NUNCA un link ' +
-        'ya publicado a claude.ai — la tool Artifact no está disponible en modo headless. Ver ' +
-        'docs/hermes/spec.md §3.7.',
+        'ya publicado a claude.ai — la tool Artifact no está disponible en modo headless. Si ' +
+        'CLAUDE_CODE_RUNNER_ARTIFACTS_DIR está configurada, también devuelve htmlFilePath: ' +
+        'úsalo con el tag MEDIA:<ruta> del gateway de Telegram para entregar un adjunto real y ' +
+        'abrible, no pegues htmlContent como texto. Ver docs/hermes/spec.md §3.7.',
       inputSchema: RUN_CLAUDE_COMMAND_INPUT_SHAPE,
     },
     async (input) => {

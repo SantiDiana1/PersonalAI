@@ -38,6 +38,8 @@ export interface RunCodingTaskDeps {
   gitBaseUrl?: string;
   /** Ver docs/hermes/spec.md §6. Por defecto, el limitador compartido del proceso (defaultRateLimiter). */
   rateLimiter?: RateLimiter;
+  /** No usado por run_coding_task — solo presente para que loadDeps() en mcpServer.ts sirva a las dos tools. Ver RunClaudeCommandDeps::artifactsDir. */
+  artifactsDir?: string;
 }
 
 async function resolveIsolation(deps: RunCodingTaskDeps): Promise<Partial<IsolationSetup>> {
