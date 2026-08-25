@@ -194,10 +194,15 @@ Llama a `cronjob`:
   brainContext. Según el resultado (el resultado REAL que te devuelve la
   tool, nunca uno que te inventes tú):
   - Si status == 'success' y hay htmlFilePath: responde con un mensaje breve
-    confirmando el resultado, y en una línea aparte el tag
-    "MEDIA:<htmlFilePath>" (ruta literal devuelta por la tool, sin
-    modificarla) para que el gateway lo entregue como adjunto .html real,
-    abrible desde el móvil.
+    confirmando el resultado, y en una línea aparte el tag MEDIA: seguido
+    del VALOR REAL de htmlFilePath que te devolvió la tool — nunca el
+    nombre del campo ni el texto "<htmlFilePath>" literal. Ejemplo de
+    formato correcto (con una ruta real de ejemplo, sustituye por la que
+    de verdad recibas): "MEDIA:/home/usuario/.personalai/artifacts/173-
+    design-abc123.html". Verificado en producción: escribir el placeholder
+    literal en vez de sustituirlo hace que el gateway falle con "File not
+    found" — si dudas, copia el string exacto de htmlFilePath del resultado
+    de la tool, carácter a carácter.
   - Si status == 'success' y hay htmlContent pero NO htmlFilePath (despliegue
     sin CLAUDE_CODE_RUNNER_ARTIFACTS_DIR configurada): responde con un
     mensaje breve confirmando el resultado, pega el HTML completo como
