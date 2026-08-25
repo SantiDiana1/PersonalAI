@@ -81,6 +81,21 @@ descubra por sí mismo.
    propio `SKILL.md`: `run_claude_command` puede tardar varios minutos, y el
    turno interactivo tiene que devolver una confirmación en segundos).
 
+5. **Dentro del propio cronjob, llama a `run_claude_command` directamente —
+   nunca delegues esa llamada a un subagente (`delegate_task` o
+   equivalente).** Regla dura, verificada en producción: la primera
+   ejecución real de este skill delegó la llamada a un subagente que **no
+   tenía las tools de `claude-code-runner-mcp` disponibles**, y en vez de
+   fallar con un error, se inventó por completo el resultado — un
+   `"Artifact generado correctamente"` con HTML y ruta de fichero
+   totalmente fabricados, con `tool_trace: []` (cero tools reales
+   ejecutadas) en la sesión exportada. No es teórico: el fichero que decía
+   haber creado no existía en ningún sitio, y no había ninguna fila nueva
+   en `runner.task_runs`. Nunca confíes en un resultado de
+   `run_claude_command` que no puedas correlacionar con una llamada real —
+   si tienes dudas, verifica que el propio turno del cronjob invocó la tool
+   MCP, no un subagente suyo.
+
 ## Prerequisites
 
 - Servidor MCP `claude-code-runner` registrado y conectado.
@@ -124,6 +139,16 @@ Llama a `cronjob`:
 - `prompt`: autocontenido —
 
   ````
+  IMPORTANTE, regla dura verificada en producción: llama tú mismo, en ESTE
+  turno, a las tools MCP reales (brain_query, run_claude_command,
+  brain_record_observation). NUNCA uses delegate_task ni ningún otro
+  mecanismo de subagente para hacer estas llamadas por ti — un subagente
+  puede no tener estas tools disponibles y, en vez de fallar con un error,
+  inventarse un resultado plausible (HTML, ruta de fichero, "éxito") sin
+  haber ejecutado nada real. Si en algún momento no ves run_claude_command
+  en tus tools disponibles en este turno, NO te lo inventes: responde con
+  status "failed" explicando exactamente eso, nunca fabriques un resultado.
+
   Genera un Artifact delegando en run_claude_command:
   - slashCommand: </design o /dataviz>
   - prompt: <descripción completa acordada con el Operador>
@@ -134,7 +159,8 @@ Llama a `cronjob`:
   colores ya decidida). Si falla o no responde, sigue sin contexto.
 
   Llama a run_claude_command con slashCommand/prompt y, si lo hay,
-  brainContext. Según el resultado:
+  brainContext. Según el resultado (el resultado REAL que te devuelve la
+  tool, nunca uno que te inventes tú):
   - Si status == 'success' y hay htmlFilePath: responde con un mensaje breve
     confirmando el resultado, y en una línea aparte el tag
     "MEDIA:<htmlFilePath>" (ruta literal devuelta por la tool, sin
@@ -155,7 +181,8 @@ Llama a `cronjob`:
   con un resumen breve de lo ocurrido. Si falla, ignóralo.
 
   No hagas nada más: no repitas la llamada, no uses shell, no intentes
-  publicar nada con una tool Artifact (no está disponible aquí).
+  publicar nada con una tool Artifact (no está disponible aquí), y no
+  delegues ninguna de estas llamadas a un subagente.
   ````
 
 ### Paso 4 — Confirmar de inmediato
