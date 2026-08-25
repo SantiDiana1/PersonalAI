@@ -37,6 +37,21 @@ variable.
 
 ## 2. Registrar los servidores MCP
 
+**Antes de nada, si has tocado `apps/claude-code-runner-mcp/docker/runner/`
+(Dockerfile o entrypoint.sh)**: reconstruye la imagen del contenedor
+efímero por tarea a mano — `docker compose build`/`up --build` **no** la
+reconstruye, es una imagen aparte del servicio `claude-code-runner` de
+abajo (ver el comentario detallado en `hermes/docker/docker-compose.yml`).
+Hallazgo real, Fase 8: olvidarse de este paso deja `run_claude_command`
+(y, en general, cualquier tarea) fallando en silencio con una imagen
+desactualizada.
+
+```bash
+docker build -t claude-code-runner-image:local \
+  -f apps/claude-code-runner-mcp/docker/runner/Dockerfile \
+  apps/claude-code-runner-mcp/docker/runner
+```
+
 Opción A — con la CLI, que escribe en `~/.hermes/config.yaml` por ti:
 
 ```bash

@@ -43,6 +43,25 @@ services:
       timeout: 5s
       retries: 10
 
+  # -------------------------------------------------------------------------
+  # IMPORTANTE, hallazgo real (Fase 8): `claude-code-runner-image:local` — la
+  # imagen del CONTENEDOR EFÍMERO POR TAREA (la que ejecuta
+  # apps/claude-code-runner-mcp/docker/runner/entrypoint.sh dentro de cada
+  # run_coding_task/run_claude_command) — NO es un servicio de este compose y
+  # `docker compose build`/`up --build` NUNCA la reconstruye. Es una imagen
+  # aparte, lanzada por `runContainer.ts` vía `docker.createContainer`, no
+  # por Compose. Verificado en producción: tras cambiar entrypoint.sh para
+  # la Fase 8, `docker compose up -d --build claude-code-runner` reconstruyó
+  # SOLO el servidor MCP de abajo, dejando la imagen de tarea 4 días
+  # desactualizada — cualquier llamada real a run_claude_command fallaba en
+  # silencio ("contenedor terminó sin escribir command-result.json").
+  # Reconstrúyela A MANO cada vez que cambie
+  # apps/claude-code-runner-mcp/docker/runner/{Dockerfile,entrypoint.sh}:
+  #
+  #   docker build -t claude-code-runner-image:local \
+  #     -f apps/claude-code-runner-mcp/docker/runner/Dockerfile \
+  #     apps/claude-code-runner-mcp/docker/runner
+  # -------------------------------------------------------------------------
   claude-code-runner:
     build:
       # Contexto = raíz del monorepo: el paquete depende de @personalai/shared
