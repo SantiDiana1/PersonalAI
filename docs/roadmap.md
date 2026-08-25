@@ -445,25 +445,28 @@ Al menos Jira (US-7.1) y un canal de mensajería adicional (US-7.4) funcionando 
 
 ## Fase 8 — Comandos de Claude Code vía chat (`run_claude_command`)
 
-**Objetivo**: que Hermes pueda pedirle a Claude Code no solo tareas de código (`run_coding_task`), sino comandos slash como `/design` o `/dataviz` que devuelven un **Artifact** publicado en vez de un commit — p. ej. "Hermes, diséñame una landing para mi proyecto X" por Telegram, y recibir el link al resultado.
+**Objetivo**: que Hermes pueda pedirle a Claude Code no solo tareas de código (`run_coding_task`), sino comandos slash como `/design` o `/dataviz` que devuelven un resultado visual en vez de un commit — p. ej. "Hermes, diséñame una landing para mi proyecto X" por Telegram, y recibir el resultado.
 
 **Depende de**: Fase 6.
 
-Diseño completo (contrato MCP, allowlist de comandos, entrega dual Telegram/issue) ya en [hermes/spec.md §3.7](hermes/spec.md#37-extensión-futura-post-v1-fase-8-run_claude_command).
+Diseño completo (contrato MCP, allowlist de comandos, entrega por Telegram) en [hermes/spec.md §3.7](hermes/spec.md#37-run_claude_command-fase-8-del-roadmap).
 
 ### User stories
 
 - **US-8.1** — Como Operador, quiero saber si `claude -p` en modo headless puede completar un flujo de publicación de Artifact igual que una sesión interactiva, antes de construir nada más.
-  - [ ] **Pregunta abierta central de esta fase, resuelta antes de continuar**: verificado empíricamente si el modo no interactivo (el mismo mecanismo que usa todo `claude-code-runner-mcp`) puede terminar de publicar un Artifact. Si no puede, esta fase se rediseña (devolver el HTML generado en vez de un link ya publicado) antes de seguir con las US siguientes.
+  - [x] **Verificado empíricamente, no viable tal cual — fase rediseñada en consecuencia.** Con `claude -p` (el mismo mecanismo que usa `claude-code-runner-mcp`) la tool `Artifact` no aparece en el toolset de la sesión (`ToolSearch` → "No matching deferred tools found"), verificado dos veces: primero con `ANTHROPIC_API_KEY`, después repitiendo el test con el token OAuth real de `hermes-claude-auth` leído del despliegue — mismo resultado con ambos. Investigada también la documentación oficial de Anthropic (`code.claude.com/docs/en/artifacts`, `.../network-config`): el plan Pro sí es compatible sobre el papel, y el modo `-p`/headless no está entre las exclusiones documentadas explícitamente — así que el bloqueo real no coincide con ninguna causa documentada, y solo se podría descartar del todo probando en el despliegue real (Mac Mini), fuera del alcance de esta sesión de trabajo. Con la misma imagen/CLI/token no hay motivo para esperar un resultado distinto ahí. Decisión tomada con el Operador: seguir con el fallback ya prediseñado en el spec original (devolver el HTML generado, no un link publicado) en vez de bloquear la fase.
 - **US-8.2** — Como Hermes, quiero una tool `run_claude_command` separada de `run_coding_task`, para pedir comandos slash sin mezclar su contrato con el de tareas de código.
-  - [ ] Tool nueva en `claude-code-runner-mcp` — mismo runner, mismo aislamiento de contenedor, misma sesión Pro compartida, misma cuota; resultado tipado con `artifactUrl` en vez de `branchName`/`commitShas`.
+  - [x] Tool nueva en `claude-code-runner-mcp` (`src/mcpServer.ts`, `src/runClaudeCommand.ts`) — mismo runner/imagen, mismo aislamiento de contenedor (`runClaudeCommandContainer` en `docker/runContainer.ts`), misma sesión Pro compartida, mismo rate limiting; resultado tipado con `htmlContent` (no `artifactUrl`, por el hallazgo de US-8.1) en vez de `branchName`/`commitShas`. El entrypoint del contenedor (`docker/runner/entrypoint.sh`) distingue el modo por la presencia de `command-prompt.md` frente a `prompt.md`, sin imagen ni entrypoint nuevos. Tests unitarios en `runClaudeCommand.test.ts`/`prompt.test.ts` (allowlist, contrato de éxito/fallo, y que el prompt nunca le pide a Claude que publique un Artifact). Verificado localmente: typecheck limpio, lint limpio, 45/45 tests pasando.
 - **US-8.3** — Como Operador, quiero un Skill dedicado (`run-design-task`) que distinga una petición de diseño de una de código, para que Hermes no intente `run_coding_task` cuando lo que pido es un Artifact.
-  - [ ] Skill nuevo, mismo patrón de confirmación inmediata + cronjob de un disparo que `run-task` (Fase 3) — no una extensión de `run-task`/`resolve-issue`.
-  - [ ] Si la petición es ambigua (¿código o diseño?), pregunta antes de elegir la tool.
+  - [x] Skill nuevo (`hermes/skills/run-design-task/SKILL.md`), mismo patrón de confirmación inmediata + cronjob de un disparo que `run-task` (Fase 3) — no una extensión de `run-task`/`resolve-issue`. Documenta explícitamente el hallazgo de US-8.1 para que el propio skill no prometa un link publicado.
+  - [x] Regla dura incluida: si la petición es ambigua (¿código o diseño?), pregunta antes de elegir la tool — con señales concretas de cada caso.
+  - [ ] Sin verificar con una petición real de Telegram todavía — pendiente de que el Operador lo pruebe contra el despliegue real, igual que el resto de skills conversacionales.
 
 ### Definition of Done
 
-Puedo pedirle a Hermes por Telegram un diseño/artifact, y recibo el link al resultado publicado — con la pregunta de US-8.1 respondida y documentada antes de dar la fase por cerrada.
+Puedo pedirle a Hermes por Telegram un diseño, y recibo el HTML real generado en el mismo chat — con la pregunta de US-8.1 respondida y documentada (rediseño del contrato en vez de un link publicado, ver arriba).
+
+**Estado**: US-8.1/US-8.2/US-8.3 cerradas en su fondo, con evidencia real de la investigación (no solo diseño) y de las pruebas locales del código nuevo. Queda un único cabo suelto, no bloqueante: verificar `run-design-task` con una petición real por Telegram contra el despliegue real — el mismo patrón que otras fases han dejado documentado como pendiente de evidencia dedicada (p. ej. US-6.4 en Fase 6).
 
 ---
 

@@ -127,9 +127,10 @@ hermes-agent la usará en lugar de la sesión Pro compartida.
 
 Viven en [`../skills/`](../skills/): `resolve-issue` (flujo automático de
 issues de GitHub, Fase 2), `run-task` (peticiones conversacionales por
-Telegram, Fase 3, ver `docs/hermes/spec.md §9`), y `status-report`/`ask-brain`
-(cierre operativo y superficie conversacional, Fase 6). Dos formas de que
-hermes los vea:
+Telegram, Fase 3, ver `docs/hermes/spec.md §9`), `status-report`/`ask-brain`
+(cierre operativo y superficie conversacional, Fase 6), y `run-design-task`
+(diseños/Artifacts pedidos por chat, Fase 8). Dos formas de que hermes los
+vea:
 
 - **Recomendada** — montar el directorio del repo en el contenedor y apuntar
   `skills.external_dirs` ahí. La fuente de verdad sigue siendo el repo, sin
@@ -152,7 +153,7 @@ hermes los vea:
   reconciliar a mano cada cambio.
 
 Comprobar: `hermes skills list` debe mostrar `resolve-issue`, `run-task`,
-`status-report` y `ask-brain`.
+`status-report`, `ask-brain` y `run-design-task`.
 
 ## 5. Programar el cron
 

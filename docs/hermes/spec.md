@@ -202,13 +202,15 @@ Al meter el runner en un contenedor, esto **se rompe en silencio**: el runner pe
 
 **Nota operativa**: como el contenedor del runner corre como root (ver el razonamiento en su `Dockerfile`), los directorios de workspace aparecen en el host propiedad de root. No es un problema de funcionamiento — quien los crea y los borra es el propio runner, que es root dentro de su contenedor — pero conviene saberlo al inspeccionar o limpiar esa raíz a mano desde el host.
 
-### 3.7 Extensión futura (post-v1, [roadmap.md — Fase 8](../roadmap.md#fase-8--comandos-de-claude-code-vía-chat-run_claude_command)): `run_claude_command`
+### 3.7 `run_claude_command` (Fase 8 del [roadmap](../roadmap.md#fase-8--comandos-de-claude-code-vía-chat-run_claude_command))
 
-**No es parte del Milestone v1.** Documentado aquí para que el diseño quede listo cuando se retome, sin bloquear las fases activas.
+**Implementada, con el contrato rediseñado tras verificar empíricamente US-8.1** — ver el hallazgo real más abajo. El diseño original de esta sección (previo a la implementación) proponía devolver un `artifactUrl` ya publicado; se descarta por evidencia real, no por hipótesis.
 
-**Motivación**: `run_coding_task` asume que el resultado de una tarea es código — una rama con commits. Pero Claude Code trae comandos slash que no producen un diff, sino un **Artifact** publicado en claude.ai (`/design` para canvases de diseño, `/dataviz` para visualizaciones, y otros que vayan apareciendo). Hermes no tiene hoy forma de pedir "diséñame una landing para X" y recibir ese tipo de entregable — solo sabe pedir código.
+**Motivación**: `run_coding_task` asume que el resultado de una tarea es código — una rama con commits. Pero Claude Code trae comandos slash que no producen un diff, sino una página HTML autocontenida (`/design` para canvases de diseño, `/dataviz` para visualizaciones). Hermes no tenía forma de pedir "diséñame una landing para X" y recibir ese tipo de entregable — solo sabía pedir código.
 
-**Contrato MCP propuesto**, tool nueva y separada de `run_coding_task` (para no mezclar dos formas de resultado — rama con commits vs. link a Artifact — en el mismo contrato):
+**Hallazgo real (US-8.1)**: verificado empíricamente, dos veces — primero con `ANTHROPIC_API_KEY`, después repitiendo el test con el token OAuth real de `hermes-claude-auth` (el mismo mecanismo exacto que usa este runner en producción) — que `claude -p` en modo headless **no tiene la tool `Artifact` disponible en el toolset de la sesión**, ni siquiera aparece como tool diferida (`ToolSearch` devuelve "No matching deferred tools found"). Esto ocurre pese a que la [documentación oficial de Artifacts](https://code.claude.com/docs/en/artifacts) lista el plan Pro como compatible y no excluye explícitamente el modo `-p`/headless de su tabla de disponibilidad (solo excluye "Agent SDK, GitHub Action, y contextos de servidor MCP"), y pese a cumplir el resto de requisitos documentados (CLI v2.1.245 ≥ v2.1.183 requerido, sin `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`/`CLAUDE_CODE_DISABLE_ARTIFACT`). Con Claude Code real intentando publicar, el error observado fue el esperable por diseño (`ToolSearch` sin resultado), no un error de red o de plan — así que tampoco es (solo) la allowlist del proxy (`api.anthropic.com`/`github.com`, sin `platform.claude.com`/`claude.ai` que la [documentación de red](https://code.claude.com/docs/en/network-config) señala como necesarios para auth/publish) lo que lo bloquea, aunque también haría falta ampliarla si esto cambiara. Conclusión: no confirmable sin acceso al despliegue real (Mac Mini) para descartar algo específico de ese host, pero con la misma imagen/CLI/token no hay motivo para esperar un resultado distinto.
+
+**Contrato MCP implementado** (`apps/claude-code-runner-mcp/src/types.ts`), tool nueva y separada de `run_coding_task`:
 
 ```ts
 // tool: run_claude_command
@@ -216,34 +218,33 @@ Al meter el runner en un contenedor, esto **se rompe en silencio**: el runner pe
 // Misma auth, mismo aislamiento de contenedor y mismo rate limiting que
 // run_coding_task (§3.2–§3.4) — comparte infraestructura, no es un
 // componente nuevo, solo una segunda forma de invocar el mismo runner.
+const ALLOWED_SLASH_COMMANDS = ['/design', '/dataviz'] as const;
+
 interface RunClaudeCommandInput {
-  slashCommand: string; // p.ej. "/design", "/dataviz" — validado contra un allowlist fijo, NO cualquier comando arbitrario
+  slashCommand: (typeof ALLOWED_SLASH_COMMANDS)[number]; // validado contra el allowlist fijo, NO cualquier comando arbitrario
   prompt: string; // texto libre tras el comando (p.ej. "landing page para mi proyecto X")
-  repo?: string; // opcional: solo si el comando necesita contexto de un repo concreto
+  repo?: string; // opcional: solo si el comando necesita contexto de un repo concreto (clonado read-only, sin push)
   brainContext?: string; // igual que en run_coding_task
-  timeoutSeconds?: number;
+  timeoutSeconds?: number; // por defecto 900 (15 min)
 }
 
 interface RunClaudeCommandOutput {
   status: 'success' | 'failed' | 'needs_human_input' | 'timed_out';
-  artifactUrl?: string; // link al Artifact publicado en claude.ai, si el comando produjo uno
+  htmlContent?: string; // el HTML autocontenido generado de verdad — NUNCA un link ya publicado
   summary: string;
   logsUrl?: string;
 }
 ```
 
-Puntos de diseño a resolver **al implementar**, no asumidos aquí:
+Puntos de diseño:
 
-- **Allowlist de comandos, no comandos libres.** El input no acepta cualquier string tras `/`: se valida contra una lista fija de slash commands aprobados (`/design`, `/dataviz`, ampliable). Mismo principio que "la superficie MCP sigue siendo exactamente una tool" (SEC-3.3) — aquí se traduce en "la superficie de comandos ejecutables es exactamente esta lista", no un intérprete de comandos arbitrario expuesto a texto no confiable (issues, mensajes de Telegram).
-- **Pendiente de verificar empíricamente, no confirmado**: si `claude -p` en modo headless (no interactivo, sin sesión de navegador) puede completar el flujo de publicación de un Artifact igual que en una sesión interactiva de Claude Code. Si no puede, esta tool no es viable tal cual y hay que rediseñar (p.ej. devolver el `.dc.html`/HTML generado en vez de un `artifactUrl` ya publicado, y que sea el Operador quien lo publique a mano). No se da esto por sentado — es la primera pregunta a responder al retomar esta fase (US-8.1), con evidencia real como el resto del spec.
-- **Sin commit, sin PR.** A diferencia de `run_coding_task`, esta tool no clona el repo en busca de cambios que empujar (salvo que el propio `repo` se use como contexto de entrada) — el entregable es el `artifactUrl`, punto.
-- El aislamiento de contenedor (SEC-5.\*), la sesión compartida (§0.1) y el rate limiting (SEC-4.3) aplican igual que a `run_coding_task` — comparten el mismo runner y la misma cuota de la ventana de 5h/semanal (§10, pregunta abierta sobre reparto de cuota).
+- **Allowlist de comandos, no comandos libres.** Mismo principio que "la superficie MCP sigue siendo exactamente una tool" (SEC-3.3) — aquí se traduce en "la superficie de comandos ejecutables es exactamente esta lista" (`ALLOWED_SLASH_COMMANDS`), validada tanto en el schema Zod de la tool (`mcpServer.ts`) como en `runClaudeCommand()` (`isAllowedSlashCommand`, defensa en profundidad si algo la llama directamente).
+- **Sin commit, sin PR, sin publicación.** El entregable es `htmlContent`. El entrypoint del contenedor (`docker/runner/entrypoint.sh`, modo detectado por la presencia de `command-prompt.md` en vez de `prompt.md`) le pide a Claude Code que escriba el resultado en `/workspace/artifact-output.html` en vez de intentar publicarlo — el runner lo lee de ahí tras `docker wait`, igual que ya lee `result.json` para `run_coding_task`.
+- El aislamiento de contenedor (SEC-5.\*), la sesión compartida (§0.1) y el rate limiting (SEC-4.3) aplican igual que a `run_coding_task` — comparten el mismo runner y la misma cuota de la ventana de 5h/semanal.
 
-**Entrega del resultado — dual según origen** (decisión tomada al diseñar esta fase, mismo patrón que ya existe entre `resolve-issue` y `run-task`):
+**Entrega del resultado**: reutiliza el mecanismo de confirmación inmediata + cronjob de un disparo de §9.3 — el mensaje final al chat incluye el `htmlContent` (como bloque de código, con aviso si supera el límite de un mensaje de Telegram). Publicarlo de verdad (copiarlo a una sesión propia de Claude Code/claude.ai) queda como acción manual del Operador — documentado explícitamente así en el Skill para no generar una expectativa que la tool no puede cumplir.
 
-- **Origen Telegram** (petición conversacional, p.ej. "diséñame una landing para mi proyecto X"): se reutiliza el mecanismo de confirmación inmediata + cronjob de un disparo de §9.3 — el mensaje final al chat incluye el `artifactUrl`. No hace falta ningún mecanismo de entrega nuevo.
-- **Origen issue/ticket** (p.ej. una issue etiquetada pidiendo un mockup): el Skill correspondiente comenta en la issue original con el `artifactUrl`, igual que `resolve-issue` comenta con el link al PR — nunca abre PR en este caso, porque no hay commits.
-- **Skill nuevo y dedicado: `run-design-task`** (`hermes/skills/run-design-task/`), no una extensión de `run-task`/`resolve-issue`. Decisión tomada al diseñar esta fase: mezclar "tarea de código" y "tarea de Artifact" en el mismo skill obligaría a esa lógica de discriminación a vivir dentro de un skill ya complejo; separarlo mantiene cada skill enfocado en una tool y un tipo de resultado, igual que `run_coding_task`/`run_claude_command` están separadas a nivel de tool (más arriba en esta sección). Disparado por chat (Telegram), siguiendo el mismo patrón de `run-task` (§9.3: confirmación inmediata + `cronjob(repeat: 1)` para no bloquear el turno) — la variante disparada por issue/ticket se deja para cuando exista un caso de uso real, no se construye especulativamente. El Operador tiene que dejar claro qué comando quiere (o el skill pregunta si es ambiguo, mismo principio que §9.2) antes de llamar a `run_claude_command`.
+**Skill dedicado: `run-design-task`** (`hermes/skills/run-design-task/`), no una extensión de `run-task`/`resolve-issue` — mezclar "tarea de código" y "tarea de Artifact" en el mismo skill obligaría a esa lógica de discriminación a vivir dentro de un skill ya complejo. Disparado por chat (Telegram), siguiendo el mismo patrón de `run-task` (§9.3: confirmación inmediata + `cronjob(repeat: 1)`). La variante disparada por issue/ticket queda sin construir — no hay caso de uso real todavía, se añadirá si aparece uno.
 
 ## 4. Servidores MCP de terceros (GitHub, Notion, Jira, Azure DevOps)
 
