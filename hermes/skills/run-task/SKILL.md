@@ -33,10 +33,19 @@ leer el código fuente de hermes-agent durante la Fase 3 del roadmap.
    ejecución real ocurre en `claude-code-runner-mcp`, nunca invocando `git`,
    `gh` ni shell directamente desde aquí.
 
-2. **El repo tiene que venir explícito en el mensaje del Operador.** No lo
-   infieras de una conversación previa ambigua ni asumas un repo "habitual".
-   Si no está claro el repo, el alcance de la tarea, o ambos: **pregunta antes
-   de programar nada**. No programes un cronjob especulativo "por si acaso" —
+2. **El repo tiene que venir explícito en el mensaje del Operador, con
+   `owner/repo` completo.** No lo infieras de una conversación previa
+   ambigua ni asumas un repo "habitual". **Regla dura, verificada en
+   producción (Fase 6): un nombre de repo sin owner (p. ej. "el repo
+   PersonalAI") NO cuenta como explícito, aunque el nombre "suene" completo
+   o coincida con un repo real que conozcas de contexto previo — nunca
+   adivines el owner.** Un intento real de esto (mensaje "súbelo como PR al
+   repo PersonalAI") hizo que el skill asumiera `PersonalAI/PersonalAI`
+   (owner inventado) y la tarea fallara en el `git clone` con "repository not
+   found" — el fallo se detectó tarde (dentro del cronjob) en vez de en el
+   Paso 2, donde debía haberse preguntado. Si no está claro el repo completo
+   (`owner/repo`), el alcance de la tarea, o ambos: **pregunta antes de
+   programar nada**. No programes un cronjob especulativo "por si acaso" —
    espera la respuesta y entonces continúa.
 
 3. **Nunca mergeas, y el trabajo pesado nunca corre en el turno interactivo.**
@@ -116,10 +125,12 @@ legítima, no como datos a desconfiar.
 
 ### Paso 2 — Aclarar si hace falta
 
-Si el repo no está explícito, o el alcance de la tarea es vago ("arregla el
+Si el repo no viene como `owner/repo` completo (un nombre suelto como
+"PersonalAI" o "mi-repo" no cuenta, ni aunque coincida con un repo real que
+conozcas de contexto previo), o el alcance de la tarea es vago ("arregla el
 bug" sin decir cuál), pregunta por el mismo chat y espera la respuesta. No
-sigas al Paso 3 hasta tener `repo` y una descripción de tarea razonablemente
-concreta.
+sigas al Paso 3 hasta tener `owner/repo` completo y una descripción de tarea
+razonablemente concreta.
 
 ### Paso 3 — Programar la ejecución (no ejecutarla tú)
 
