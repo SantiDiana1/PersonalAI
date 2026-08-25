@@ -70,10 +70,20 @@ services:
       # contenedor efímero recibe un /workspace vacío y la tarea falla de forma
       # confusa, sin error claro.
       - ${WORKSPACE_ROOT:-/var/lib/personalai/workspaces}:${WORKSPACE_ROOT:-/var/lib/personalai/workspaces}
+      # Fase 8 (US-8.2): directorio persistente para los HTML que genera
+      # run_claude_command, en la MISMA ruta que en el servicio `hermes` de
+      # abajo — así el `htmlFilePath` que devuelve esta tool es directamente
+      # la ruta que hermes-agent necesita para el tag MEDIA: del gateway de
+      # Telegram (docs/hermes/spec.md §3.7), sin traducción de rutas entre
+      # contenedores. Igual de lectura/escritura que WORKSPACE_ROOT, pero
+      # NUNCA se limpia solo — ver el comentario de retención en
+      # apps/claude-code-runner-mcp/src/runClaudeCommand.ts::persistArtifact.
+      - ${ARTIFACTS_ROOT:-/var/lib/personalai/artifacts}:${ARTIFACTS_ROOT:-/var/lib/personalai/artifacts}
     environment:
       CLAUDE_CODE_RUNNER_TRANSPORT: http
       CLAUDE_CODE_RUNNER_HTTP_PORT: '8080'
       CLAUDE_CODE_RUNNER_WORKSPACE_ROOT: ${WORKSPACE_ROOT:-/var/lib/personalai/workspaces}
+      CLAUDE_CODE_RUNNER_ARTIFACTS_DIR: ${ARTIFACTS_ROOT:-/var/lib/personalai/artifacts}
       # SEC-3.2: sin este secreto el proceso no arranca. Genéralo con
       # `openssl rand -hex 32`; debe ser distinto de cualquier otro secreto.
       CLAUDE_CODE_RUNNER_AUTH_TOKEN: ${CLAUDE_CODE_RUNNER_AUTH_TOKEN:?falta CLAUDE_CODE_RUNNER_AUTH_TOKEN}
@@ -169,6 +179,11 @@ services:
       # es simplemente este sub-mount de solo lectura. Montándolo fuera de
       # $HERMES_HOME el chown recursivo no lo toca y el warning desaparece.
       - ../skills:/opt/skills-repo:ro
+      # Fase 8 (US-8.2): MISMA ruta que en `claude-code-runner` de arriba —
+      # el gateway de Telegram de hermes-agent lee el fichero directamente
+      # de aquí cuando un Skill responde con el tag `MEDIA:<ruta>`. Solo
+      # lectura: hermes nunca escribe aquí, solo el runner.
+      - ${ARTIFACTS_ROOT:-/var/lib/personalai/artifacts}:${ARTIFACTS_ROOT:-/var/lib/personalai/artifacts}:ro
     environment:
       HERMES_UID: ${HERMES_UID:-10000}
       HERMES_GID: ${HERMES_GID:-10000}

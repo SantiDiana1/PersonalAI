@@ -34,10 +34,25 @@ el que corre Claude Code dentro del contenedor efímero — no tiene la tool
 plan Pro como compatible con Artifacts. Por eso `run_claude_command` NUNCA
 devuelve un `artifactUrl`: devuelve `htmlContent`, el HTML autocontenido que
 Claude Code generó de verdad al ejecutar `/design`/`/dataviz` (no un
-placeholder — el diseño es real, solo falta el paso de publicarlo). Este
-skill entrega ese HTML al Operador; publicarlo (copiarlo a una sesión propia
-de Claude Code o claude.ai) es una acción manual del Operador, no algo que
-este skill intente automatizar.
+placeholder — el diseño es real, solo falta el paso de publicarlo).
+Publicarlo de verdad (copiarlo a una sesión propia de Claude Code o
+claude.ai) sigue siendo una acción manual del Operador.
+
+**Corrección real, verificada en producción**: la primera versión de este
+skill entregaba `htmlContent` pegado como texto en el chat de Telegram — el
+Operador no podía abrir el resultado desde el móvil, solo leerlo. Fix: si
+`run_claude_command` devuelve `htmlFilePath` (requiere
+`CLAUDE_CODE_RUNNER_ARTIFACTS_DIR` configurada en el despliegue — ver
+`hermes/docker/.env.example`), este skill responde con el tag
+`MEDIA:<htmlFilePath>` que el gateway de hermes-agent reconoce y entrega
+como **adjunto real** de Telegram (fichero `.html` descargable/abrible),
+documentado en la [guía oficial de
+Telegram](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/telegram)
+de hermes-agent. Sin `htmlFilePath` (despliegue sin la variable
+configurada), cae al fallback anterior — pegar `htmlContent` como bloque de
+código — pero avisando explícitamente de que hay que guardarlo como
+`.html` a mano para poder abrirlo, en vez de dejar que el Operador lo
+descubra por sí mismo.
 
 ## Reglas innegociables
 
@@ -120,11 +135,19 @@ Llama a `cronjob`:
 
   Llama a run_claude_command con slashCommand/prompt y, si lo hay,
   brainContext. Según el resultado:
-  - Si status == 'success' y hay htmlContent: responde con un mensaje breve
-    confirmando el resultado, y pega el HTML completo como bloque de código
-    en la respuesta (```html ... ```). Si es muy largo para un mensaje de
-    Telegram, avisa de que el resultado se ha truncado y sugiere pedirlo con
-    un alcance más acotado.
+  - Si status == 'success' y hay htmlFilePath: responde con un mensaje breve
+    confirmando el resultado, y en una línea aparte el tag
+    "MEDIA:<htmlFilePath>" (ruta literal devuelta por la tool, sin
+    modificarla) para que el gateway lo entregue como adjunto .html real,
+    abrible desde el móvil.
+  - Si status == 'success' y hay htmlContent pero NO htmlFilePath (despliegue
+    sin CLAUDE_CODE_RUNNER_ARTIFACTS_DIR configurada): responde con un
+    mensaje breve confirmando el resultado, pega el HTML completo como
+    bloque de código (```html ... ```), y avisa explícitamente de que hay
+    que guardarlo como fichero .html a mano para poder abrirlo — no asumas
+    que el Operador lo sabe. Si es muy largo para un mensaje de Telegram,
+    avisa de que el resultado se ha truncado y sugiere pedirlo con un
+    alcance más acotado.
   - Si status es 'failed', 'needs_human_input' o 'timed_out': NO inventes un
     resultado. Responde con el summary literal.
 
@@ -139,8 +162,10 @@ Llama a `cronjob`:
 
 Responde ya en el chat: "Vale, me pongo a diseñarlo — te mando el resultado
 en este mismo chat en unos minutos." Deja claro, si es la primera vez que el
-Operador usa este skill, que el resultado es el HTML del diseño, no un link
-ya publicado — evita expectativas equivocadas.
+Operador usa este skill, que el resultado es un fichero `.html` que se puede
+abrir directamente (o, en el despliegue sin `htmlFilePath` configurado, el
+HTML pegado como texto que hay que guardar a mano) — nunca un link ya
+publicado a claude.ai. Evita esa expectativa concreta.
 
 ### Paso 5 — Nada que limpiar
 
@@ -150,7 +175,10 @@ El cronjob se autodestruye tras dispararse una vez (`repeat: 1`).
 
 - Si `run_claude_command` devuelve el error de rate limiting, ese turno debe
   reportarlo tal cual — comparte cuota con `run_coding_task`/`run-task`.
-- Un HTML de diseño real puede superar cómodamente el límite de ~4096
-  caracteres de un mensaje de Telegram — es una limitación conocida y
-  documentada, no un bug: si pasa, el cronjob debe decirlo explícitamente en
-  vez de mandar un fragmento cortado sin avisar.
+- **Solo en el fallback sin `htmlFilePath`**: un HTML de diseño real puede
+  superar cómodamente el límite de ~4096 caracteres de un mensaje de
+  Telegram — es una limitación conocida y documentada, no un bug: si pasa,
+  el cronjob debe decirlo explícitamente en vez de mandar un fragmento
+  cortado sin avisar. Con `htmlFilePath` (el camino recomendado) esto no
+  aplica: el adjunto `MEDIA:` no tiene ese límite (hasta 20 MB con la Bot
+  API pública de Telegram).

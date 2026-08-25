@@ -1,5 +1,6 @@
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { finishTaskRun, insertTaskRun } from './db.js';
 import { cleanupClone, shallowClone } from './git.js';
 import { logger } from './logger.js';
@@ -26,6 +27,16 @@ export interface RunClaudeCommandDeps {
   disableIsolation?: boolean;
   gitBaseUrl?: string;
   rateLimiter?: RateLimiter;
+  /**
+   * Directorio persistente, montado en la MISMA ruta en este contenedor y en
+   * el de hermes-agent (mismo patrón que `CLAUDE_CODE_RUNNER_WORKSPACE_ROOT`
+   * — ver docs/hermes/spec.md §3.6), donde se deja una copia de
+   * `artifact-output.html` para que el gateway de Telegram pueda mandarla
+   * como adjunto real (`MEDIA:<ruta>`) en vez de como texto. Sin configurar,
+   * `htmlFilePath` queda ausente y el Skill cae al fallback de pegar
+   * `htmlContent` como texto — sigue funcionando, peor UX.
+   */
+  artifactsDir?: string;
 }
 
 async function resolveIsolation(deps: RunClaudeCommandDeps): Promise<Partial<IsolationSetup>> {
@@ -42,6 +53,36 @@ async function resolveIsolation(deps: RunClaudeCommandDeps): Promise<Partial<Iso
     return {};
   }
   return ensureIsolation();
+}
+
+/**
+ * Copia `htmlContent` a un fichero en `artifactsDir` con nombre único, y
+ * devuelve la ruta — ver RunClaudeCommandDeps::artifactsDir para el porqué
+ * (entrega como adjunto real de Telegram vía `MEDIA:`, no como texto).
+ *
+ * Sin `artifactsDir` configurado (deployment que no lo montó todavía), no
+ * escribe nada y devuelve `undefined` — degradación esperada, no un error:
+ * `runClaudeCommand` sigue devolviendo `htmlContent` de todos modos.
+ *
+ * Retención: deliberadamente NO limpia ficheros antiguos aquí — a
+ * diferencia del workspace efímero (`cleanupClone`), este directorio debe
+ * sobrevivir el tiempo suficiente para que el gateway de Telegram, en un
+ * proceso/turno completamente distinto, llegue a leerlo. Limpiarlo (p. ej.
+ * con una tarea de cron externa que borre lo más antiguo de N días) queda
+ * como tarea operativa pendiente, documentada, no bloqueante.
+ */
+async function persistArtifact(
+  htmlContent: string,
+  artifactsDir: string | undefined,
+  slashCommand: string,
+): Promise<string | undefined> {
+  if (!artifactsDir) return undefined;
+  await mkdir(artifactsDir, { recursive: true });
+  const safeCommand = slashCommand.replace(/[^a-z0-9]+/gi, '');
+  const fileName = `${Date.now()}-${safeCommand}-${randomUUID().slice(0, 8)}.html`;
+  const filePath = join(artifactsDir, fileName);
+  await writeFile(filePath, htmlContent);
+  return filePath;
 }
 
 /** Ver types.ts::ALLOWED_SLASH_COMMANDS — rechaza cualquier comando fuera de la allowlist antes de tocar Docker. */
@@ -147,10 +188,14 @@ export async function runClaudeCommand(
         summary: 'Claude Code reportó éxito pero no generó artifact-output.html.',
       };
     } else {
+      const htmlFilePath = containerResult.htmlContent
+        ? await persistArtifact(containerResult.htmlContent, deps.artifactsDir, input.slashCommand)
+        : undefined;
       output = {
         status: containerResult.result.status,
         summary: containerResult.result.summary,
         ...(containerResult.htmlContent ? { htmlContent: containerResult.htmlContent } : {}),
+        ...(htmlFilePath ? { htmlFilePath } : {}),
       };
     }
 
