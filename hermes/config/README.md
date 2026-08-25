@@ -17,6 +17,16 @@ MCP_BRAIN_MCP_API_KEY=<el mismo secreto que brain-mcp>
 
 # PAT fine-grained, scoped solo a los repos donde Hermes actúa (SEC-6.1).
 GITHUB_TOKEN=<pat>
+
+# Fase 7 — Notion (integración interna, notion.so/my-integrations).
+NOTION_TOKEN=<secret>
+
+# Fase 7 — Jira. Token en id.atlassian.com/manage-profile/security/api-tokens.
+# ATLASSIAN_SITE_NAME es solo el subdominio (si tu Jira es
+# https://miempresa.atlassian.net, aquí va "miempresa"), no toda la URL.
+ATLASSIAN_TOKEN=<api-token>
+ATLASSIAN_SITE_NAME=<subdominio>
+ATLASSIAN_USER_EMAIL=<tu-email-de-atlassian>
 ```
 
 Los nombres `MCP_CLAUDE_CODE_RUNNER_API_KEY`/`MCP_BRAIN_MCP_API_KEY` no son
@@ -55,27 +65,47 @@ hermes mcp list          # los tres deben aparecer conectados
 hermes mcp test github   # prueba de conexión
 ```
 
-**Fase 7 (Notion/Jira) — bloqueado hasta tener tokens propios**: los bloques
-`notion`/`jira` de `hermes.config.yaml` están comentados a propósito porque
-necesitan credenciales que solo el Operador puede generar:
+**Fase 7 (Notion/Jira) — activado con tokens propios del Operador**: los
+bloques `notion`/`jira` de `hermes.config.yaml` están descomentados y
+registrados de verdad en `~/.hermes/config.yaml`:
 
 ```bash
-# Notion: crear una integración interna en notion.so/my-integrations,
-# compartirla con la base de datos "Hermes Tasks", y guardar el token:
-#   NOTION_TOKEN=<secret> en ~/.hermes/.env
+# Notion: integración interna creada en notion.so/my-integrations.
 hermes mcp add notion \
   --command npx \
   --args -y @notionhq/notion-mcp-server \
   --env NOTION_TOKEN=$NOTION_TOKEN
 
-# Jira: generar un API token en id.atlassian.com/manage-profile/security/api-tokens.
-# El servidor MCP concreto (oficial por URL/OAuth vs. comunidad por API token)
-# queda por decidir al activarlo — ver el comentario en hermes.config.yaml.
+# Jira: API token en id.atlassian.com/manage-profile/security/api-tokens.
+# Se eligió el servidor de comunidad @aashari/mcp-server-atlassian-jira
+# (stdio, auth por API token clásico) en vez del remoto oficial de Atlassian
+# porque este último exige OAuth — infraestructura que no hacía falta añadir.
+hermes mcp add jira \
+  --command npx \
+  --args -y @aashari/mcp-server-atlassian-jira \
+  --env ATLASSIAN_SITE_NAME=<subdominio-de-tu-sitio> \
+  --env ATLASSIAN_USER_EMAIL=<tu-email-de-atlassian> \
+  --env ATLASSIAN_API_TOKEN=$ATLASSIAN_TOKEN
 ```
 
-En cuanto se registren, `resolve-issue` (`hermes/skills/resolve-issue/SKILL.md`
-§ "Generalización a Notion y Jira") ya sabe listarlos/reportarlos sin ningún
-otro cambio.
+Nota: `hermes mcp add --args` no admite flags sueltos como `-y` bien (falla
+con "unrecognized arguments"); si te pasa, edita `~/.hermes/config.yaml` a
+mano en `mcp_servers.<nombre>.args` con una lista YAML (`['-y', 'paquete']`) —
+es la Opción B de este mismo README, y es lo que se usó aquí.
+
+Verificado (`hermes mcp test notion` / `hermes mcp test jira`): ambos
+conectan y descubren sus tools, y ambos tokens autentican de verdad contra
+las APIs reales (llamadas de prueba con 200 OK). **Pendiente de un único paso
+del Operador en la propia UI de Notion**: compartir la base de datos "Hermes
+Tasks" con la integración (menú "..." de la base de datos → Connections) —
+sin eso, Notion devuelve resultados vacíos aunque el token sea válido. Jira no
+tiene un bloqueo equivalente: la JQL ya apunta a un proyecto/label reales, solo
+está vacía porque aún no hay ningún issue etiquetado.
+
+En cuanto lo anterior esté resuelto, `resolve-issue`
+(`hermes/skills/resolve-issue/SKILL.md` § "Generalización a Notion y Jira")
+ya sabe listarlos/reportarlos sin ningún otro cambio — ver esa misma sección
+para el detalle de lo verificado.
 
 ## 3. Fijar aprobaciones y modelo
 

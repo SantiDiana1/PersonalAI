@@ -248,11 +248,29 @@ Do"` en vez de la etiqueta de GitHub. "Marcar antes de empezar" es
   explícita) o el Operador — igual que con GitHub, nunca se infiere del
   texto libre de la descripción.
 
-**Estado real (Fase 7)**: esta sección está escrita y lista, pero **sin
-verificar contra un servidor Notion/Jira real** — bloqueado hasta que el
-Operador genere sus propios tokens (integración de Notion, API token de
-Atlassian) y los añada a `~/.hermes/.env`. No lo des por probado hasta tener
-una ejecución real.
+**Estado real (Fase 7)**: verificado contra servidores reales tras recibir los
+tokens del Operador.
+
+- **Jira**: registrado (`hermes mcp add jira`, servidor `@aashari/mcp-server-
+atlassian-jira` vía npx, env `ATLASSIAN_SITE_NAME`/`ATLASSIAN_USER_EMAIL`/
+  `ATLASSIAN_API_TOKEN`). `hermes mcp test jira` conecta y descubre 5 tools
+  (`jira_get`/`jira_post`/`jira_put`/`jira_patch`/`jira_delete`). Autenticación
+  verificada con una llamada real a la API (`GET
+/rest/api/3/search/jql?jql=labels=hermes AND status="To Do"`, 200 OK,
+  `{"issues": [], "isLast": true}`) — el token es válido, sencillamente no hay
+  todavía ningún issue con esa etiqueta+estado en el proyecto personal del
+  Operador. El flujo end-to-end (recoger, delegar, reportar) sigue sin
+  ejercitarse porque no hay ningún ticket real que dispare el Paso 1.
+- **Notion**: registrado (`hermes mcp add notion`, servidor oficial
+  `@notionhq/notion-mcp-server` vía npx, env `NOTION_TOKEN`). `hermes mcp test
+notion` conecta y descubre 24 tools. Autenticación verificada con una
+  llamada real (`POST /v1/search`, 200 OK) — el token es válido, pero la
+  búsqueda devuelve `results: []`: la integración interna de Notion todavía no
+  se ha **compartido** con ninguna página/base de datos (paso manual en la UI
+  de Notion: abrir la base de datos "Hermes Tasks" → "..." → "Connections" →
+  añadir la integración). Sin ese paso, ningún servidor MCP —por válido que
+  sea el token— puede ver la base de datos. **Bloqueado en este único paso,
+  pendiente del Operador.**
 
 ## Notas de operación
 
