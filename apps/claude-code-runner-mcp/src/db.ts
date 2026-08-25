@@ -54,9 +54,19 @@ export async function insertTaskRun(params: {
 }): Promise<string | null> {
   const p = getPool();
   if (!p) return null;
+  // Bug real, encontrado en producción (Fase 6, anotado sin arreglar
+  // entonces; ahora bloqueaba también run_claude_command — Fase 8):
+  // brain_context es `jsonb`, pero brainContext es texto libre (un párrafo
+  // devuelto por brain_query), no JSON válido por sí mismo. Pasarlo tal
+  // cual hacía que Postgres rechazara el insert con "invalid input syntax
+  // for type json" en cuanto brainContext traía comillas/acentos/etc. —
+  // JSON.stringify lo envuelve como un string JSON válido (p.ej. "el color
+  // es #7C3AED" -> "\"el color es #7C3AED\""), que sí encaja en `jsonb`.
+  const brainContextJson =
+    params.brainContext !== undefined ? JSON.stringify(params.brainContext) : null;
   const res = await p.query<{ id: string }>(
     `insert into runner.task_runs (repo, task_title, status, brain_context) values ($1, $2, 'running', $3) returning id`,
-    [params.repo, params.taskTitle, params.brainContext ?? null],
+    [params.repo, params.taskTitle, brainContextJson],
   );
   return res.rows[0]?.id ?? null;
 }

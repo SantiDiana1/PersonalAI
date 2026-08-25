@@ -56,11 +56,24 @@ descubra por sí mismo.
 
 ## Reglas innegociables
 
-1. **Solo `run_claude_command` para generar el resultado.** Igual que
-   `run-task`/`resolve-issue` con `run_coding_task`: nunca generes tú mismo
-   el HTML en el turno interactivo ni uses la tool `Artifact` directamente
-   (no la tienes disponible en este contexto tampoco — hermes-agent no es
-   Claude Code).
+1. **Solo `run_claude_command` para generar el resultado. Nunca escribas tú
+   mismo el fichero HTML con tus propias tools de fichero/bash — bajo
+   NINGÚN concepto, ni siquiera para algo trivial.** Regla dura, bug real
+   encontrado en producción: verificado que, ante peticiones reales de
+   Telegram ("Hazme un diseño de una landing básica para...", "Hazme una
+   nueva landing para mi página web personal"), Hermes escribió el HTML
+   directamente con sus propias tools nativas de escritura de fichero
+   dentro de **su propio contenedor** — nunca cargó este skill, nunca llamó
+   a `run_claude_command`. El resultado: un fichero real pero inaccesible
+   (vive dentro del contenedor de hermes, sin ningún mecanismo de entrega),
+   y el Operador solo recibe una descripción en texto de algo que no puede
+   abrir. Esto rompe el aislamiento (SEC-2.1/SEC-4.x) exactamente igual que
+   el bug ya documentado en `run-task/SKILL.md` para tareas de código — es
+   el mismo patrón, aplicado a diseño. Si dudas sobre si algo "cuenta" como
+   una petición de diseño, trátalo como que sí cuenta (ver Paso 1) y pasa
+   por `run_claude_command`, nunca lo resuelvas tú directamente. Tampoco
+   uses la tool `Artifact` directamente (no la tienes disponible en este
+   contexto — hermes-agent no es Claude Code).
 
 2. **`slashCommand` tiene que ser uno de la allowlist** (`/design`,
    `/dataviz` — ver `ALLOWED_SLASH_COMMANDS` en
@@ -109,12 +122,20 @@ descubra por sí mismo.
 
 ### Paso 1 — Detectar la petición y elegir el comando
 
-Reconoce peticiones de un resultado visual/interactivo: "diséñame...",
-"hazme una landing/dashboard/mockup de...", "quiero ver opciones de diseño
-para...". Elige `slashCommand`:
+**Regla dura, verificada en producción (bug real, ver regla 1 de arriba):
+si la petición implica generar una landing, web, portfolio, dashboard,
+mockup, póster, o cualquier resultado visual/HTML, este skill se activa
+SIEMPRE, sin excepción — no solo ante el patrón literal "diséñame X".**
+Reconoce también variantes conversacionales reales que fallaron antes de
+este fix: "hazme un diseño de una landing para...", "hazme una nueva
+landing/web para...", "quiero una página para hablar de...", peticiones
+en varios turnos que van afinando el encargo (tono, contenido, redes
+sociales...), o cualquier petición de que se cree una página/web/landing
+aunque no use la palabra "diseño" explícitamente. Si tienes dudas sobre si
+algo "cuenta" como esto, trátalo como que sí cuenta. Elige `slashCommand`:
 
 - `/design`: landing pages, mockups de UI, comparación de opciones visuales,
-  pósters/flyers/one-pagers.
+  pósters/flyers/one-pagers, webs personales/de portfolio.
 - `/dataviz`: cualquier gráfico, dashboard, o visualización de datos.
 
 Si no está claro cuál de los dos, o si la petición es realmente de código
@@ -136,6 +157,17 @@ Llama a `cronjob`:
   `1`.
 - `deliver`: omítelo (se auto-entrega al chat/hilo de origen, igual que
   `run-task`).
+- **Nunca pases `enabled_toolsets` a esta llamada — ni `["delegation"]` ni
+  ningún otro valor. Déjalo completamente sin especificar.** Bug real,
+  encontrado en producción: pasar `enabled_toolsets: ["delegation"]`
+  restringe el turno del propio cronjob a **únicamente** la tool
+  `delegate_task`, dejándolo sin acceso a `run_claude_command`,
+  `brain_query` ni ninguna otra tool MCP — exactamente lo contrario de lo
+  que se busca (confirmado comparando sesiones reales: con
+  `enabled_toolsets` fijado, la sesión del cronjob tenía 1 sola tool
+  disponible; sin fijarlo, 109). Es fácil caer en esto por asociación con
+  la palabra "delegación"/"subagente" que aparece en el propio prompt de
+  abajo — no la confundas con un parámetro real de `cronjob`.
 - `prompt`: autocontenido —
 
   ````
