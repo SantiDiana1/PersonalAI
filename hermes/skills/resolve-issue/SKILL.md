@@ -252,18 +252,18 @@ Do"` en vez de la etiqueta de GitHub. "Marcar antes de empezar" es
 tokens del Operador.
 
 - **Jira**: registrado (`hermes mcp add jira`, servidor `@aashari/mcp-server-
-  atlassian-jira` vía npx, env `ATLASSIAN_SITE_NAME`/`ATLASSIAN_USER_EMAIL`/
+atlassian-jira` vía npx, env `ATLASSIAN_SITE_NAME`/`ATLASSIAN_USER_EMAIL`/
   `ATLASSIAN_API_TOKEN`). `hermes mcp test jira` conecta y descubre 5 tools
   (`jira_get`/`jira_post`/`jira_put`/`jira_patch`/`jira_delete`). Autenticación
   verificada con una llamada real a la API (`GET
-  /rest/api/3/search/jql?jql=labels=hermes AND status="To Do"`, 200 OK,
+/rest/api/3/search/jql?jql=labels=hermes AND status="To Do"`, 200 OK,
   `{"issues": [], "isLast": true}`) — el token es válido, sencillamente no hay
   todavía ningún issue con esa etiqueta+estado en el proyecto personal del
   Operador. El flujo end-to-end (recoger, delegar, reportar) sigue sin
   ejercitarse porque no hay ningún ticket real que dispare el Paso 1.
 - **Notion**: registrado (`hermes mcp add notion`, servidor oficial
   `@notionhq/notion-mcp-server` vía npx, env `NOTION_TOKEN`). `hermes mcp test
-  notion` conecta y descubre 24 tools. Autenticación verificada con una
+notion` conecta y descubre 24 tools. Autenticación verificada con una
   llamada real (`POST /v1/search`, 200 OK) — el token es válido, pero la
   búsqueda devuelve `results: []`: la integración interna de Notion todavía no
   se ha **compartido** con ninguna página/base de datos (paso manual en la UI
