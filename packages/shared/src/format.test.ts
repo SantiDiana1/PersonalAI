@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Metrics } from '@personalai/shared';
+import type { Metrics } from './metrics.js';
 import { formatMetrics } from './format.js';
 
 const EMPTY: Metrics = {

@@ -9,8 +9,7 @@
  *                                historial de consumo de la cuenta — Fase 12)
  */
 import pg from 'pg';
-import { collectMetrics } from '@personalai/shared';
-import { formatMetrics } from './format.js';
+import { collectMetrics, formatMetrics } from '@personalai/shared';
 
 const { Pool } = pg;
 

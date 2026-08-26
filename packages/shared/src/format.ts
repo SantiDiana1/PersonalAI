@@ -1,4 +1,14 @@
-import type { Metrics, ToolMetrics } from '@personalai/shared';
+/**
+ * Render de texto plano de las métricas. Vive junto a las consultas y no en el
+ * CLI porque tiene dos consumidores que deben producir el MISMO texto: el
+ * comando `personalai-metrics` y la ruta `GET /v1/metrics` del runner, que es
+ * la que alimenta el webhook determinista de Telegram (US-9.2).
+ *
+ * Texto plano a propósito, sin Markdown: el destino es un mensaje de Telegram
+ * entregado literalmente (`--deliver-only`), y un asterisco o un guion bajo sin
+ * escapar en un nombre de repo rompería el formateo del mensaje entero.
+ */
+import type { Metrics, ToolMetrics } from './metrics.js';
 
 function pct(rate: number | null): string {
   return rate === null ? 'sin datos' : `${(rate * 100).toFixed(1)} %`;

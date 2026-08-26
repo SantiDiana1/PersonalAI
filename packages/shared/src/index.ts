@@ -19,6 +19,7 @@ export {
   type TerminalStatus,
   type TaskRunTool,
 } from './metrics.js';
+export { formatMetrics } from './format.js';
 
 /** Autoridad de una fuente de ingestion, ver docs/personal-brain/spec.md §4.1. */
 export type SourceAuthority = 'canonical' | 'supporting';

@@ -238,3 +238,71 @@ editas en vivo desde el propio chat de Hermes, trae el cambio de vuelta a
 este `SOUL.md` del repo para que no se pierda en el siguiente despliegue —
 este fichero es la fuente de verdad versionada, `~/.hermes/SOUL.md` es la
 copia operativa.
+
+## 8. Webhook de métricas — el camino determinista (US-9.2)
+
+Pedirle las métricas a Hermes por lenguaje natural funciona, pero gasta tokens
+de la ventana Pro y depende de que el modelo elija la tool correcta. Este
+webhook es la alternativa **sin modelo**: cero tokens, cero decisiones del
+agente.
+
+**Por qué un webhook y no un `/comando`**: los slash commands de hermes-agent
+están hardcodeados en su registro central (`hermes_cli/commands.py`); los
+custom son una petición abierta y sin implementar
+([#25335](https://github.com/NousResearch/hermes-agent/issues/25335), duplicado
+en [#31373](https://github.com/NousResearch/hermes-agent/issues/31373), con
+[PR #4602](https://github.com/NousResearch/hermes-agent/pull/4602) sin
+mergear). Añadir uno exigiría parchear el código de hermes-agent, que este
+proyecto decidió no tocar. El flag `--deliver-only` de `hermes webhook` es la
+única vía documentada para entregar un mensaje **sin agent loop**.
+
+El precio de esa decisión: el disparador es un POST HTTP, no un mensaje de
+Telegram. Desde el móvil se lanza con un atajo de iOS / acceso directo de
+Android; la respuesta sí llega al chat de Telegram de siempre.
+
+```bash
+# 1. Script y su configuración, en $HERMES_HOME/scripts (hermes-agent confina
+#    los scripts de webhook a ese directorio; no se ejecutan desde el repo).
+mkdir -p ~/.hermes/scripts
+cp ../scripts/metrics-webhook.sh ~/.hermes/scripts/
+cp ../scripts/metrics-webhook.env.example ~/.hermes/scripts/metrics-webhook.env
+chmod +x ~/.hermes/scripts/metrics-webhook.sh
+chmod 600 ~/.hermes/scripts/metrics-webhook.env   # contiene el token del runner
+$EDITOR ~/.hermes/scripts/metrics-webhook.env     # rellenar RUNNER_TOKEN
+
+# 2. Suscripción. --deliver-only es lo que evita el turno de modelo: el prompt
+#    renderizado ({script_output} = la salida del script) se entrega literal.
+hermes webhook subscribe metrics \
+  --script metrics-webhook.sh \
+  --prompt '{script_output}' \
+  --deliver-only \
+  --deliver telegram \
+  --deliver-chat-id '<tu_chat_id>'
+
+hermes webhook list          # devuelve la URL y el secreto HMAC
+hermes webhook test metrics  # comprobar sin esperar a dispararlo de verdad
+```
+
+`<tu_chat_id>` es el mismo ID numérico que `TELEGRAM_ALLOWED_USERS` (SEC-1.1).
+
+**Cómo funciona el script** (`hermes/scripts/metrics-webhook.sh`): hace un
+`curl` autenticado a `GET /v1/metrics` del runner y escribe el informe en
+stdout. Detalles del contrato de hermes-agent de los que depende, verificados
+antes de escribirlo:
+
+- El entorno del script está **saneado**, así que la configuración se lee de
+  `metrics-webhook.env` al lado del script, no de variables heredadas del
+  compose.
+- stdout de **texto** se expone como `{script_output}`; un stdout que sea un
+  **objeto JSON** reemplazaría el payload en vez de exponerse. El informe
+  empieza por `PersonalAI` y nunca por `{`, por eso se entrega en texto plano
+  y no en JSON.
+- stdout vacío, `[SILENT]`, o **salida distinta de cero** hacen que el webhook
+  se ignore y no se entregue nada. Es el comportamiento deseado ante un error:
+  verificado que token incorrecto (exit 22), falta de configuración (exit 1) y
+  runner caído (exit 7) dejan stdout vacío, así que nunca se entrega un informe
+  en blanco que parezca real.
+
+La ruta `GET /v1/metrics` exige la misma autenticación Bearer que `/mcp`
+(SEC-3.2), es de solo lectura y sin parámetros, y devuelve agregados fijos —
+nunca títulos de tarea ni contenido de repos.

@@ -3,12 +3,30 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { formatMetrics } from '@personalai/shared';
 import { isAuthorized, requireAuthSecret } from './auth.js';
+import { getMetrics } from './db.js';
 import { logger } from './logger.js';
 import { createMcpServer } from './mcpServer.js';
 
 /** Ruta del endpoint MCP. */
 const MCP_PATH = '/mcp';
+/**
+ * Ruta REST de solo lectura con las mismas métricas que la tool MCP
+ * `get_metrics` (US-9.2), en texto plano listo para enviar.
+ *
+ * Existe porque el camino determinista de Telegram no puede hablar MCP: el
+ * webhook de hermes-agent ejecuta un script de shell con el entorno saneado y
+ * un timeout, y el transporte Streamable HTTP exige un handshake `initialize`
+ * con sesión — inviable con `curl` en tres líneas. Esta ruta da el mismo dato
+ * con un GET.
+ *
+ * No relaja la seguridad: misma autenticación Bearer que `/mcp` (SEC-3.2),
+ * solo lectura, sin parámetros, y devuelve agregados fijos — nunca títulos de
+ * tarea ni contenido de repos. Es estrictamente menos capaz que `/mcp`, que
+ * desde el mismo origen ya permite lanzar contenedores.
+ */
+const METRICS_PATH = '/v1/metrics';
 /** Tope del cuerpo de una petición: un prompt de tarea, no una subida de datos. */
 const MAX_BODY_BYTES = 1_024 * 1_024;
 
@@ -28,6 +46,14 @@ export function httpOptionsFromEnv(): HttpServerOptions {
   // desde la red interna (SEC-3.1 de docs/security.md).
   const host = process.env['CLAUDE_CODE_RUNNER_HTTP_HOST']?.trim() || '0.0.0.0';
   return { port, host };
+}
+
+function writeText(res: ServerResponse, status: number, body: string): void {
+  res.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+  });
+  res.end(body);
 }
 
 function writeJson(res: ServerResponse, status: number, body: unknown): void {
@@ -96,7 +122,7 @@ export async function startHttpServer(options: HttpServerOptions): Promise<Serve
       return;
     }
 
-    if (url.pathname !== MCP_PATH) {
+    if (url.pathname !== MCP_PATH && url.pathname !== METRICS_PATH) {
       writeJson(res, 404, jsonRpcError(-32601, 'Not found'));
       return;
     }
@@ -110,6 +136,28 @@ export async function startHttpServer(options: HttpServerOptions): Promise<Serve
       );
       res.setHeader('WWW-Authenticate', 'Bearer');
       writeJson(res, 401, jsonRpcError(-32001, 'Unauthorized'));
+      return;
+    }
+
+    if (url.pathname === METRICS_PATH) {
+      if (req.method !== 'GET') {
+        writeJson(res, 405, jsonRpcError(-32000, 'Method not allowed'));
+        return;
+      }
+      const metrics = await getMetrics();
+      if (metrics === null) {
+        // 503 y no 200 con un cuerpo vacío: el script del webhook trata el
+        // fallo de `curl` como "no enviar nada" (`set -e` + `--fail`), que es
+        // mejor que entregar al Operador un informe silenciosamente vacío.
+        writeJson(res, 503, jsonRpcError(-32000, 'Persistencia no configurada'));
+        return;
+      }
+      logger.info('GET /v1/metrics atendida');
+      if (url.searchParams.get('format') === 'json') {
+        writeJson(res, 200, metrics);
+        return;
+      }
+      writeText(res, 200, formatMetrics(metrics));
       return;
     }
 
@@ -182,7 +230,7 @@ export async function startHttpServer(options: HttpServerOptions): Promise<Serve
   });
 
   logger.info(
-    { host: options.host, port: options.port, path: MCP_PATH },
+    { host: options.host, port: options.port, paths: [MCP_PATH, METRICS_PATH] },
     'claude-code-runner-mcp escuchando por HTTP (autenticación Bearer obligatoria)',
   );
 
