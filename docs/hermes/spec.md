@@ -24,7 +24,14 @@ Todo lo demás (leer GitHub Issues, leer Notion, leer Jira) se resuelve registra
 
 ### 0.1 Autenticación: token OAuth de larga duración para todo, vía suscripción Pro
 
-**Decisión de este proyecto**: tanto el propio hermes-agent (para su agent loop / chat) como los contenedores de `claude-code-runner-mcp` (para resolver issues) se autentican **exclusivamente con un token OAuth de larga duración de la suscripción Pro del operador**, nunca con `ANTHROPIC_API_KEY`. En la práctica esto significa:
+> **INVALIDADO POR UN CAMBIO DE POLÍTICA DE ANTHROPIC (verificado el 2026-08-26, Fase 12 US-12.3).** Lo que sigue describe la decisión original, que ya solo se cumple a medias. Anthropic clasifica a hermes-agent como _third-party app_ y le rechaza el consumo del plan Pro con `HTTP 400 invalid_request_error` — _"Third-party apps now draw from your extra usage, not your plan limits"_. El sistema queda partido:
+>
+> - **`claude-code-runner-mcp` sigue igual y funciona**: ejecuta el binario oficial `claude -p`, que Anthropic sí acepta contra la suscripción. Verificado con `checkSessionValid` → `{"valid": true}` después del bloqueo.
+> - **El agent loop de hermes-agent, no**: hace peticiones HTTP directas a `api.anthropic.com` y nunca invoca el binario (`providers.py` no tiene ningún `subprocess`; el alias `"claude-code": "anthropic"` es puro, no un camino distinto). Necesita otra fuente de tokens — ver **Fase 13** del roadmap.
+>
+> Consecuencia para el §0.2 de abajo: el "riesgo de ToS asumido" ha dejado de ser teórico. Anthropic lo hace cumplir técnicamente.
+
+**Decisión de este proyecto** (original, ver aviso de arriba): tanto el propio hermes-agent (para su agent loop / chat) como los contenedores de `claude-code-runner-mcp` (para resolver issues) se autentican **exclusivamente con un token OAuth de larga duración de la suscripción Pro del operador**, nunca con `ANTHROPIC_API_KEY`. En la práctica esto significa:
 
 - El token se genera **una única vez** en el host con `claude setup-token` (login interactivo, ver §0.3), que **imprime por stdout** un token de larga duración (`sk-ant-oat01-...`) — no crea ni deja ningún archivo de sesión reutilizable. Ese token se guarda como secreto único, `hermes-claude-auth` (§0.3), inyectado como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN`.
 - **hermes-agent** no necesita ningún wrapper propio: soporta de fábrica el proveedor `anthropic` (alias `claude-code`) autenticándose vía `CLAUDE_CODE_OAUTH_TOKEN` (o, alternativamente, detectando `~/.claude/.credentials.json` si existiera de un login interactivo completo — no es el caso aquí). Confirmado explorando su código real (`agent/anthropic_adapter.py`, `hermes_cli/auth.py`) — ver `docs/hermes/exploration-notes.md` §4 para el detalle. No se construye ningún wrapper.

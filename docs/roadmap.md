@@ -28,6 +28,7 @@ Lo que en la primera versión de este documento vivía como una lista suelta de 
 
 **Orden dentro de v2 (decisión del Operador)**: se cierra primero todo lo de carácter **backend/infra**, antes que lo funcional o de presentación. La cola concreta, en orden:
 
+0. **Fase 13 — bloqueante, por delante de todo lo demás.** El agent loop de Hermes está caído desde el cambio de política de Anthropic (ver Fase 12): no es una mejora en la cola, es una reparación.
 1. **Fase 12, mitad de código** (US-12.2, US-12.5) — aviso de cuota antes de la caída a créditos, auditoría de `env` en las tres capas, y `hermes/spec.md §0.1/§0.3` puesto al día. Es lo que evita gasto no controlado, así que va primero.
 2. **US-9.3 — GitHub App** — sustituir el PAT fine-grained por una identidad propia con tokens de instalación de 1 h. Vive dentro de la Fase 9 por historia, pero es endurecimiento de seguridad (SEC-6.1), no pulido de portfolio: se ejecuta con esta cola, no con el resto de su fase.
 3. **US-9.2 — métricas** — comando CLI/dashboard sobre `runner.task_runs` y Brain. Backend puro; además da la evidencia cuantitativa que la Fase 12 necesita para cruzar consumo contra ejecuciones reales.
@@ -65,6 +66,7 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 | 9    | Pulido de portfolio                                     | El proyecto se entiende y se ve funcionar sin que yo esté delante                                | Fase 5                         |
 | 10   | Despliegue dual personal/trabajo                        | Una segunda instancia de Hermes para mi empresa, sin compartir riesgo ni infraestructura         | Fase 6                         |
 | 12   | Auditoría de facturación (Pro vs. créditos)             | Sé con evidencia si el consumo va contra la suscripción o contra créditos de pago, y lo corto    | Fase 8                         |
+| 13   | Independencia de proveedor (fallback + modelo local)    | Hermes vuelve a responder, con una cadena de proveedores en vez de un único punto de fallo       | Fase 12                        |
 | 11   | Company Brain completo (consolidación real) — **v3**    | Brain deja de ser un vector store simple y cumple las 4 propiedades de un company brain real     | Fase 4 + cola backend/infra    |
 
 **Milestone v1 = Fases 0 a 5. Cumplido.** Ver más abajo [Milestone v2](#milestone-v2--qué-es-la-segunda-versión) para las Fases 6 a 11 — lo que antes vivía como Futuribles sueltos, ahora secuenciado igual que v1.
@@ -579,11 +581,18 @@ Hipótesis a descartar, en orden de probabilidad:
   - [ ] Estado de `Settings > Usage` en claude.ai documentado con captura: créditos habilitados sí/no, saldo, límite de gasto mensual, auto-reload, e historial de consumo.
   - [ ] El historial se cruza contra las fechas/horas de ejecuciones reales de `runner.task_runs` — si el consumo de créditos coincide con tareas de Hermes, la hipótesis queda **confirmada**, no supuesta.
 - **US-12.2** — Como Operador, quiero verificar que no existe ninguna `ANTHROPIC_API_KEY` en ninguna capa del despliegue real, para descartar la hipótesis 2.
-  - [ ] `env | grep -i anthropic` ejecutado y documentado en las **tres** capas: host (Mac Mini, incluyendo el entorno de `launchd`/el shell que arranca el compose), contenedor `hermes`, y un contenedor efímero de tarea en vivo.
-  - [ ] Comprobado también el contenido de `~/.hermes/.env` y del `~/.hermes/config.yaml` reales — con el precedente de la Fase 0, donde el `config.yaml` del Operador tenía `provider: openrouter` residual, este fichero no se da por bueno sin mirarlo.
+  - [x] **Hipótesis 2 descartada.** `env | grep -iE "anthropic|claude"` ejecutado en las tres capas del despliegue real: host (solo variables de la sesión de Claude Code del Operador, ajenas al despliegue), contenedor `hermes` (únicamente `CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat…`) y contenedor `claude-code-runner` (el mismo token, más su propia configuración `CLAUDE_CODE_RUNNER_*`). Ninguna `ANTHROPIC_API_KEY` en ninguna parte.
+  - [x] Config real revisada — y **corregido un supuesto del propio spec**: el `config.yaml` operativo no está en `~/.hermes/` sino en `/opt/data/`, porque el contenedor define `HERMES_HOME=/opt/data`. Contenido: `provider: anthropic`, `default: claude-sonnet-4-5-20250929`, `providers: {}` **vacío**, `fallback_providers: []`. Sin rastro del `openrouter` residual de la Fase 0. El `.env` de `HERMES_HOME` solo tiene un `# LLM_MODEL=` comentado, inerte.
+  - [x] `auth.json` inspeccionado (sin volcar secretos): **una sola credencial**, `auth_type: oauth`, `source: env:CLAUDE_CODE_OAUTH_TOKEN`, `base_url: https://api.anthropic.com`. No hay ninguna credencial de tipo API key en el pool.
 - **US-12.3** — Como Operador, quiero saber a qué se imputa la llamada HTTP directa que hace hermes-agent, para descartar la hipótesis 3 — la única que no cubre ninguna documentación pública.
-  - [ ] Aislar una única llamada de chat de Hermes (sin tareas en curso), anotar la hora exacta, y comprobar en `Settings > Usage` si movió la ventana de la suscripción, el saldo de créditos, o ninguno de los dos.
-  - [ ] Si se imputa a créditos: documentar la causa a nivel de request (headers de identidad de Claude Code ausentes, endpoint distinto, etc.) leyendo el código real de hermes-agent, no infiriéndolo.
+  - [x] **HIPÓTESIS 3 CONFIRMADA, y es la causa raíz.** Tras desactivar el Operador los usage credits en `Settings > Usage`, la siguiente petición conversacional de Hermes falló con un error inequívoco de la propia API (`request_id: req_011CeR4AsSCv3dEeHueENNKs`):
+
+    > `HTTP 400 invalid_request_error` — _"Third-party apps now draw from your extra usage, not your plan limits. Add more at claude.ai/settings/usage and keep going."_
+
+    **No es un 429 de cuota agotada: es un 400, un rechazo de política.** Anthropic clasifica a hermes-agent como _third-party app_ y ya no le permite consumir del plan Pro — solo de créditos de pago. Con los créditos desactivados, se queda sin nada de lo que tirar. Esto explica exactamente el síntoma que motivó la fase: el consumo del bot **sí** salía de créditos, y la mitad culpable era el agent loop de hermes, no el runner.
+
+  - [x] **Causa a nivel de mecanismo, leída del código real, no inferida**: hermes-agent nunca invoca el binario `claude`. `grep` sobre `/opt/hermes/hermes_cli/providers.py` no encuentra ni un `subprocess`/`Popen`/`spawn`, y el alias que las notas de exploración señalaban como posible salida resulta ser un alias puro al mismo camino HTTP: `"claude-code": "anthropic"` (línea 265). No existe ninguna configuración que haga pasar el loop de hermes por el binario oficial.
+  - [x] **El runner NO está afectado — el sistema queda partido en dos.** Verificado en el despliegue real ejecutando `checkSessionValid` (que lanza un contenedor efímero con `claude -p`, el binario oficial de Claude Code, con el mismo token OAuth): devuelve `{"valid": true}`. Anthropic distingue su propio Claude Code de una app de terceros que use el mismo token. Consecuencia: `run_coding_task`/`run_claude_command` siguen contra la suscripción Pro, mientras que todo lo conversacional (`run-task`, `resolve-issue`, `status-report`, `ask-brain`, `run-design-task`) está **caído**, porque todos dependen del agent loop de hermes. El bot de control (US-9.2) sobrevive por no usar modelo alguno.
 - **US-12.4** — Como Operador, quiero un corte duro que haga imposible consumir créditos por accidente, para no depender de que la configuración siga siendo correcta en el futuro.
   - [ ] Créditos deshabilitados en `Settings > Usage`, o —si el Operador prefiere conservarlos para uso interactivo propio— límite de gasto mensual explícito y bajo, documentado con el valor elegido y el porqué.
   - [ ] Decisión tomada y registrada sobre qué debe hacer Hermes al agotar la ventana de 5 h: fallar y avisar por Telegram, o encolar y reintentar. Hoy no hay ninguna política — es un hueco real, no un detalle.
@@ -596,7 +605,62 @@ Hipótesis a descartar, en orden de probabilidad:
 
 Está documentado con evidencia real —no por diseño— a qué se imputa cada uno de los dos caminos de consumo del sistema (hermes-agent por HTTP directo, y `claude -p` en los contenedores efímeros), la causa del síntoma reportado por el Operador está identificada o descartada explícitamente hipótesis por hipótesis, y existe un corte duro que impide que se consuman créditos sin acción deliberada del Operador.
 
-**Nota de honestidad**: US-12.1, US-12.3 y US-12.4 requieren acceso a `Settings > Usage` de la cuenta de Anthropic del Operador — no son verificables desde el repo ni desde una sesión de Claude Code, por mucho código que se lea. La parte de código (US-12.2, US-12.5) sí lo es. Esta fase no se cierra con la mitad hecha.
+**Nota de honestidad**: US-12.1 y US-12.4 requieren acceso a `Settings > Usage` de la cuenta del Operador. US-12.3, que era la incógnita real de esta fase, quedó resuelta de la forma más contundente posible: desactivar los créditos convirtió una pregunta de atribución en un error explícito de la API.
+
+**Corrección de un supuesto de esta fase, escrita al descubrirse**: las hipótesis se ordenaron por probabilidad poniendo "créditos habilitados en la cuenta" primero y la ruta HTTP de hermes tercera. El orden era incorrecto — no eran independientes. Los créditos habilitados eran el _mecanismo_ por el que la hipótesis 3 pasaba desapercibida: mientras hubo saldo, la política de third-party apps se cobraba en silencio. Desactivarlos no descartó una hipótesis, sino que **destapó** la otra.
+
+**Consecuencia para el proyecto, que excede esta fase**: la premisa de `hermes/spec.md §0.1` —"una única sesión Pro compartida para todo"— es falsa desde este cambio de política de Anthropic. Y el "riesgo de ToS asumido" del §0.2 ha dejado de ser un riesgo teórico: Anthropic lo hace cumplir técnicamente. El trabajo de reemplazo va en la **Fase 13**.
+
+---
+
+## Fase 13 — Independencia de proveedor: cadena de fallback y modelo local
+
+**Prioridad: bloqueante.** Mientras no esté, todo lo conversacional de Hermes sigue caído — no es una mejora, es una reparación.
+
+**Objetivo**: que el agent loop de Hermes deje de depender de un único proveedor que Anthropic acaba de cerrarle, mediante una **cadena explícita de proveedores** con degradación ordenada: modelo local gratuito primero, proveedor barato después, y Anthropic con créditos como último recurso consciente.
+
+**Depende de**: Fase 12 (el hallazgo que la motiva y la justifica).
+
+**Motivo**: la Fase 12 demostró que hermes-agent es "third-party" para Anthropic y no puede consumir del plan Pro (`HTTP 400`, ver US-12.3). El runner (`claude -p`) sí puede. La respuesta no es elegir _otro_ proveedor único —eso repite el mismo error con otro nombre— sino dejar de tener un único punto de fallo de proveedor.
+
+**Lo que ya está verificado en el código real de hermes-agent** (no hay que investigarlo otra vez):
+
+- **`fallback_providers` existe y es una cadena ordenada**, top-level en `config.yaml`, gestionada por el subcomando `hermes fallback` (`hermes_cli/fallback_cmd.py`). Hoy está en `[]`. Es exactamente el mecanismo que esta fase necesita — no hay que construirlo.
+- **Los modelos locales están soportados de fábrica**: `ollama` (mapeado al proveedor `custom`, es decir local vía `base_url`), `ollama-cloud`, `lmstudio`, `vllm`, `llamacpp` y un `local` genérico (`hermes_cli/providers.py:336-344`).
+- **Ningún proveedor está marcado como "gratuito" en el código.** No existe un flag `free`: la gratuidad viene o de ejecutar en hardware propio (Ollama local) o del free tier comercial de un proveedor concreto (Gemini vía AI Studio, Hugging Face). Eso hay que verificarlo proveedor a proveedor, no darlo por hecho.
+
+**Restricción de hardware, medida — no supuesta**: en la máquina donde corre el compose hoy hay **7,8 GiB de RAM totales, ~1,9 GiB libres** (el stack ya consume 5,8 GiB), 6 núcleos y **sin GPU**. Un modelo 7B cuantizado a Q4 necesita ~5 GiB. Con esas cifras, Ollama local **no cabe hoy** sin liberar memoria, ampliar la asignación de WSL2 (`.wslconfig`), o correrlo en otra máquina. Esto no invalida la fase, pero sí obliga a que US-13.1 se resuelva antes de comprometerse con nada.
+
+### User stories
+
+- **US-13.1** — Como Operador, quiero saber si un modelo pequeño y local puede hacer llamadas a tools MCP de forma fiable, **antes** de construir nada encima. Es la puerta de la fase.
+  - [ ] Medido el margen real de RAM y decidido dónde corre Ollama (esta máquina con más RAM asignada, u otra). Documentado con cifras, no con impresiones.
+  - [ ] Probado al menos un modelo pequeño (candidatos: `qwen2.5:3b`, `llama3.2:3b`, `gemma2:2b`) contra el flujo real: una petición de Telegram que dispare `run-task` end-to-end, con la llamada MCP a `run_coding_task` hecha **de verdad** (fila nueva en `runner.task_runs`), no descrita en texto.
+  - [ ] Si el modelo no llama a las tools de forma fiable, **se dice y se rediseña la fase**, igual que se hizo en US-8.1 con el hallazgo de `Artifact`. Un loop local que alucina llamadas a tools es peor que no tenerlo: el bug 2 de la Fase 8 ya demostró que un modelo mal equipado fabrica resultados plausibles en vez de fallar.
+- **US-13.2** — Como Operador, quiero Ollama desplegado y hablando con hermes-agent, para tener un eslabón que no dependa de ningún proveedor externo ni cueste dinero por turno.
+  - [ ] Servicio de Ollama alcanzable desde el contenedor `hermes`, con el modelo elegido en US-13.1 descargado y persistido en un volumen.
+  - [ ] `hermes config set model.provider ollama` (+ `base_url`) verificado con una respuesta real por Telegram, no solo con `hermes chat`.
+- **US-13.3** — Como Operador, quiero una cadena de fallback configurada, para que un proveedor caído o bloqueado degrade en vez de tumbar el sistema.
+  - [ ] Cadena establecida con `hermes fallback` y visible en `config.yaml`, con el orden decidido y justificado (por defecto: local → barato → Anthropic).
+  - [ ] **Verificado con un fallo real forzado**, no por diseño: apagar Ollama y comprobar que el turno siguiente lo atiende el eslabón siguiente y el Operador recibe respuesta igualmente.
+- **US-13.4** — Como Operador, quiero evaluar los proveedores de pago y los free tiers con datos, para elegir el eslabón intermedio sabiendo lo que cuesta.
+  - [ ] Comparados al menos tres candidatos del catálogo de hermes-agent con **precio real por millón de tokens** y free tier si lo hay (candidatos de partida: OpenRouter con modelos `:free`, Gemini vía AI Studio, Hugging Face). Precios verificados en la fuente, nunca de memoria.
+  - [ ] Estimado el coste mensual real cruzando esos precios con el uso conversacional medido — `/metricas` de la Fase 9 da las tareas por ventana, que es el insumo que faltaba.
+- **US-13.5** — Como Operador, quiero saber qué proveedor atendió cada turno, porque sin eso no sé qué estoy pagando ni cuándo degradó la cadena.
+  - [ ] El proveedor que atiende cada turno queda registrado y es consultable a posteriori.
+  - [ ] Expuesto en el bot de control como un comando nuevo (p. ej. `/proveedor`), que es el camino determinista y sin coste ya construido en la Fase 9.
+- **US-13.6** — Como Operador, quiero Anthropic como último eslabón consciente, para no perder la calidad de Claude cuando de verdad haga falta.
+  - [ ] Créditos reactivados **con tope de gasto mensual explícito** y el valor elegido documentado, o la decisión contraria escrita con su porqué.
+  - [ ] Verificado que Anthropic solo entra cuando los eslabones anteriores fallan, no como primera opción por descuido de configuración.
+- **US-13.7** — Como Operador, quiero el spec corregido, para que no siga describiendo una arquitectura que ya no existe.
+  - [ ] `hermes/spec.md §0.1–§0.3` reescrito: la premisa de "una única sesión Pro compartida para todo" es **falsa** desde el cambio de política de Anthropic. El runner sigue en Pro vía `claude -p`; el agent loop, no.
+  - [ ] El "riesgo de ToS asumido" del §0.2 se actualiza: ha dejado de ser un riesgo teórico, Anthropic lo hace cumplir técnicamente. Para el agent loop, la nueva configuración además lo elimina.
+
+### Definition of Done
+
+Hermes vuelve a responder por Telegram, atendido por una cadena de proveedores con al menos dos eslabones vivos, verificada con un fallo real forzado — y el Operador puede saber, a posteriori y sin gastar tokens, qué proveedor atendió cada turno y cuánto le está costando.
+
+**Nota de alcance**: esta fase NO toca el runner. `run_coding_task`/`run_claude_command` siguen sobre la suscripción Pro vía `claude -p`, que es el camino que Anthropic sí permite — verificado en la Fase 12. Cambiar eso sería tirar la única mitad del sistema que sigue funcionando gratis.
 
 ---
 
