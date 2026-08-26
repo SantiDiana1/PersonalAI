@@ -22,31 +22,38 @@ Dado esto, **nuestro trabajo no es reimplementar nada de lo anterior**. Es const
 
 Todo lo demás (leer GitHub Issues, leer Notion, leer Jira) se resuelve registrando servidores MCP **de terceros ya existentes** para esas plataformas — no se escriben conectores propios.
 
-### 0.1 Autenticación: token OAuth de larga duración para todo, vía suscripción Pro
+### 0.1 Autenticación: dos caminos distintos, no uno
 
-> **INVALIDADO POR UN CAMBIO DE POLÍTICA DE ANTHROPIC (verificado el 2026-08-26, Fase 12 US-12.3).** Lo que sigue describe la decisión original, que ya solo se cumple a medias. Anthropic clasifica a hermes-agent como _third-party app_ y le rechaza el consumo del plan Pro con `HTTP 400 invalid_request_error` — _"Third-party apps now draw from your extra usage, not your plan limits"_. El sistema queda partido:
->
-> - **`claude-code-runner-mcp` sigue igual y funciona**: ejecuta el binario oficial `claude -p`, que Anthropic sí acepta contra la suscripción. Verificado con `checkSessionValid` → `{"valid": true}` después del bloqueo.
-> - **El agent loop de hermes-agent, no**: hace peticiones HTTP directas a `api.anthropic.com` y nunca invoca el binario (`providers.py` no tiene ningún `subprocess`; el alias `"claude-code": "anthropic"` es puro, no un camino distinto). Necesita otra fuente de tokens — ver **Fase 13** del roadmap.
->
-> Consecuencia para el §0.2 de abajo: el "riesgo de ToS asumido" ha dejado de ser teórico. Anthropic lo hace cumplir técnicamente.
+> **Reescrito el 2026-08-26 (US-13.7).** Hasta esa fecha esta sección afirmaba que _todo_ el sistema se autenticaba con una única sesión Pro compartida. **Eso es falso** desde el cambio de política de Anthropic verificado en la Fase 12 (US-12.3), y no era un matiz: describía mal **dónde va el dinero**. La versión anterior quedó un tiempo con una banda de "INVALIDADO" encima mientras el texto seguía diciendo lo contrario — se sustituye entera.
 
-**Decisión de este proyecto** (original, ver aviso de arriba): tanto el propio hermes-agent (para su agent loop / chat) como los contenedores de `claude-code-runner-mcp` (para resolver issues) se autentican **exclusivamente con un token OAuth de larga duración de la suscripción Pro del operador**, nunca con `ANTHROPIC_API_KEY`. En la práctica esto significa:
+El sistema tiene **dos caminos de consumo separados**, con facturación distinta. Confundirlos es el error que costó la Fase 12 entera.
 
-- El token se genera **una única vez** en el host con `claude setup-token` (login interactivo, ver §0.3), que **imprime por stdout** un token de larga duración (`sk-ant-oat01-...`) — no crea ni deja ningún archivo de sesión reutilizable. Ese token se guarda como secreto único, `hermes-claude-auth` (§0.3), inyectado como variable de entorno `CLAUDE_CODE_OAUTH_TOKEN`.
-- **hermes-agent** no necesita ningún wrapper propio: soporta de fábrica el proveedor `anthropic` (alias `claude-code`) autenticándose vía `CLAUDE_CODE_OAUTH_TOKEN` (o, alternativamente, detectando `~/.claude/.credentials.json` si existiera de un login interactivo completo — no es el caso aquí). Confirmado explorando su código real (`agent/anthropic_adapter.py`, `hermes_cli/auth.py`) — ver `docs/hermes/exploration-notes.md` §4 para el detalle. No se construye ningún wrapper.
-- **`claude-code-runner-mcp`** inyecta el mismo `CLAUDE_CODE_OAUTH_TOKEN` como variable de entorno en cada contenedor efímero, y ejecuta `claude -p` de forma no interactiva (§3.2) — el CLI de Claude Code soporta esta variable nativamente para uso headless, es su mecanismo documentado para CI/entornos sin navegador.
-- Un único secreto (`hermes-claude-auth`, el valor del token), compartido por ambos componentes vía sus respectivos `.env`/secret store — **no** es un volumen Docker con archivos de sesión (ver §0.3 para la corrección respecto al diseño original de este spec).
+**Camino 1 — el runner (`claude-code-runner-mcp`): suscripción Pro. Sigue funcionando.**
 
-### 0.2 Nota de riesgo — léela antes de desplegar
+Cada tarea lanza un contenedor efímero que ejecuta `claude -p`, el binario oficial de Claude Code, con `CLAUDE_CODE_OAUTH_TOKEN` inyectado como variable de entorno. Anthropic acepta ese uso contra la suscripción: es su propio cliente. Verificado tras el bloqueo con `checkSessionValid` → `{"valid": true}`.
 
-Esto **viola explícitamente los Términos de Servicio de consumidor de Anthropic**. Desde febrero de 2026, Anthropic aclaró que los tokens OAuth de cuentas Free/Pro/Max están autorizados únicamente para Claude Code y Claude.ai — no para el Agent SDK, ni para terceros que envuelvan el CLI para otros fines (como hace este proyecto con hermes-agent).
+**Camino 2 — el agent loop de hermes-agent: créditos de pago. No puede usar el plan.**
 
-- **No hay bloqueo técnico**: el token OAuth es válido para cualquier llamada, la haga el CLI oficial o un wrapper. Por eso esto es viable de implementar.
-- **Sí hay riesgo contractual**: si Anthropic lo detecta, la consecuencia habitual es suspensión de la cuenta — no solo del uso automatizado, sino de tu cuenta Pro entera, incluyendo tu uso normal de Claude Code para tu trabajo diario.
-- **Precedente**: el propio proyecto NanoClaw tiene un issue abierto (#1224) discutiendo esto tras la aclaración de ToS de febrero 2026; la comunidad lo trata como "riesgo asumido por el usuario", no como algo resuelto o sancionado por Anthropic.
-- Este proyecto se hace con ese riesgo **consciente y aceptado** por el operador, como experimento personal de bajo volumen — no como base para un despliegue de cara a terceros ni como pieza de portfolio profesional sin matizar este punto.
-- Mitigación parcial: mantener el secreto `hermes-claude-auth` (el token) como único punto de fallo — si Anthropic revoca la sesión, se reautentica a mano (§3.3) y punto; no se automatiza la reautenticación para no agravar la situación con extracción de tokens adicional.
+hermes-agent hace peticiones HTTP directas a `api.anthropic.com` y **nunca invoca el binario `claude`** — comprobado en su código: `hermes_cli/providers.py` no contiene ningún `subprocess`/`Popen`/`spawn`, y el alias `"claude-code": "anthropic"` (línea 265) es un alias puro, no un camino distinto. Para Anthropic eso es una _third-party app_, y desde el cambio de política la rechaza con `HTTP 400 invalid_request_error`: _"Third-party apps now draw from your extra usage, not your plan limits"_.
+
+**No es un 429 de cuota agotada. Es un 400, un rechazo de política.** La distinción es diagnóstica y conviene tenerla a mano: un `429 rate_limit_error` significa que la petición **se aceptó** y se contabilizó contra una cuota; un `400` significa que ni siquiera se admite. Fue exactamente así como se confirmó, el 2026-08-26, que reactivar los créditos había desbloqueado el sistema: la misma llamada pasó de `400` a `429`.
+
+Todo lo conversacional depende del camino 2 — `run-task`, `resolve-issue`, `resolve-jira-task`, `status-report`, `ask-brain`, `run-design-task`— porque todos pasan por el agent loop. El bot de control (`apps/control-bot`) es la única superficie que sobrevive a un corte de ambos caminos, precisamente por no usar modelo alguno.
+
+**Consecuencia operativa, que es lo que de verdad importa**: mientras el agent loop consuma créditos, **cada turno cuesta dinero real**, incluida cada pasada de un cronjob que no encuentra nada que hacer. El control de gasto deja de ser higiene y pasa a ser el freno principal — ver US-13.6 del roadmap (tope mensual explícito) y la nota de coste del cron en [roadmap.md](../roadmap.md#milestone-v2--qué-es-la-segunda-versión).
+
+El secreto sigue siendo uno solo (`hermes-claude-auth`, el valor del token OAuth), compartido por ambos caminos vía sus respectivos `.env`. Lo que cambió no es cómo se guarda la credencial, sino **contra qué se factura cada uso**.
+
+### 0.2 Nota de riesgo — actualizada, ya no es teórica
+
+> **Reescrito el 2026-08-26 (US-13.7).** La versión anterior decía "no hay bloqueo técnico: el token OAuth es válido para cualquier llamada". Eso ha dejado de ser cierto para el agent loop.
+
+Usar un token OAuth de una cuenta de consumidor fuera de Claude Code y Claude.ai **viola los Términos de Servicio de consumidor de Anthropic**, y desde el cambio de política **Anthropic lo hace cumplir técnicamente**, no solo contractualmente:
+
+- **Para el agent loop (camino 2), hay bloqueo técnico y ya se materializó.** No es un riesgo pendiente: ocurrió, tumbó todo lo conversacional del sistema, y motivó las Fases 12 y 13. La forma de operar dentro de las reglas es que ese camino consuma de créditos de pago o de otro proveedor — que es la configuración actual.
+- **Para el runner (camino 1), el riesgo contractual sigue vigente y sin resolver.** Anthropic acepta hoy `claude -p` con ese token contra la suscripción, pero el uso que hace este proyecto —invocarlo desatendido desde un agente— no es el uso interactivo que los ToS contemplan. Sigue asumido **de forma consciente** por el Operador como experimento personal de bajo volumen, con la misma consecuencia posible que antes: suspensión de la cuenta Pro entera, no solo del uso automatizado.
+- **Lo que cambió, en una frase**: el riesgo dejó de ser uniforme. Un camino ya fue cortado y está regularizado; el otro sigue siendo una apuesta.
+- Mitigación sin cambios: el token es el único punto de fallo. Si Anthropic revoca la sesión, se reautentica a mano (§3.3). La reautenticación **no se automatiza**, deliberadamente, para no agravar la situación con extracción de tokens adicional.
 
 ### 0.3 Corrección de diseño — `hermes-claude-auth` es un token, no un volumen de archivos
 
@@ -58,6 +65,8 @@ Esto **viola explícitamente los Términos de Servicio de consumidor de Anthropi
 **Diseño corregido**: `hermes-claude-auth` es el **valor del token** (`sk-ant-oat01-...`), generado una vez con `claude setup-token`, guardado como secreto (`.env` fuera de git en el servidor local, único entorno de este proyecto — nunca en el repo ni horneado en una imagen), e inyectado como `CLAUDE_CODE_OAUTH_TOKEN` tanto en el proceso de hermes-agent como en cada contenedor efímero de `claude-code-runner-mcp`. Todas las referencias de este documento a "volumen `hermes-claude-auth` montado read-only en `/root/.claude`" deben leerse como "variable de entorno `CLAUDE_CODE_OAUTH_TOKEN` inyectada desde el secreto `hermes-claude-auth`" — el resto del razonamiento (sesión única compartida, sin API key, riesgo de ToS de §0.2, reautenticación manual) no cambia.
 
 Verificado extremo a extremo (US-0.4): `docker run --env-file .env ... claude -p "..."` responde correctamente usando únicamente `CLAUDE_CODE_OAUTH_TOKEN`, sin exponer el valor del token en ningún log.
+
+**Esta sección sigue siendo válida tal cual** tras la reescritura de §0.1/§0.2 (US-13.7): el hallazgo es sobre **cómo se almacena** la credencial (un token en una variable de entorno, no un volumen de archivos), y eso no lo tocó el cambio de política de Anthropic. Lo único que hay que releer con la cabeza puesta en §0.1 es la frase "sesión única compartida": la credencial sí es única, pero **lo que se factura con ella ya no**.
 
 ## 1. Objetivos
 

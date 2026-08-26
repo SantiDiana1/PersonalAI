@@ -184,30 +184,50 @@ approvals:
 # config.yaml, gestionado con `hermes fallback` — hermes_cli/fallback_cmd.py).
 # No hay que construir nada, solo configurarlo.
 #
-# ORDEN DECIDIDO, de barato a caro:
+# ORDEN VIGENTE, revisado el 2026-08-26 tras verificarlo contra el despliegue:
 #
-#   1. ollama    — modelo local. Coste por turno: cero. Sin cuota, sin red.
-#                  Es el eslabón por defecto porque el loop de hermes sobre
-#                  todo ORQUESTA (decide qué tool llamar y formatea la
-#                  respuesta); el trabajo caro de verdad lo hace Claude Code
-#                  dentro del runner, que sigue en la suscripción Pro.
-#   2. <barato>  — proveedor comercial pequeño, PENDIENTE de elegir con precios
-#                  reales (US-13.4). Cubre el caso de que el modelo local no dé
-#                  la talla en una petición concreta.
-#   3. anthropic — último recurso consciente, contra usage credits y con tope
-#                  de gasto mensual. Calidad de Claude cuando de verdad hace
-#                  falta, pagando por ello a sabiendas.
+#   1. anthropic (primario) — calidad conocida. Consume usage credits, no el
+#                  plan Pro, así que cada turno cuesta dinero: el tope mensual
+#                  de US-13.6 es el freno real.
+#   2. openrouter minimax/minimax-m3:free       — respaldo, coste cero.
+#   3. openrouter nvidia/nemotron-3.5-lightning:free — segundo respaldo.
 #
-# NO se aplica copiando este fichero (ver cabecera). Se aplica con:
-#   hermes config set model.provider ollama
-#   hermes fallback add anthropic
+# POR QUÉ YA NO ENCABEZA OLLAMA: el modelo local pasó a futurible (US-13.1/
+# US-13.2). Nació como reparación de emergencia mientras el agent loop estuvo
+# caído; al reactivarse los créditos dejó de haber emergencia, y la resiliencia
+# sale casi gratis con una credencial de OpenRouter que ya existía sin usar en
+# el .env. El servicio `ollama` sigue en el compose tras el profile `local-llm`,
+# listo para retomarse.
+#
+# POR QUÉ ESOS DOS MODELOS Y NO OTROS: un eslabón de respaldo que no sepa
+# llamar a tools es inútil para un agent loop. De los 17 modelos `:free` del
+# catálogo, 16 declaran soporte de tools — pero eso es una afirmación del
+# catálogo, no una prueba. Se verificó con una llamada real: ambos emiten un
+# `tool_call` correcto a `run_coding_task` con los argumentos bien formados.
+# (Ojo: `thinkingmachines/inkling:free` devuelve 403 "only available on agentic
+# harnesses" — declara tools y no se puede usar. Por eso se prueba, no se cree.)
+#
+# NO se aplica copiando este fichero (ver cabecera). `hermes fallback add` es un
+# selector interactivo y no sirve por `docker exec`; se edita `config.yaml` con
+# la forma que espera el código ({provider, model}) y se reinicia hermes.
+#
+# HALLAZGO REAL, verificado forzando un fallo (US-13.3): la cadena la carga el
+# GATEWAY (`gateway/run.py::_load_fallback_model`), no el CLI de un disparo.
+# Con el primario apuntando a un puerto muerto, `hermes -z` falla con
+# "API call failed after 3 retries: Connection error" y NO cae al respaldo,
+# mientras que un cronjob —que sí pasa por el gateway— responde con normalidad.
+# Es decir: probar el fallback con `hermes -z` da un falso negativo. Todo lo que
+# importa (Telegram, cron) va por el gateway y sí está cubierto.
 #
 # ADVERTENCIA vigente: si defines ANTHROPIC_API_KEY en el .env, hermes-agent la
 # tomará en lugar de cualquier otra ruta de Anthropic. Sigue sin haber ninguna.
 model:
-  provider: ollama
+  provider: anthropic
+  default: claude-sonnet-4-5-20250929
 
-# El eslabón intermedio se añadirá aquí cuando US-13.4 lo haya elegido con
-# precios verificados. Mientras tanto, la cadena tiene dos eslabones reales.
+# Requiere OPENROUTER_API_KEY en ~/.hermes/.env — ya estaba presente y sin usar.
 fallback_providers:
-  - anthropic
+  - provider: openrouter
+    model: minimax/minimax-m3:free
+  - provider: openrouter
+    model: nvidia/nemotron-3.5-lightning:free

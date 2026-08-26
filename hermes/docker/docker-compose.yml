@@ -248,7 +248,13 @@ services:
       # volumen con un token de por medio que este bot no debe montar). Si se
       # cambia la cadena con `hermes fallback`, hay que actualizar esto también
       # — el comando lo advierte en su propia salida.
-      CONTROL_BOT_PROVIDER_PROBES: ${CONTROL_BOT_PROVIDER_PROBES:-ollama|ollama|http://ollama:11434,anthropic|http|https://api.anthropic.com/v1/models}
+      #
+      # Actualizado el 2026-08-26: la cadena pasó a `anthropic` (primario) →
+      # OpenRouter (respaldo gratuito). Se retira la sonda de `ollama`: con el
+      # modelo local en futurible, aparecería como CAÍDO en cada consulta y un
+      # aviso permanente que siempre es falso enseña a ignorar los avisos.
+      # Si se retoma el profile `local-llm`, hay que volver a añadirla.
+      CONTROL_BOT_PROVIDER_PROBES: ${CONTROL_BOT_PROVIDER_PROBES:-anthropic|http|https://api.anthropic.com/v1/models,openrouter|http|https://openrouter.ai/api/v1/models}
       # Estado de los cronjobs para `/cron`. Solo lectura; ver el mount y el
       # `user:` de abajo, que es donde está el matiz.
       CONTROL_BOT_CRON_JOBS_PATH: /hermes-cron/jobs.json
