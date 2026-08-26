@@ -80,6 +80,7 @@ export async function runCodingTask(
   const taskRunId = await insertTaskRun({
     repo: input.repo,
     taskTitle: input.taskTitle,
+    tool: 'run_coding_task',
     ...(input.brainContext !== undefined ? { brainContext: input.brainContext } : {}),
   });
 

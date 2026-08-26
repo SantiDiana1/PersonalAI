@@ -6,6 +6,17 @@
 
 export type TaskRunStatus = 'running' | 'success' | 'failed' | 'needs_human_input' | 'timed_out';
 
+/**
+ * Qué tool MCP originó una fila de `runner.task_runs`.
+ *
+ * Existe porque sin ella las métricas no se pueden calcular: hasta la Fase 9
+ * ambas tools insertaban filas indistinguibles, así que "tasa de éxito de
+ * `run_coding_task`" (US-9.2) salía contaminada con las ejecuciones de
+ * `/design` y `/dataviz`, que fallan por motivos distintos y no dicen nada
+ * sobre la calidad del flujo de código.
+ */
+export type TaskRunTool = 'run_coding_task' | 'run_claude_command';
+
 export interface RunCodingTaskInput {
   /** owner/repo */
   repo: string;

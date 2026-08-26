@@ -114,6 +114,7 @@ export async function runClaudeCommand(
   const taskRunId = await insertTaskRun({
     repo: input.repo ?? 'n/a',
     taskTitle: `${input.slashCommand} ${input.prompt}`.slice(0, 200),
+    tool: 'run_claude_command',
     ...(input.brainContext !== undefined ? { brainContext: input.brainContext } : {}),
   });
 

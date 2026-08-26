@@ -47,6 +47,18 @@ Este repo se desarrolla siguiendo un enfoque _spec-first_: antes de escribir có
 - **Brain se mantiene básico en este proyecto**: ingestión + búsqueda por similitud, sin capa de consolidación (extracción de hechos vía LLM, reconciliación, mental models). Esa capa está diseñada en el spec como referencia, pero no se construye aquí — es trabajo futuro que haré yo por mi cuenta.
 - **Orden de las fases (Milestone v1 = Fases 0 a 5)**: fundación (0), `claude-code-runner-mcp` (1), hermes-agent en local + GitHub (2), Telegram (3), Brain básico (4), integración Brain↔Hermes (5). Notion/Jira y pulido de portfolio son futuribles post-v1. Ver [docs/roadmap.md](docs/roadmap.md).
 
+## Métricas de uso
+
+`personalai-metrics` (en `apps/metrics-cli`) imprime un informe de solo lectura del uso real del sistema: tareas delegadas a Claude Code y su tasa de éxito por tool, y eventos ingestados en Brain. Necesita `DATABASE_URL` apuntando a la misma base de datos que usan el runner y Brain.
+
+```sh
+pnpm --filter @personalai/metrics-cli run build
+DATABASE_URL=postgresql://... node apps/metrics-cli/dist/index.js
+DATABASE_URL=postgresql://... node apps/metrics-cli/dist/index.js --json
+```
+
+La cuenta de tareas de las últimas 5 h es un **proxy** de la ventana de cuota de Claude Pro, no consumo real: Anthropic no expone esa telemetría por API (ver Fase 12 del roadmap).
+
 ## Licencia
 
 Este proyecto es de uso personal y no está licenciado para redistribución.

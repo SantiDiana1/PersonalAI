@@ -1,0 +1,25 @@
+{
+  "name": "@personalai/metrics-cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CLI de métricas de uso real: tareas del runner y eventos ingestados en Brain",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "personalai-metrics": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.5"
+  }
+}

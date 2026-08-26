@@ -5,6 +5,7 @@ import type {
   RunCodingTaskOutput,
   TaskRunStatus,
   TaskRunSummary,
+  TaskRunTool,
 } from './types.js';
 
 const { Pool } = pg;
@@ -26,6 +27,33 @@ create table if not exists runner.task_runs (
   started_at timestamptz not null default now(),
   finished_at timestamptz
 );
+
+-- Añadida en la Fase 9 (US-9.2) sobre una tabla que ya tenía datos reales en
+-- producción. El bloque condicional no es ceremonia: \`migrate()\` corre en
+-- cada arranque del servidor, y el backfill debe ejecutarse UNA vez —
+-- reclasificar en cada boot sería trabajo repetido y, peor, machacaría una
+-- corrección manual del Operador sobre una fila mal clasificada.
+--
+-- El backfill es heurístico por necesidad: las filas históricas no guardan
+-- qué tool las creó, y lo único que las distingue es que \`run_claude_command\`
+-- construye su \`task_title\` como "<comando> <prompt>" (ver
+-- runClaudeCommand.ts) con el comando salido de ALLOWED_SLASH_COMMANDS. Es
+-- fiable para los datos existentes, pero es una inferencia sobre el pasado,
+-- no un dato registrado — las filas nuevas sí lo llevan explícito.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'runner' and table_name = 'task_runs' and column_name = 'tool'
+  ) then
+    alter table runner.task_runs
+      add column tool text not null default 'run_coding_task';
+
+    update runner.task_runs
+      set tool = 'run_claude_command'
+      where task_title like '/design %' or task_title like '/dataviz %';
+  end if;
+end $$;
 `;
 
 /** Devuelve el pool compartido, o `null` si `DATABASE_URL` no está configurada (modo sin persistencia, solo para pruebas manuales). */
@@ -50,6 +78,7 @@ export async function migrate(): Promise<void> {
 export async function insertTaskRun(params: {
   repo: string;
   taskTitle: string;
+  tool: TaskRunTool;
   brainContext?: string;
 }): Promise<string | null> {
   const p = getPool();
@@ -65,8 +94,8 @@ export async function insertTaskRun(params: {
   const brainContextJson =
     params.brainContext !== undefined ? JSON.stringify(params.brainContext) : null;
   const res = await p.query<{ id: string }>(
-    `insert into runner.task_runs (repo, task_title, status, brain_context) values ($1, $2, 'running', $3) returning id`,
-    [params.repo, params.taskTitle, brainContextJson],
+    `insert into runner.task_runs (repo, task_title, status, brain_context, tool) values ($1, $2, 'running', $3, $4) returning id`,
+    [params.repo, params.taskTitle, brainContextJson, params.tool],
   );
   return res.rows[0]?.id ?? null;
 }
