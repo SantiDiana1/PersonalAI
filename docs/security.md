@@ -116,6 +116,22 @@ cualquiera puede escribirle.
   lo tenga puede leer todo lo que le escribes al bot y suplantarlo. Vive en el
   `.env` fuera de git, igual que el resto (ver SEC-6.2).
 
+- **SEC-1.5 — El bot de control tiene token y allowlist propios, y es el
+  servicio menos privilegiado.** El segundo bot de Telegram (`apps/control-bot`,
+  Fase 9) NO comparte el token de Hermes — no podría aunque se quisiera:
+  Telegram solo admite un consumidor de updates por token. SEC-1.1 a SEC-1.3
+  aplican igual y por separado: allowlist propia y obligatoria (el proceso no
+  arranca sin ella, verificado con test), y su token es un secreto de primer
+  nivel.
+
+  Lo que **no** tiene, deliberadamente, porque ingiere texto de Telegram igual
+  que hermes: socket de Docker, `CLAUDE_CODE_RUNNER_AUTH_TOKEN` (ese token
+  autentica también `/mcp`, que lanza contenedores), puertos publicados, y
+  acceso a workspaces o artefactos. Su única capacidad es hacer SELECTs
+  agregados contra Postgres y hablar con `api.telegram.org`. Es la aplicación
+  del mismo razonamiento de SEC-2.1: el componente expuesto a texto no
+  confiable recibe el mínimo, no la comodidad.
+
 - **SEC-1.4 — El canal de entrada no cambia las garantías.** Una tarea que llega
   por Telegram pasa exactamente por el mismo `run_coding_task`, con el mismo
   aislamiento y el mismo rate limiting, que una que llega por una issue de
@@ -336,5 +352,6 @@ evidencia pegada en el roadmap.
 | 1 (hecha)     | SEC-4.3, SEC-5.1 – SEC-5.6, SEC-6.3                                                      |
 | 2             | SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1, SEC-6.2 |
 | 3             | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
+| 9             | SEC-1.5, en cuanto el bot de control esté desplegado                                     |
 | 4–5           | Revisión de que Brain no reintroduce superficie (API solo en red interna, token propio)  |
 | Fase 10 de v2 | SEC-7.1 – SEC-7.5, en cuanto exista una instancia "Hermes trabajo"                       |

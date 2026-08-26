@@ -306,3 +306,52 @@ antes de escribirlo:
 La ruta `GET /v1/metrics` exige la misma autenticación Bearer que `/mcp`
 (SEC-3.2), es de solo lectura y sin parámetros, y devuelve agregados fijos —
 nunca títulos de tarea ni contenido de repos.
+
+## 9. Bot de control — el camino determinista definitivo (US-9.2)
+
+Un SEGUNDO bot de Telegram, con su propio token, que responde `/metricas`
+calculando sobre la base de datos: **sin modelo, sin gastar cuota de Claude
+Pro, y sin depender de que un agente decida llamar a la tool correcta**.
+
+Es la alternativa al webhook de §8: mismo determinismo, pero el disparador sí
+es un mensaje. El precio es un bot más en tu Telegram.
+
+**Por qué un bot aparte y no un comando del de Hermes**: Telegram admite un
+único consumidor de updates por token. Si los dos servicios hicieran
+`getUpdates` con el mismo token se robarían los mensajes (error 409 de la Bot
+API). Y un `/comando` dentro de Hermes no es posible: sus slash commands están
+hardcodeados en su registro central (ver §8).
+
+```bash
+# 1. Crear el bot en BotFather (/newbot) y copiar el token. NO reutilices el
+#    de Hermes.
+# 2. Añadir al .env del compose:
+#      CONTROL_BOT_TELEGRAM_TOKEN=<token del bot nuevo>
+#      CONTROL_BOT_ALLOWED_USERS=<los mismos IDs que TELEGRAM_ALLOWED_USERS>
+# 3. Levantarlo:
+docker compose up -d --build control-bot
+docker compose logs -f control-bot   # debe decir "bot de control escuchando"
+```
+
+Luego, en el chat del bot nuevo: `/metricas`. También valen `/metrics`, `/m`,
+y se toleran acentos y mayúsculas (`/Métricas`). `/ayuda` lista los comandos.
+
+**Comportamiento que conviene conocer**:
+
+- **Allowlist obligatoria**: sin `CONTROL_BOT_ALLOWED_USERS` el proceso no
+  arranca (sale con código 2 y un mensaje claro). A un usuario no autorizado no
+  se le contesta **nada** — ni un "no autorizado", que le confirmaría que el bot
+  existe. Queda en el log.
+- **Descarta el backlog al arrancar**: Telegram retiene los mensajes hasta 24 h,
+  así que un `/metricas` enviado mientras el bot estaba caído no se contesta al
+  volver. Un informe de ayer entregado hoy sin avisar sería peor que ninguno.
+- **No hace lenguaje natural, a propósito**: es su garantía de determinismo. Un
+  mensaje que no sea un comando conocido recibe la lista de comandos, nunca una
+  interpretación.
+- **Es el servicio menos privilegiado del compose** (SEC-1.5): sin socket de
+  Docker, sin el token del runner, sin puertos publicados. Solo SELECTs contra
+  Postgres.
+
+Añadir un comando nuevo es añadir una entrada a `COMMANDS` en
+`apps/control-bot/src/commands.ts`: la superficie es exactamente esa lista, no
+un intérprete genérico.

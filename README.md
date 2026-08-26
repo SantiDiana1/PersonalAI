@@ -59,6 +59,8 @@ DATABASE_URL=postgresql://... node apps/metrics-cli/dist/index.js --json
 
 Las mismas métricas se pueden pedir por Telegram: Hermes las sirve con la tool MCP `get_metrics` a través del skill `status-report` ("dame las métricas", "¿cuántas tareas has resuelto?"). El SQL vive en `@personalai/shared`, así que las dos superficies dan el mismo número.
 
+Y hay un **bot de control** de Telegram (`apps/control-bot`) con su propio token: `/metricas` responde calculando directamente sobre la base de datos, sin modelo de por medio y sin gastar cuota de Claude Pro. Es la vía determinista; la conversacional sigue existiendo para quien prefiera preguntar con lenguaje natural.
+
 La cuenta de tareas de las últimas 5 h es un **proxy** de la ventana de cuota de Claude Pro, no consumo real: Anthropic no expone esa telemetría por API (ver Fase 12 del roadmap).
 
 ## Licencia
