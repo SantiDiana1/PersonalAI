@@ -4,7 +4,7 @@ import { logger } from './logger.js';
 import { runCodingTask, type RunCodingTaskDeps } from './runCodingTask.js';
 import { runClaudeCommand, type RunClaudeCommandDeps } from './runClaudeCommand.js';
 import { checkSessionValid } from './session.js';
-import { getRunnerStatusSummary } from './db.js';
+import { getMetrics, getRunnerStatusSummary } from './db.js';
 import { ensureIsolation } from './docker/network.js';
 import {
   ALLOWED_SLASH_COMMANDS,
@@ -81,12 +81,18 @@ export function loadDeps(): RunCodingTaskDeps {
  * con acceso al socket de Docker, así que cualquier operación que exponga es,
  * en la práctica, ejecutable por quien controle al cliente MCP.
  *
- * `get_runner_status` (US-6.3/US-6.4 de docs/roadmap.md — Fase 6) es una
- * excepción acotada a "una sola tool": es de solo lectura (no lanza
- * contenedores de tarea, no toca `/var/run/docker.sock` salvo el mismo
- * contenedor de comprobación de sesión efímero que ya usa `run_coding_task`)
- * y sin parámetros — no amplía la superficie de ataque de la misma forma que
- * un `run_shell_command` genérico.
+ * `get_runner_status` (US-6.3/US-6.4 de docs/roadmap.md — Fase 6) y
+ * `get_metrics` (US-9.2 — Fase 9) son excepciones acotadas: ambas son de solo
+ * lectura y sin parámetros — no amplían la superficie de ataque de la forma
+ * en que lo haría un `run_shell_command` genérico. `get_runner_status` no
+ * toca `/var/run/docker.sock` salvo por el mismo contenedor de comprobación
+ * de sesión efímero que ya usa `run_coding_task`; `get_metrics` no lo toca en
+ * absoluto — solo hace SELECTs agregados contra Postgres.
+ *
+ * Que `get_metrics` no reciba parámetros es deliberado y no una simplificación
+ * pendiente de ampliar: en cuanto aceptara un filtro en texto libre pasaría a
+ * ser una superficie por la que colar SQL o exfiltrar filas concretas desde un
+ * mensaje de Telegram. Devuelve agregados fijos, nunca contenido de tareas.
  *
  * `run_claude_command` (Fase 8, US-8.2) es la segunda tool que sí lanza
  * contenedores — deliberadamente separada de `run_coding_task` (contrato de
@@ -189,6 +195,34 @@ export function createMcpServer(): McpServer {
         tasksNeedingAttention: summary?.tasksNeedingAttention ?? [],
         tasksStartedLast5h: summary?.tasksStartedLast5h ?? null,
         tasksStartedLast7d: summary?.tasksStartedLast7d ?? null,
+      };
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(output) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'get_metrics',
+    {
+      title: 'get_metrics',
+      description:
+        'Métricas acumuladas de uso real del sistema, de solo lectura y sin parámetros: ' +
+        'tareas resueltas y tasa de éxito POR TOOL (run_coding_task frente a ' +
+        'run_claude_command, que fallan por motivos distintos), tareas iniciadas en las ' +
+        'ventanas de 5h/7d/30d, y eventos ingestados en Brain con desglose por fuente. ' +
+        'Mismo dato que imprime el CLI `personalai-metrics`. Distinta de ' +
+        'get_runner_status: esa responde "¿está todo bien AHORA?" (sesión, tareas ' +
+        'atascadas), esta responde "¿cuánto se ha usado esto?". Usada por el skill ' +
+        'status-report cuando el Operador pide métricas o números.',
+      inputSchema: {},
+    },
+    async () => {
+      logger.info('get_metrics recibida');
+      const metrics = await getMetrics();
+      const output = {
+        persistenceAvailable: metrics !== null,
+        metrics,
       };
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(output) }],

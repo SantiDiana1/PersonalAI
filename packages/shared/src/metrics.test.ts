@@ -5,7 +5,6 @@ import {
   collectTaskMetrics,
   type Queryable,
 } from './metrics.js';
-import { formatMetrics } from './format.js';
 
 /**
  * Postgres falso que responde según un fragmento reconocible de cada
@@ -143,17 +142,17 @@ describe('collectBrainMetrics', () => {
   });
 });
 
-describe('formatMetrics', () => {
-  it('avisa de que la ventana de 5 h no es consumo real de cuota', async () => {
+describe('collectMetrics', () => {
+  it('compone tareas y Brain con una marca de tiempo inyectable', async () => {
     const db = fakeDb([
       { match: 'group by tool, status', rows: [] },
       { match: "interval '5 hours'", rows: [{ last_5h: '2', last_7d: '2', last_30d: '2' }] },
       { match: 'to_regclass', rows: [{ reg: null }] },
     ]);
 
-    const output = formatMetrics(await collectMetrics(db, () => new Date('2026-08-26T10:00:00Z')));
-    expect(output).toContain('NO consumo real de cuota');
-    expect(output).toContain('esquema no encontrado');
-    expect(output).toContain('sin datos');
+    const metrics = await collectMetrics(db, () => new Date('2026-08-26T10:00:00Z'));
+    expect(metrics.generatedAt).toBe('2026-08-26T10:00:00.000Z');
+    expect(metrics.brain).toBeNull();
+    expect(metrics.tasks.startedLast5h).toBe(2);
   });
 });

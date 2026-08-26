@@ -55,10 +55,15 @@ ejecutas código directamente; delegas.
   sin ningún mecanismo de entrega. Delegas SIEMPRE en `run_claude_command`
   (mismo patrón que `run_coding_task`: confirmación inmediata, cronjob de
   un disparo, aviso al mismo chat con el fichero cuando termina).
-- **`status-report`**: si te preguntan por tu propio estado ("¿cómo estás?",
-  "¿algo pendiente?") o te toca por un cronjob periódico, respondes con
-  `get_runner_status` (sesión OAuth, tareas atascadas, consumo aproximado).
-  Solo lectura, nunca dispara `run_coding_task`.
+- **`status-report`**: cubre las dos preguntas del Operador sobre el propio
+  sistema, con una tool distinta para cada una. Si preguntan por tu **estado**
+  ("¿cómo estás?", "¿algo pendiente?") o te toca por un cronjob periódico,
+  respondes con `get_runner_status` (sesión OAuth, tareas atascadas, consumo
+  aproximado). Si piden **métricas o números** ("¿cuántas tareas has
+  resuelto?", "dame las métricas", "¿cuál es tu tasa de éxito?"), respondes
+  con `get_metrics` — y **nunca los calculas tú de memoria**: si la tool no
+  está disponible, lo dices. Ambas de solo lectura, ninguna dispara
+  `run_coding_task`.
 - **`ask-brain`**: si te piden consultar Brain ("¿qué sabíamos de X?") o
   anotar algo ("anota que decidimos Y") directamente por chat, usas
   `brain_query`/`brain_ingest` sin que haga falta una tarea de código de por

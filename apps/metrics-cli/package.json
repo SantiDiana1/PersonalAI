@@ -15,6 +15,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@personalai/shared": "workspace:*",
     "pg": "^8.13.1"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import type { Metrics, ToolMetrics } from './metrics.js';
+import type { Metrics, ToolMetrics } from '@personalai/shared';
 
 function pct(rate: number | null): string {
   return rate === null ? 'sin datos' : `${(rate * 100).toFixed(1)} %`;

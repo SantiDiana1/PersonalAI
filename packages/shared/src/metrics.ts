@@ -4,15 +4,32 @@
  * (lo que Brain ha ingerido). Ver docs/roadmap.md US-9.2.
  *
  * Todo lo de este módulo es de SOLO LECTURA y trabaja contra una interfaz
- * mínima (`Queryable`) en vez de contra `pg.Pool` directamente: así los tests
- * ejercitan la lógica de agregación —que es donde están los errores
- * interesantes, no en el driver— sin levantar un Postgres.
+ * mínima (`Queryable`) en vez de contra `pg.Pool` directamente. Eso da dos
+ * cosas: los tests ejercitan la lógica de agregación —donde están los errores
+ * interesantes, no en el driver— sin levantar un Postgres, y este paquete no
+ * necesita depender de `pg`.
+ *
+ * Vive en `shared` y no en el CLI porque tiene dos consumidores con formatos
+ * de salida distintos pero el mismo dato detrás: `personalai-metrics`
+ * (informe de terminal) y la tool MCP `get_metrics` de
+ * `claude-code-runner-mcp`, que es como Hermes las cuenta por Telegram. El
+ * SQL vive en un solo sitio a propósito — duplicarlo es cómo dos superficies
+ * acaban dando números distintos para la misma pregunta.
  */
 
 export interface Queryable {
   query<T extends object>(sql: string, params?: unknown[]): Promise<{ rows: T[] }>;
 }
 
+/**
+ * Qué tool MCP originó una fila de `runner.task_runs`.
+ *
+ * Existe porque sin ella las métricas no se pueden calcular: hasta la Fase 9
+ * ambas tools insertaban filas indistinguibles, así que "tasa de éxito de
+ * `run_coding_task`" (US-9.2) salía contaminada con las ejecuciones de
+ * `/design` y `/dataviz`, que fallan por motivos distintos y no dicen nada
+ * sobre la calidad del flujo de código.
+ */
 export type TaskRunTool = 'run_coding_task' | 'run_claude_command';
 
 /** Estados terminales: una tarea `running` todavía no dice nada sobre éxito. */

@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { collectMetrics, type Metrics, type Queryable } from '@personalai/shared';
 import { logger } from './logger.js';
 import type {
   RunClaudeCommandOutput,
@@ -172,4 +173,22 @@ export async function getRunnerStatusSummary(): Promise<{
     tasksStartedLast5h: Number.parseInt(windows.rows[0]?.last_5h ?? '0', 10),
     tasksStartedLast7d: Number.parseInt(windows.rows[0]?.last_7d ?? '0', 10),
   };
+}
+
+/**
+ * Lectura para la tool MCP `get_metrics` (US-9.2) — el mismo dato que imprime
+ * `personalai-metrics`, servido a Hermes para que pueda contarlo por chat.
+ *
+ * Reutiliza `collectMetrics` de @personalai/shared en vez de repetir el SQL
+ * aquí: si el CLI y Telegram dieran números distintos para la misma pregunta,
+ * ninguno de los dos serviría como evidencia.
+ *
+ * Devuelve `null` sin persistencia configurada, igual que
+ * `getRunnerStatusSummary` — un despliegue de pruebas sin `DATABASE_URL` no
+ * debe romper una consulta de solo lectura.
+ */
+export async function getMetrics(): Promise<Metrics | null> {
+  const p = getPool();
+  if (!p) return null;
+  return collectMetrics(p as Queryable);
 }

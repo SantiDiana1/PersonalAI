@@ -7,6 +7,19 @@
  * de claude-code-runner-mcp llegan en las fases 1 y 2 respectivamente.
  */
 
+export {
+  collectMetrics,
+  collectTaskMetrics,
+  collectBrainMetrics,
+  type Queryable,
+  type Metrics,
+  type TaskMetrics,
+  type BrainMetrics,
+  type ToolMetrics,
+  type TerminalStatus,
+  type TaskRunTool,
+} from './metrics.js';
+
 /** Autoridad de una fuente de ingestion, ver docs/personal-brain/spec.md §4.1. */
 export type SourceAuthority = 'canonical' | 'supporting';
 
