@@ -233,10 +233,14 @@ solo sustituye la tool de listado/reporte por la del servidor equivalente:
   de en la issue; no hay "PR" que abrir vía Notion, así que el PR se sigue
   abriendo con el MCP de GitHub sobre el repo que la tarea de Notion indique
   explícitamente (nunca inferido).
-- **Jira**: igual, pero con el JQL fijo `labels = hermes AND status = "To
-Do"` en vez de la etiqueta de GitHub. "Marcar antes de empezar" es
-  transicionar el issue a "In Progress" (y a "Done"/"Needs Human" al
-  reportar) en vez de tocar etiquetas.
+- **Jira**: **no lo hagas desde aquí.** Jira tiene su propio skill,
+  `resolve-jira-task` (Fase 14) — úsalo. Lo que este documento decía antes
+  ("transicionar el issue a In Progress") quedó **invalidado** al verificarlo
+  contra un site real: los nombres de las transiciones están localizados y sus
+  IDs son propios del workflow del proyecto, así que no sirven como mecanismo.
+  Jira usa las **mismas cuatro etiquetas** que GitHub, y el servidor MCP expone
+  verbos REST crudos en vez de tools con nombre, lo que cambia el procedimiento
+  entero. Ver `hermes/skills/resolve-jira-task/SKILL.md`.
 - **Brain**: `brain_query`/`brain_record_observation` (Pasos 3 y 6) no
   cambian — son agnósticas de la fuente. Al ingerir contenido de Notion/Jira
   con `brain_ingest` (p. ej. desde `ask-brain`), usa `source: 'notion'` o
@@ -251,8 +255,9 @@ Do"` en vez de la etiqueta de GitHub. "Marcar antes de empezar" es
 **Estado real (Fase 7)**: verificado contra servidores reales tras recibir los
 tokens del Operador.
 
-- **Jira**: registrado (`hermes mcp add jira`, servidor `@aashari/mcp-server-
-atlassian-jira` vía npx, env `ATLASSIAN_SITE_NAME`/`ATLASSIAN_USER_EMAIL`/
+- **Jira**: movido a su propio skill en la Fase 14 (ver arriba). Registrado
+  (`hermes mcp add jira`, servidor `@aashari/mcp-server-atlassian-jira` vía
+  npx, env `ATLASSIAN_SITE_NAME`/`ATLASSIAN_USER_EMAIL`/
   `ATLASSIAN_API_TOKEN`). `hermes mcp test jira` conecta y descubre 5 tools
   (`jira_get`/`jira_post`/`jira_put`/`jira_patch`/`jira_delete`). Autenticación
   verificada con una llamada real a la API (`GET

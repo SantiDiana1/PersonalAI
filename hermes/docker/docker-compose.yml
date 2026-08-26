@@ -249,6 +249,31 @@ services:
       # cambia la cadena con `hermes fallback`, hay que actualizar esto también
       # — el comando lo advierte en su propia salida.
       CONTROL_BOT_PROVIDER_PROBES: ${CONTROL_BOT_PROVIDER_PROBES:-ollama|ollama|http://ollama:11434,anthropic|http|https://api.anthropic.com/v1/models}
+      # Estado de los cronjobs para `/cron`. Solo lectura; ver el mount y el
+      # `user:` de abajo, que es donde está el matiz.
+      CONTROL_BOT_CRON_JOBS_PATH: /hermes-cron/jobs.json
+    volumes:
+      # SOLO el subdirectorio `cron` de $HERMES_HOME, y en solo lectura. NO se
+      # monta $HERMES_HOME entero: ahí vive `auth.json` con el token OAuth de
+      # Claude, y este es el proceso que ingiere texto de Telegram (SEC-1.5).
+      - ${HERMES_HOME:-~/.hermes}/cron:/hermes-cron:ro
+    # Mismo uid que hermes-agent, y esto necesita justificación porque rompe la
+    # separación de uid que tenía este contenedor (10003).
+    #
+    # hermes escribe `cron/jobs.json` con modo 0600 y lo REESCRIBE en cada tick
+    # del scheduler, restaurando ese modo — verificado a mano: un `chmod 644`
+    # vuelve a 600 en la siguiente edición. Así que relajar permisos no aguanta,
+    # y no hay ACLs disponibles (`setfacl` no existe ni en el host ni en las
+    # imágenes). Compartir uid es lo único que sobrevive a un redespliegue.
+    #
+    # Por qué es aceptable: en Linux el uid no concede nada por sí mismo, solo
+    # da acceso a ficheros ALCANZABLES, y lo único montado aquí es el directorio
+    # de cron en `:ro`. `auth.json` no está en ese árbol. Lo que sí queda
+    # alcanzable son los transcripts de `cron/output/` — ningún camino del
+    # código los lee, y sobre todo este bot NO TIENE MODELO: ejecuta un registro
+    # fijo de comandos, así que no hay nada a lo que convencer de leerlos.
+    # Documentado en docs/security.md SEC-1.5.
+    user: '10000:10000'
 
   hermes:
     build:

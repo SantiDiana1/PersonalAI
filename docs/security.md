@@ -132,6 +132,29 @@ cualquiera puede escribirle.
   del mismo razonamiento de SEC-2.1: el componente expuesto a texto no
   confiable recibe el mínimo, no la comodidad.
 
+  - _Excepción declarada, añadida con `/cron`_: el contenedor monta
+    `$HERMES_HOME/cron` en **solo lectura** y corre con el **uid de hermes**
+    (10000) en vez del suyo propio (10003). No es comodidad: hermes-agent
+    escribe `cron/jobs.json` con modo 0600 y **lo reescribe restaurando ese
+    modo en cada tick** del scheduler — verificado a mano, un `chmod 644` vuelve
+    a 600 en la siguiente edición — y no hay `setfacl` disponible ni en el host
+    ni en las imágenes. Compartir uid es lo único que sobrevive a un
+    redespliegue.
+  - _Qué NO se amplía_: se monta el subdirectorio `cron`, **no**
+    `$HERMES_HOME`. `auth.json` (token OAuth de Claude) no está en ese árbol y
+    sigue siendo inalcanzable. En Linux el uid no concede nada por sí solo:
+    solo da acceso a ficheros alcanzables, y aquí lo alcanzable es un
+    directorio `:ro`.
+  - _Qué SÍ se amplía, dicho sin adornos_: `cron/output/` cuelga de ese mismo
+    directorio y contiene transcripts completos de las ejecuciones del cron.
+    Ningún camino del código los lee — solo se abre `jobs.json` — pero son
+    alcanzables desde ese contenedor. Lo que hace el riesgo aceptable es que
+    **este bot no tiene modelo**: ejecuta un registro fijo de comandos
+    (`COMMANDS` en `apps/control-bot/src/commands.ts`) y no interpreta lenguaje
+    natural, así que no hay agente al que convencer de leer otra cosa. Si algún
+    día se le añadiera un modelo, esta excepción deja de ser defendible y hay
+    que sustituirla por un endpoint HTTP acotado.
+
 - **SEC-1.4 — El canal de entrada no cambia las garantías.** Una tarea que llega
   por Telegram pasa exactamente por el mismo `run_coding_task`, con el mismo
   aislamiento y el mismo rate limiting, que una que llega por una issue de
@@ -169,6 +192,29 @@ que tocan datos externos, porque es el único que ingiere texto arbitrario.
 - **SEC-2.4 — Los datos de hermes son sensibles.** El volumen `~/.hermes` contiene
   `.env`, `auth.json`, memorias y sesiones. Se trata como material sensible: no
   se copia a repos, no se sube a backups sin cifrar.
+
+- **SEC-2.5 — Un servidor MCP de passthrough REST no es una superficie acotada.**
+  El servidor MCP de Jira (`@aashari/mcp-server-atlassian-jira`) no expone tools
+  semánticas sino **cinco verbos HTTP crudos** — `jira_get`, `jira_post`,
+  `jira_put`, `jira_patch`, `jira_delete` — sobre toda la API REST del site de
+  Atlassian. Es decir: `jira_delete` puede borrar cualquier issue, sprint o
+  proyecto de la cuenta, no solo los del proyecto de tareas.
+  - _Diferencia con GitHub, que importa_: allí SEC-3.3 acota la superficie
+    contándola (`Tools discovered: 1`). Aquí ese conteo no dice nada — cinco
+    tools genéricas son más superficie que las veintitantas específicas de
+    GitHub. La superficie real no la fija el servidor, la fija el **skill**.
+  - _Mitigación_: `resolve-jira-task` declara una allowlist explícita de método
+    - endpoint (Regla 1 de su `SKILL.md`) y prohíbe `jira_post` salvo para
+      comentar, `jira_patch` y `jira_delete` por completo. Es el mismo patrón que
+      `resolve-issue` aplica a `merge_pull_request`/`create_repository`: la tool
+      existe, el procedimiento no la usa.
+  - _Límite honesto, declarado y no cerrado_: esto es una restricción **en el
+    prompt**, no en el transporte. Un token de API de Atlassian hereda todos los
+    permisos del usuario y no admite scoping fine-grained como un PAT de GitHub
+    (SEC-6.1), así que no hay forma de imponerlo por debajo del skill. Si una
+    inyección consiguiera que hermes llamara a `jira_delete`, nada más abajo lo
+    pararía. Se asume como riesgo consciente, acotado a que el site de Atlassian
+    es personal y no contiene datos de empresa (misma frontera que SEC-7.x).
 
 ## 5. Capa 3 — El canal entre hermes-agent y el runner
 
@@ -208,6 +254,14 @@ no confiable" y "tiene la llave maestra".
 - **SEC-3.4 — El repo de la tarea es un parámetro acotado, no libre.** El Skill
   solo puede lanzar tareas sobre los repos donde el PAT de GitHub tiene permiso
   (ver SEC-5.1). Un `repo` inventado por una inyección falla en el clone.
+  - _Caso Jira (Fase 14)_: un issue de GitHub **vive** en un repo, así que su
+    `repo` es un hecho de su ubicación y no hay nada que elegir. Un ticket de
+    Jira no vive en ninguno, así que ese hecho hay que suplirlo — y ahí es donde
+    reaparece el riesgo que este requisito cierra. La única fuente admitida es
+    una etiqueta `repo:<owner>/<nombre>` **cotejada contra una allowlist que
+    llega en el prompt del cron**, nunca la descripción del ticket ni el nombre
+    del proyecto. El PAT sigue siendo la última barrera, pero aquí deja de ser
+    la única: la allowlist filtra antes de llegar al clone.
 
 ## 6. Capa 4 — El runner, el componente con la llave maestra
 
@@ -353,5 +407,6 @@ evidencia pegada en el roadmap.
 | 2             | SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1, SEC-6.2 |
 | 3             | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
 | 9             | SEC-1.5, en cuanto el bot de control esté desplegado                                     |
+| 14            | SEC-2.5, SEC-3.4 (variante Jira), SEC-4.3                                                |
 | 4–5           | Revisión de que Brain no reintroduce superficie (API solo en red interna, token propio)  |
 | Fase 10 de v2 | SEC-7.1 – SEC-7.5, en cuanto exista una instancia "Hermes trabajo"                       |

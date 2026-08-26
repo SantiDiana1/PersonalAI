@@ -6,9 +6,11 @@
  * genérico "ejecuta X". Un mensaje que no coincida con un comando conocido se
  * contesta con la ayuda, nunca se interpreta.
  */
+import { readFile } from 'node:fs/promises';
 import { collectMetrics, formatMetrics, type Queryable } from '@personalai/shared';
 import { logger } from './logger.js';
 import { formatProbes, probeAll, type ProviderProbe } from './providers.js';
+import { cronReport, CronUnavailableError, type ReadFileLike } from './cron.js';
 
 export interface CommandDeps {
   db: Queryable;
@@ -16,6 +18,12 @@ export interface CommandDeps {
   providerProbes?: ProviderProbe[];
   /** Inyectable para poder testear las sondas sin red. */
   fetchImpl?: typeof fetch;
+  /** Ruta al jobs.json de Hermes, montado en solo lectura. */
+  cronJobsPath?: string;
+  /** Inyectable para testear `/cron` sin tocar disco. */
+  readFileImpl?: ReadFileLike;
+  /** Inyectable para que los tests de `/cron` no dependan del reloj. */
+  now?: () => Date;
 }
 
 export interface Command {
@@ -40,6 +48,15 @@ export const COMMANDS: Command[] = [
     run: async ({ providerProbes, fetchImpl }) => {
       const probes = providerProbes ?? [];
       return formatProbes(probes, await probeAll(probes, fetchImpl));
+    },
+  },
+  {
+    name: 'cron',
+    aliases: ['crons', 'jobs', 'c'],
+    description: 'Cronjobs de Hermes: horario, próxima ejecución y resultado de la última.',
+    run: async ({ cronJobsPath, readFileImpl, now }) => {
+      const read: ReadFileLike = readFileImpl ?? ((p: string) => readFile(p, 'utf8'));
+      return cronReport(cronJobsPath, read, (now ?? (() => new Date()))());
     },
   },
 ];
@@ -94,6 +111,13 @@ export async function handleCommand(text: string, deps: CommandDeps): Promise<st
   try {
     return await command.run(deps);
   } catch (err: unknown) {
+    // Un fallo de despliegue (fichero no montado, permisos) es accionable por
+    // el Operador desde el propio chat: su mensaje ya está redactado para eso
+    // y no filtra nada interno, así que se muestra tal cual.
+    if (err instanceof CronUnavailableError) {
+      logger.warn({ err, command: command.name }, 'estado de cron no disponible');
+      return err.message;
+    }
     // El error real va al log; al chat va algo accionable pero sin filtrar
     // cadenas de conexión ni estructura interna de la base de datos.
     logger.error({ err, command: command.name }, 'comando falló');

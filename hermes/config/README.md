@@ -117,10 +117,13 @@ sin eso, Notion devuelve resultados vacíos aunque el token sea válido. Jira no
 tiene un bloqueo equivalente: la JQL ya apunta a un proyecto/label reales, solo
 está vacía porque aún no hay ningún issue etiquetado.
 
-En cuanto lo anterior esté resuelto, `resolve-issue`
-(`hermes/skills/resolve-issue/SKILL.md` § "Generalización a Notion y Jira")
-ya sabe listarlos/reportarlos sin ningún otro cambio — ver esa misma sección
-para el detalle de lo verificado.
+**Jira ya no lo maneja `resolve-issue`**: tiene skill propio,
+`resolve-jira-task` (Fase 14, ver §11). El motivo es que este servidor MCP
+expone cinco verbos REST crudos (`jira_get/post/put/patch/delete`) en vez de
+tools con nombre, así que cada llamada se construye a mano y el procedimiento
+no se parece al de GitHub. Para **Notion**, en cambio, `resolve-issue`
+(§ "Generalización a Notion y Jira") sigue sirviendo sin cambios en cuanto se
+resuelva el paso manual de arriba.
 
 ## 3. Fijar aprobaciones y modelo
 
@@ -143,8 +146,9 @@ hermes-agent la usará en lugar de la sesión Pro compartida.
 Viven en [`../skills/`](../skills/): `resolve-issue` (flujo automático de
 issues de GitHub, Fase 2), `run-task` (peticiones conversacionales por
 Telegram, Fase 3, ver `docs/hermes/spec.md §9`), `status-report`/`ask-brain`
-(cierre operativo y superficie conversacional, Fase 6), y `run-design-task`
-(diseños/Artifacts pedidos por chat, Fase 8). Dos formas de que hermes los
+(cierre operativo y superficie conversacional, Fase 6), `run-design-task`
+(diseños/Artifacts pedidos por chat, Fase 8) y `resolve-jira-task` (flujo
+automático de tareas de Jira, Fase 14, ver §11). Dos formas de que hermes los
 vea:
 
 - **Recomendada** — montar el directorio del repo en el contenedor y apuntar
@@ -168,7 +172,7 @@ vea:
   reconciliar a mano cada cambio.
 
 Comprobar: `hermes skills list` debe mostrar `resolve-issue`, `run-task`,
-`status-report`, `ask-brain` y `run-design-task`.
+`status-report`, `ask-brain`, `run-design-task` y `resolve-jira-task`.
 
 ## 5. Programar el cron
 
@@ -185,6 +189,15 @@ hermes cron tick     # ejecuta los jobs pendientes una vez, sin esperar
 `hermes cron tick` es la forma de probar el ciclo sin esperar al intervalo real.
 `run-task` y `ask-brain` no necesitan cron — se activan igual que cualquier
 otro skill en un turno interactivo normal (ver paso 6).
+
+El cron de Jira (Fase 14) va **aparte** del de GitHub, y lleva la allowlist de
+repos en el prompt posicional — ver §11.
+
+> **Siempre `docker exec -u hermes`, nunca root.** El `gateway` corre como el
+> usuario no-root `hermes`; un `hermes cron create` ejecutado como root deja
+> `cron/jobs.json` con dueño `root` e ilegible para el gateway, y el cron deja
+> de dispararse **en silencio**. Hallazgo real de la Fase 2, reproducido otra
+> vez en la Fase 6.
 
 ## 6. Telegram (Fase 3)
 
@@ -420,3 +433,109 @@ demostró que un modelo mal equipado fabrica resultados plausibles en vez de
 fallar. Por eso US-13.1 es una puerta: hay que ver una petición real de Telegram
 disparando `run_coding_task` **de verdad** (fila nueva en `runner.task_runs`),
 no descrita en texto, antes de confiar en el eslabón local.
+
+## 11. Jira como fuente de tareas (Fase 14)
+
+Jira usa **las mismas cuatro etiquetas** que GitHub (`hermes`,
+`hermes:in-progress`, `hermes:done`, `hermes:needs-human`) más una quinta,
+`repo:<owner>/<nombre>`, que dice en qué repositorio aterriza la tarea.
+
+No hay que crear ninguna: a diferencia de GitHub, donde un label debe existir
+en el repo antes de aplicarse, las etiquetas de Jira son texto libre y nacen al
+asignarlas. Los dos puntos y la barra son caracteres válidos (verificado contra
+`santidiana.atlassian.net`); lo único prohibido son los espacios.
+
+### Crear el cron
+
+```bash
+docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes \
+  cron create '30m' --name resolve-jira --skill resolve-jira-task \
+  'Procesa tareas de Jira. Repos permitidos: SantiDiana1/PersonalAI.'
+```
+
+El prompt posicional es **obligatorio en la práctica**: ahí va la allowlist de
+repos. Sin ella el skill se planta y no ejecuta nada, a propósito — un ticket
+de Jira no vive dentro de ningún repo, así que el destino no es un hecho que se
+pueda deducir, y dejar que lo elija el texto del ticket sería exactamente el
+agujero que cierra SEC-3.4. Ver la Regla 2 de
+`hermes/skills/resolve-jira-task/SKILL.md`.
+
+Añade cada repo nuevo a esa lista **editando el job**, no al ticket.
+
+### Ajustar la frecuencia
+
+```bash
+docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes cron list
+docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes cron tick   # dispara ya, sin esperar
+```
+
+Para cambiar el intervalo, borra el job y créalo de nuevo con otro `schedule`.
+Está separado del de `resolve-issue` justo para esto: puedes parar o acelerar
+la fuente Jira sin tocar la de GitHub.
+
+### Comprobar el filtro a mano
+
+El JQL que usa el skill, por si quieres verlo desde la UI de Jira:
+
+```
+labels = hermes AND statusCategory != Done ORDER BY created ASC
+```
+
+**No filtres por `status`**: JQL resuelve los nombres canónicos en inglés, no
+los que muestra la UI. En un site en español, `status = "Tareas por hacer"`
+devuelve **cero resultados sin dar error** — el cron seguiría corriendo sin
+coger nunca nada. `statusCategory` tiene tres valores fijos del propio Jira y
+es inmune al idioma y a que renombres un estado.
+
+## 12. Gobierno: entrega del cron y `/cron`
+
+Dos piezas que responden a la misma pregunta — _¿qué está corriendo solo, y cómo
+me entero de lo que hizo?_
+
+### Que los cronjobs te avisen
+
+Un job con `Deliver: local` deja su resultado dentro del contenedor. Parece
+sano en `hermes cron list` y **nadie se entera de nada**, ni de los errores.
+Este fue un fallo real: `resolve-issues` estuvo fallando cada 30 minutos sin
+avisar. Todo job debe entregar a Telegram:
+
+```bash
+docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes \
+  cron edit <job_id> --deliver telegram:<tu_chat_id>
+```
+
+`hermes cron edit` cambia el job en sitio, sin perder su historial de
+ejecuciones (`repeat.completed`), a diferencia de borrarlo y recrearlo.
+
+### `/cron` en el bot de control
+
+Lista jobs, horario, próxima ejecución y resultado de la última — determinista,
+sin modelo y sin gastar cuota, igual que `/metricas` y `/proveedores`. Además
+**avisa** de los dos fallos silenciosos: un job con entrega `local`, y un job
+que corrió bien pero cuya entrega falló (`last_delivery_error`).
+
+Requiere dos cosas en el compose, ya puestas en el servicio `control-bot`:
+
+```yaml
+volumes:
+  - ${HERMES_HOME:-~/.hermes}/cron:/hermes-cron:ro
+user: '10000:10000'
+environment:
+  CONTROL_BOT_CRON_JOBS_PATH: /hermes-cron/jobs.json
+```
+
+El `user:` no es opcional ni es pereza: hermes escribe `jobs.json` con modo
+`0600` **y restaura ese modo cada vez que reescribe el fichero**, así que un
+`chmod` se deshace solo en el siguiente tick del scheduler. Se monta el
+subdirectorio `cron` y no `$HERMES_HOME` entero, para que `auth.json` quede
+fuera de alcance. El razonamiento completo, incluida la parte que sí amplía el
+alcance, está en [`../../docs/security.md`](../../docs/security.md) SEC-1.5.
+
+Si falta el mount, `/cron` lo dice y explica qué hacer, en vez de contestar un
+error genérico: el Operador está leyendo Telegram, no tiene el compose delante.
+
+> **Acoplamiento declarado**: `jobs.json` es formato interno de hermes-agent,
+> no un contrato público. Puede cambiar al actualizar el upstream. Todos los
+> campos se leen de forma opcional y degradan a "desconocido", así que un
+> cambio de formato produce un informe más pobre, nunca un bot caído — hay
+> tests que fijan justo eso.

@@ -67,6 +67,7 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 | 10   | Despliegue dual personal/trabajo                        | Una segunda instancia de Hermes para mi empresa, sin compartir riesgo ni infraestructura         | Fase 6                         |
 | 12   | Auditoría de facturación (Pro vs. créditos)             | Sé con evidencia si el consumo va contra la suscripción o contra créditos de pago, y lo corto    | Fase 8                         |
 | 13   | Independencia de proveedor (fallback + modelo local)    | Hermes vuelve a responder, con una cadena de proveedores en vez de un único punto de fallo       | Fase 12                        |
+| 14   | Jira como fuente primaria de tareas                     | Etiqueto un ticket de Jira y Hermes abre un PR, igual que ya hace con GitHub                     | Fase 7, 13                     |
 | 11   | Company Brain completo (consolidación real) — **v3**    | Brain deja de ser un vector store simple y cumple las 4 propiedades de un company brain real     | Fase 4 + cola backend/infra    |
 
 **Milestone v1 = Fases 0 a 5. Cumplido.** Ver más abajo [Milestone v2](#milestone-v2--qué-es-la-segunda-versión) para las Fases 6 a 11 — lo que antes vivía como Futuribles sueltos, ahora secuenciado igual que v1.
@@ -664,6 +665,57 @@ Está documentado con evidencia real —no por diseño— a qué se imputa cada 
 Hermes vuelve a responder por Telegram, atendido por una cadena de proveedores con al menos dos eslabones vivos, verificada con un fallo real forzado — y el Operador puede saber, a posteriori y sin gastar tokens, qué proveedor atendió cada turno y cuánto le está costando.
 
 **Nota de alcance**: esta fase NO toca el runner. `run_coding_task`/`run_claude_command` siguen sobre la suscripción Pro vía `claude -p`, que es el camino que Anthropic sí permite — verificado en la Fase 12. Cambiar eso sería tirar la única mitad del sistema que sigue funcionando gratis.
+
+---
+
+## Fase 14 — Jira como fuente primaria de tareas
+
+**Objetivo**: etiquetar un ticket de Jira con `hermes` produce un PR, con el mismo contrato de etiquetas que GitHub y un cron propio configurable.
+
+**Depende de**: Fase 7 (servidor MCP de Jira registrado y autenticado) y Fase 13 (sin agent loop no hay cron que dispare nada — un cron sobre un Hermes caído solo produce fallos silenciosos).
+
+**Por qué existe esta fase**, si la Fase 7 ya daba Jira por cubierto: lo que la Fase 7 cerró fue la **conectividad** (servidor registrado, token válido, JQL que responde 200). Lo que dejó escrito sobre el flujo era una generalización a ojo dentro de `resolve-issue/SKILL.md` — "igual que GitHub pero transicionando estados" — que nunca se ejercitó. Al bajar a detalle contra el site real, esa generalización resulta ser falsa en tres puntos concretos (transiciones, formato de la descripción, origen del repo). Esta fase la sustituye por un procedimiento verificado.
+
+### Hallazgos verificados contra el Jira real del Operador
+
+Todos comprobados con llamadas reales a `santidiana.atlassian.net` (proyecto `MYAI`), no deducidos de la documentación:
+
+1. **Las etiquetas admiten `:` y `/`.** `PUT /rest/api/3/issue/{key}` con `hermes:in-progress` y con `repo:SantiDiana1/PersonalAI` devuelve `204` y ambas se leen de vuelta intactas. Lo único que Jira prohíbe en una etiqueta son los espacios. Esto es lo que hace viable el contrato de etiquetas idéntico al de GitHub que pidió el Operador.
+2. **Quitar y poner etiqueta caben en una sola petición**, con `{"update":{"labels":[{"remove":...},{"add":...}]}}`. El marcado "antes de empezar" del Paso 2 es por tanto **atómico**, sin la ventana intermedia sin etiqueta que sí existe en GitHub (donde son dos llamadas). Garantía mejor que la de la fuente original, no peor.
+3. **Las transiciones de estado no sirven como mecanismo.** Sus nombres están localizados (en este site: "Por hacer", "En curso", "In Review", "Blocked", "Listo") y sus IDs son propios del workflow (`11`/`21`/`31`/`41`/`51`). Usar transiciones exigiría descubrir IDs en cada pasada y acertar con un nombre traducido. Confirma la decisión del Operador de ir por etiquetas, y **invalida** lo que `resolve-issue/SKILL.md` decía sobre Jira.
+4. **JQL resuelve nombres de estado canónicos en inglés, no los localizados.** `status = "To Do"` devuelve resultados; `status = "Tareas por hacer"` —el nombre que muestra la UI— devuelve **cero**. Es una trampa silenciosa: el filtro no falla, simplemente no encuentra nada nunca. Se evita filtrando por `statusCategory != Done`, que tiene tres valores fijos del propio Jira y es inmune a que el Operador renombre un estado.
+5. **La descripción llega en ADF por la API v3** (árbol JSON de nodos), y en **texto plano por la v2**. Para transcribirla a `taskDescription` se usa la v2. Los comentarios, en cambio, **solo** aceptan ADF y no tienen equivalente v2 — asimetría real de la API, documentada en el skill.
+6. **El servidor MCP de Jira son cinco verbos REST crudos**, no tools semánticas: `jira_get/post/put/patch/delete` sobre todo el site. Incluye borrado. Ver [security.md SEC-2.5](security.md).
+
+### User stories
+
+- **US-14.1** — Como Operador, quiero etiquetar un ticket de Jira con `hermes` y que Hermes lo recoja, para poner mis tareas donde de verdad las gestiono.
+  - [x] Skill `resolve-jira-task` escrito (`hermes/skills/resolve-jira-task/SKILL.md`), con las recetas REST concretas verificadas arriba en vez de una generalización.
+  - [x] Contrato de etiquetas idéntico al de GitHub (`hermes`, `hermes:in-progress`, `hermes:done`, `hermes:needs-human`), verificado como aplicable en Jira.
+  - [ ] Flujo end-to-end real: un ticket etiquetado por el Operador produce un PR y queda en `hermes:done`. **Bloqueado por la Fase 13** (el agent loop no responde) y por que exista un ticket real etiquetado.
+- **US-14.2** — Como Operador, quiero decirle a Hermes en qué repo trabajar desde el propio ticket, para que una tarea de Jira sepa dónde aterrizar.
+  - [x] Etiqueta `repo:<owner>/<nombre>`, cotejada contra una allowlist que llega en el prompt del cron. Regla innegociable 2 del skill + [SEC-3.4 variante Jira](security.md).
+  - [x] Un ticket sin esa etiqueta, o con un repo fuera de la allowlist, va a `hermes:needs-human` con un comentario — no se adivina el repo ni se asume "el único de la lista".
+  - [ ] Verificado con un ticket real que nombre un repo fuera de la allowlist.
+- **US-14.3** — Como Operador, quiero un cron propio y configurable para la fuente Jira, para poder ajustar su frecuencia sin tocar la de GitHub.
+  - [x] Job independiente documentado (`hermes cron create 'every 30m' --skill resolve-jira-task`), con la allowlist de repos en su prompt. Separado del de `resolve-issue` a propósito: dos fuentes con ritmos distintos, y poder parar una sin parar la otra.
+  - [ ] Verificado con al menos un ciclo completo disparado por el `gateway`, sin invocación manual.
+- **US-14.4** — Como Operador, quiero que el flujo de Jira no amplíe la superficie de ataque más de lo que ya está asumido, para no comprar automatización con seguridad.
+  - [x] [SEC-2.5](security.md) escrito: allowlist de método+endpoint en el skill, `jira_patch`/`jira_delete` prohibidos, y el **límite declarado sin maquillar** — es una restricción en el prompt, no en el transporte, porque un token de Atlassian no admite scoping fine-grained como un PAT de GitHub.
+  - [ ] Prueba de inyección real con un ticket hostil, equivalente a la que cerró la Fase 2 en GitHub.
+- **US-14.5** — Como Operador, quiero que `resolve-issue` deje de afirmar cosas falsas sobre Jira, para que el skill de GitHub no contradiga al de Jira.
+  - [x] La sección "Generalización a Notion y Jira" de `resolve-issue/SKILL.md` corregida: apunta a `resolve-jira-task` y retira la receta de transiciones de estado, invalidada por el hallazgo 3.
+
+### Tareas técnicas
+
+- Skill `resolve-jira-task` cargado vía `skills.external_dirs` (ya apunta al repo; no hace falta registrarlo uno a uno).
+- Job de `hermes cron` propio, creado con `docker exec -u hermes` — nunca como root, ver el hallazgo de `jobs.json` de la Fase 2.
+
+### Definition of Done
+
+Un ticket real de Jira etiquetado `hermes` + `repo:<owner>/<nombre>` produce un PR abierto y queda en `hermes:done`, disparado por el cron sin intervención manual, con SEC-2.5 verificado. **Hoy no se puede cerrar**: depende de la Fase 13.
+
+**Estado real**: el procedimiento está escrito y sus seis supuestos verificados uno a uno contra la API real (arriba). Lo que falta es ejercicio real, no diseño — y está bloqueado por dos cosas distintas: el agent loop caído (Fase 13) y la ausencia de un ticket etiquetado por el Operador. Ninguna de las dos se puede resolver escribiendo más código.
 
 ---
 

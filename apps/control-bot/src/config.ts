@@ -19,6 +19,12 @@ export interface ControlBotConfig {
    * depende de ningún proveedor.
    */
   providerProbes: ProviderProbe[];
+  /**
+   * Ruta al `jobs.json` de hermes-agent, montado en solo lectura. Opcional:
+   * sin ella el bot arranca igual y `/cron` explica qué falta, en vez de
+   * impedir que `/metricas` funcione por una función que no se usa.
+   */
+  cronJobsPath?: string;
 }
 
 export class ConfigError extends Error {}
@@ -72,9 +78,11 @@ export function loadConfig(): ControlBotConfig {
   }
 
   const rawProbes = process.env['CONTROL_BOT_PROVIDER_PROBES']?.trim() ?? '';
+  const cronJobsPath = process.env['CONTROL_BOT_CRON_JOBS_PATH']?.trim();
 
   return {
     providerProbes: rawProbes.length > 0 ? parseProbes(rawProbes) : [],
+    ...(cronJobsPath !== undefined && cronJobsPath.length > 0 ? { cronJobsPath } : {}),
     telegramToken: required('CONTROL_BOT_TELEGRAM_TOKEN'),
     allowedUsers: parseAllowedUsers(required('CONTROL_BOT_ALLOWED_USERS')),
     databaseUrl: required('DATABASE_URL'),

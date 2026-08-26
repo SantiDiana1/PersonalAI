@@ -45,6 +45,7 @@ export async function runBot(
       const reply = await handleCommand(message.text, {
         db,
         providerProbes: config.providerProbes,
+        ...(config.cronJobsPath !== undefined ? { cronJobsPath: config.cronJobsPath } : {}),
       });
       try {
         await telegram.sendMessage(message.chatId, reply);
