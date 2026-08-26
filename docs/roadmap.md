@@ -22,9 +22,17 @@ Este proyecto es, ante todo, mi sistema de IA personal — backed by Claude Code
 
 ## Milestone v2 — qué es la segunda versión
 
-Lo que en la primera versión de este documento vivía como una lista suelta de "Futuribles" (ideas sin fecha, sin orden, sin criterios de aceptación) pasa aquí a ser **Fases 6 a 11**, con la misma disciplina que v1: objetivo, user stories verificables, y Definition of Done con evidencia real — nada se da por cerrado por diseño, igual que en v1.
+Lo que en la primera versión de este documento vivía como una lista suelta de "Futuribles" (ideas sin fecha, sin orden, sin criterios de aceptación) pasa aquí a ser **Fases 6 a 10 y 12**, con la misma disciplina que v1: objetivo, user stories verificables, y Definition of Done con evidencia real — nada se da por cerrado por diseño, igual que en v1.
 
-**Orden decidido**: primero cerrar los cabos sueltos operativos de v1 y dar a Hermes una superficie conversacional completa (Fase 6) — es la base sobre la que se apoyan casi todas las demás. Después, con prioridad explícita sobre el pulido y el despliegue dual: ampliar fuentes y canales (Fase 7) y comandos de Claude Code vía chat (Fase 8) — son las que más amplían lo que Hermes puede hacer de verdad. Solo después, pulido de portfolio (Fase 9, no depende de nada más que v1) y el despliegue dual para uso profesional (Fase 10, la única con una puerta de gobernanza no técnica — SEC-7.5). Por último, deliberadamente al final por ser la pieza más grande y menos urgente — la consolidación real de Brain (Fase 11), que tiene sentido dejar para cuando el uso diario de v1 haya enseñado qué merece la pena consolidar de verdad.
+**Orden decidido**: primero cerrar los cabos sueltos operativos de v1 y dar a Hermes una superficie conversacional completa (Fase 6) — es la base sobre la que se apoyan casi todas las demás. Después, con prioridad explícita sobre el pulido y el despliegue dual: ampliar fuentes y canales (Fase 7) y comandos de Claude Code vía chat (Fase 8) — son las que más amplían lo que Hermes puede hacer de verdad. Solo después, pulido de portfolio (Fase 9, no depende de nada más que v1) y el despliegue dual para uso profesional (Fase 10, la única con una puerta de gobernanza no técnica — SEC-7.5). La consolidación real de Brain (Fase 11) **ya no forma parte de v2**: por decisión del Operador pasa a ser [Milestone v3](#milestone-v3--company-brain-y-futuribles), a abrir cuando la cola de backend/infra de abajo esté cerrada.
+
+**Orden dentro de v2 (decisión del Operador)**: se cierra primero todo lo de carácter **backend/infra**, antes que lo funcional o de presentación. La cola concreta, en orden:
+
+1. **Fase 12, mitad de código** (US-12.2, US-12.5) — aviso de cuota antes de la caída a créditos, auditoría de `env` en las tres capas, y `hermes/spec.md §0.1/§0.3` puesto al día. Es lo que evita gasto no controlado, así que va primero.
+2. **US-9.3 — GitHub App** — sustituir el PAT fine-grained por una identidad propia con tokens de instalación de 1 h. Vive dentro de la Fase 9 por historia, pero es endurecimiento de seguridad (SEC-6.1), no pulido de portfolio: se ejecuta con esta cola, no con el resto de su fase.
+3. **US-9.2 — métricas** — comando CLI/dashboard sobre `runner.task_runs` y Brain. Backend puro; además da la evidencia cuantitativa que la Fase 12 necesita para cruzar consumo contra ejecuciones reales.
+
+Lo funcional y de presentación que queda (US-9.1 demo grabada, US-9.4 case study, US-7.5 prueba de voz, Fase 10) va **después** de esa cola.
 
 v2 no tiene una fecha de "cumplido" única como v1 — es la cola de trabajo priorizada, no un hito con Definition of Done propia. Cada fase se cierra por su cuenta cuando su Definition of Done se cumple.
 
@@ -56,7 +64,8 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 | 8    | Comandos de Claude Code vía chat (`run_claude_command`) | Le pido a Hermes un diseño/artifact por Telegram, no solo código                                 | Fase 6                         |
 | 9    | Pulido de portfolio                                     | El proyecto se entiende y se ve funcionar sin que yo esté delante                                | Fase 5                         |
 | 10   | Despliegue dual personal/trabajo                        | Una segunda instancia de Hermes para mi empresa, sin compartir riesgo ni infraestructura         | Fase 6                         |
-| 11   | Company Brain completo (consolidación real)             | Brain deja de ser un vector store simple y cumple las 4 propiedades de un company brain real     | Fase 4                         |
+| 12   | Auditoría de facturación (Pro vs. créditos)             | Sé con evidencia si el consumo va contra la suscripción o contra créditos de pago, y lo corto    | Fase 8                         |
+| 11   | Company Brain completo (consolidación real) — **v3**    | Brain deja de ser un vector store simple y cumple las 4 propiedades de un company brain real     | Fase 4 + cola backend/infra    |
 
 **Milestone v1 = Fases 0 a 5. Cumplido.** Ver más abajo [Milestone v2](#milestone-v2--qué-es-la-segunda-versión) para las Fases 6 a 11 — lo que antes vivía como Futuribles sueltos, ahora secuenciado igual que v1.
 
@@ -424,8 +433,7 @@ US-5.5 queda verificada con evidencia real (no solo por diseño), el warning de 
   - [x] Fuentes de ingestion de Brain desde Notion/Jira etiquetadas con su `source_authority` correcta — `brain_ingest` ya soporta `source: 'notion'`/`'jira'` desde la Fase 4/5 (`apps/brain-mcp/src/mcpServer.ts`), documentado en `resolve-issue/SKILL.md`.
 - **US-7.3** — Como Operador, quiero que la instancia de trabajo (Fase 10) pueda coger tareas desde Azure DevOps, para poder usar Hermes también en mi día a día profesional.
   - [ ] Fuera de alcance hasta que exista la Fase 10 (instancia de trabajo) — dependencia explícita, no se empieza antes.
-- **US-7.4** — Como Operador, quiero al menos un canal de mensajería adicional a Telegram, para no depender de una sola app.
-  - [ ] Uno de Discord/Slack/WhatsApp/Signal (los que hermes-agent ya trae de fábrica) habilitado y verificado con un mensaje real, reutilizando el mismo Skill conversacional de la Fase 3 sin cambios. **Bloqueado**: necesita que el Operador elija plataforma y genere una cuenta/bot token nuevo — mecanismo de activación documentado en `hermes/config/README.md §6`.
+- **US-7.4** — ~~Canal de mensajería adicional a Telegram.~~ **Movida a futurible** (ver [Milestone v3](#milestone-v3--company-brain-y-futuribles)). Decisión del Operador: hoy Telegram cubre la necesidad y un canal nuevo no aporta nada, así que deja de bloquear esta fase. El ID se conserva vacío para no renumerar US-7.5.
 - **US-7.5** — Como Operador, quiero poder mandarle una tarea hablada por Telegram en vez de escrita, para poder usar Hermes con las manos ocupadas.
   - [x] Infraestructura verificada lista en el despliegue real: `faster-whisper` instalado en el contenedor de hermes, `stt.enabled: true`/`provider: local` en `~/.hermes/config.yaml` (transcripción local, sin API key externa) — no hacía falta ningún cambio.
   - [ ] Pendiente la prueba real: una nota de voz real del Operador por Telegram disparando `run-task`/`ask-brain` igual que un mensaje de texto.
@@ -433,13 +441,12 @@ US-5.5 queda verificada con evidencia real (no solo por diseño), el warning de 
 ### Tareas técnicas
 
 - Registro de servidores MCP (Jira, Notion, Azure DevOps) en la configuración de hermes-agent correspondiente.
-- Configuración del gateway nativo de hermes-agent para el canal adicional (US-7.4) — sin código propio.
 
 ### Definition of Done
 
-Al menos Jira (US-7.1) y un canal de mensajería adicional (US-7.4) funcionando end-to-end con evidencia real. Azure DevOps (US-7.3) queda condicionada a que exista la Fase 10.
+Al menos Jira (US-7.1) funcionando end-to-end con evidencia real. Azure DevOps (US-7.3) queda condicionada a que exista la Fase 10; el canal adicional (US-7.4) ya no forma parte de esta fase — movido a futurible, ver [Milestone v3](#milestone-v3--company-brain-y-futuribles).
 
-**Estado real**: Jira y Notion (US-7.1/US-7.2) están registrados y verificados con tokens reales del Operador — ambos servidores MCP conectan, descubren sus tools, y ambas llamadas de prueba autentican correctamente contra las APIs reales. Jira no tiene ningún bloqueo restante: solo falta que exista un issue real etiquetado para ver el flujo completo. Notion tiene un único paso manual pendiente del Operador (compartir la base de datos "Hermes Tasks" con la integración desde la UI de Notion). El canal adicional (US-7.4) y la prueba de voz (US-7.5) siguen bloqueados como antes: necesitan, respectivamente, que el Operador elija plataforma y genere una cuenta/bot nuevo, y un audio real por Telegram. Ninguno de los dos es algo que se pueda generar sin el Operador.
+**Estado real**: Jira y Notion (US-7.1/US-7.2) están registrados y verificados con tokens reales del Operador — ambos servidores MCP conectan, descubren sus tools, y ambas llamadas de prueba autentican correctamente contra las APIs reales. Jira no tiene ningún bloqueo restante: solo falta que exista un issue real etiquetado para ver el flujo completo. Notion tiene un único paso manual pendiente del Operador (compartir la base de datos "Hermes Tasks" con la integración desde la UI de Notion). La prueba de voz (US-7.5) sigue bloqueada como antes: necesita un audio real del Operador por Telegram, no es algo que se pueda generar sin él. El canal adicional (US-7.4) ha dejado de ser un bloqueo al moverse a futurible.
 
 ---
 
@@ -544,11 +551,69 @@ La instancia "Hermes trabajo" funciona de forma aislada, con SEC-7.1 a SEC-7.5 v
 
 ---
 
+## Fase 12 — Auditoría de facturación: ¿la suscripción Pro o los créditos?
+
+**Prioridad: la siguiente a ejecutar.** Va numerada al final por orden de creación, no de urgencia: mientras no esté cerrada, cada tarea que corre Hermes puede estar costando dinero real por encima de la suscripción, sin que nadie lo vea hasta la factura.
+
+**Objetivo**: determinar con evidencia —no por diseño— si el consumo de Hermes y de `claude-code-runner-mcp` se imputa a la ventana de uso de la suscripción Claude Pro o a **usage credits** de pago, y dejar el sistema en un estado donde consumir créditos sea imposible sin una acción explícita del Operador.
+
+**Depende de**: Fase 8 (es el flujo que más consumo genera y el último verificado en producción).
+
+**Motivo**: el Operador observó que el consumo parecía estar tirando de créditos en vez de la ventana de 5 h de Claude Pro. La configuración del repo es, sobre el papel, la correcta —`CLAUDE_CODE_OAUTH_TOKEN` en todas partes, sin `ANTHROPIC_API_KEY` (verificado en `.env.example`, `hermes/docker/.env.example`, `docker/runner/{Dockerfile,entrypoint.sh}`, `src/docker/runContainer.ts` y `hermes/config/hermes.config.yaml`)—, así que si el síntoma es real, la causa está **fuera del repo**: en la cuenta de Anthropic, en el entorno del Mac Mini, o en el mecanismo de autenticación que usa hermes-agent, que **no es** `claude -p`.
+
+Hipótesis a descartar, en orden de probabilidad:
+
+1. **Usage credits habilitados en la cuenta.** Los créditos son opt-in y se activan en `Settings > Usage` de claude.ai; una vez activos, al agotar el límite incluido del plan el consumo **continúa** contra el saldo prepagado a tarifas de API. En una sesión interactiva Claude Code ofrece declinar; en el flujo de este proyecto (`claude -p --dangerously-skip-permissions`, disparado por cronjobs, sin nadie delante) **no hay quién decline**. Es la explicación que mejor encaja con el síntoma.
+2. **Precedencia de `ANTHROPIC_API_KEY` en el host.** Si la variable existe en el entorno del Mac Mini (perfil de shell, `launchd`, `~/.hermes/.env`), Claude Code la usa y factura por API **ignorando la suscripción**, con independencia de lo que diga este repo — que solo controla lo que se inyecta en los contenedores efímeros, no el entorno del host ni el del contenedor `hermes`.
+3. **La ruta HTTP de hermes-agent, nunca auditada para facturación.** hermes-agent con `provider: anthropic` **no spawnea el binario `claude`**: llama a la API de Anthropic directamente por HTTP reutilizando la credencial de Claude Code (documentado en [hermes/exploration-notes.md §4](hermes/exploration-notes.md)). Que funcione está verificado (Fase 0); que se **impute a la suscripción y no al saldo** nunca se ha comprobado. Es la incógnita específica de este proyecto y la que ninguna documentación de Anthropic cubre.
+4. **Volumen, no atribución.** Cronjobs de un disparo, subagentes y reintentos pueden agotar la ventana de 5 h mucho antes de lo que el Operador percibe, adelantando la caída a créditos sin que nada esté "mal" configurado. Distinguir esto de 1-3 es parte del trabajo.
+
+### User stories
+
+- **US-12.1** — Como Operador, quiero saber si mi cuenta tiene usage credits habilitados y si se han consumido, para confirmar o descartar la hipótesis 1 antes de tocar nada.
+  - [ ] Estado de `Settings > Usage` en claude.ai documentado con captura: créditos habilitados sí/no, saldo, límite de gasto mensual, auto-reload, e historial de consumo.
+  - [ ] El historial se cruza contra las fechas/horas de ejecuciones reales de `runner.task_runs` — si el consumo de créditos coincide con tareas de Hermes, la hipótesis queda **confirmada**, no supuesta.
+- **US-12.2** — Como Operador, quiero verificar que no existe ninguna `ANTHROPIC_API_KEY` en ninguna capa del despliegue real, para descartar la hipótesis 2.
+  - [ ] `env | grep -i anthropic` ejecutado y documentado en las **tres** capas: host (Mac Mini, incluyendo el entorno de `launchd`/el shell que arranca el compose), contenedor `hermes`, y un contenedor efímero de tarea en vivo.
+  - [ ] Comprobado también el contenido de `~/.hermes/.env` y del `~/.hermes/config.yaml` reales — con el precedente de la Fase 0, donde el `config.yaml` del Operador tenía `provider: openrouter` residual, este fichero no se da por bueno sin mirarlo.
+- **US-12.3** — Como Operador, quiero saber a qué se imputa la llamada HTTP directa que hace hermes-agent, para descartar la hipótesis 3 — la única que no cubre ninguna documentación pública.
+  - [ ] Aislar una única llamada de chat de Hermes (sin tareas en curso), anotar la hora exacta, y comprobar en `Settings > Usage` si movió la ventana de la suscripción, el saldo de créditos, o ninguno de los dos.
+  - [ ] Si se imputa a créditos: documentar la causa a nivel de request (headers de identidad de Claude Code ausentes, endpoint distinto, etc.) leyendo el código real de hermes-agent, no infiriéndolo.
+- **US-12.4** — Como Operador, quiero un corte duro que haga imposible consumir créditos por accidente, para no depender de que la configuración siga siendo correcta en el futuro.
+  - [ ] Créditos deshabilitados en `Settings > Usage`, o —si el Operador prefiere conservarlos para uso interactivo propio— límite de gasto mensual explícito y bajo, documentado con el valor elegido y el porqué.
+  - [ ] Decisión tomada y registrada sobre qué debe hacer Hermes al agotar la ventana de 5 h: fallar y avisar por Telegram, o encolar y reintentar. Hoy no hay ninguna política — es un hueco real, no un detalle.
+- **US-12.5** — Como Operador, quiero visibilidad continua del consumo, para que esto no vuelva a detectarse por sospecha.
+  - [ ] Salida de `claude /status` (o equivalente disponible en modo headless) capturada desde el despliegue real, documentando qué información de cuota expone de verdad — y si no expone ninguna útil en `-p`, decirlo explícitamente en vez de asumir que sí.
+  - [ ] Un chequeo periódico (cronjob de Hermes o script) que avise al Operador cuando el consumo se acerque al límite del plan, **antes** de la caída a créditos.
+  - [ ] `hermes/spec.md §0.1/§0.3` actualizado con lo aprendido: el modelo de auth documentado promete "suscripción Pro, nunca API key", y esa promesa hoy no está verificada en el eslabón de hermes-agent.
+
+### Definition of Done
+
+Está documentado con evidencia real —no por diseño— a qué se imputa cada uno de los dos caminos de consumo del sistema (hermes-agent por HTTP directo, y `claude -p` en los contenedores efímeros), la causa del síntoma reportado por el Operador está identificada o descartada explícitamente hipótesis por hipótesis, y existe un corte duro que impide que se consuman créditos sin acción deliberada del Operador.
+
+**Nota de honestidad**: US-12.1, US-12.3 y US-12.4 requieren acceso a `Settings > Usage` de la cuenta de Anthropic del Operador — no son verificables desde el repo ni desde una sesión de Claude Code, por mucho código que se lea. La parte de código (US-12.2, US-12.5) sí lo es. Esta fase no se cierra con la mitad hecha.
+
+---
+
+## Milestone v3 — Company Brain y futuribles
+
+Tercera fase del proyecto, **deliberadamente después de v2**. La regla de orden que la separa de v2 la fijó el Operador y es explícita: **primero se cierra todo lo de carácter backend/infra, y solo entonces se abre el Company Brain**. No es que estas piezas no importen — es que abrir la más grande antes de tener la base cerrada garantiza arrastrar deuda hacia ella.
+
+v3 no tiene Definition of Done propia ni fecha. Se abre cuando la cola de backend/infra de v2 esté vacía.
+
+### Futuribles (sin fase asignada)
+
+Ideas conscientemente aparcadas: tienen sentido, pero hoy no resuelven ningún problema real del Operador. Se distinguen de [Fuera de alcance](#fuera-de-alcance-de-verdad-no-un-futurible) en que aquellas no se harán nunca; estas, quizá.
+
+- **Canal de mensajería adicional a Telegram** (antes US-7.4). Uno de Discord/Slack/WhatsApp/Signal, que hermes-agent ya trae de fábrica — se activaría por configuración del gateway nativo, sin código propio (`hermes/config/README.md §6`). **Por qué está aquí y no en una fase**: Telegram cubre hoy la necesidad entera, y añadir un canal solo por no depender de una app no justifica generar un bot nuevo ni ampliar la superficie de entrada de texto no confiable al sistema. Se retomaría si Telegram fallara como canal o si apareciera una necesidad real de otro.
+
+---
+
 ## Fase 11 — Company Brain completo (consolidación real)
 
 **Objetivo**: retomar la capa de consolidación ya diseñada en [personal-brain/spec.md §4.2](personal-brain/spec.md#42-consolidation--fuera-de-alcance-de-este-proyecto-diseño-de-referencia-únicamente) — extracción de `Observation` vía LLM, reconciliación de contradicciones, `MentalModel` agregados — para que Brain deje de ser un vector store simple y cumpla de verdad las 4 propiedades del patrón "company brain" (shared, enforceable, evolving, agent-readable).
 
-**Depende de**: Fase 4. Deliberadamente sin depender de las Fases 6-10 — puede construirse en paralelo si el Operador lo prioriza antes.
+**Depende de**: Fase 4. Técnicamente construible desde hace tiempo — lo que la bloquea no es una dependencia sino una decisión de orden: no se empieza hasta que el backend/infra de v2 esté cerrado (ver arriba).
 
 ### User stories
 
