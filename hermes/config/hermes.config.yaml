@@ -160,14 +160,54 @@ approvals:
   cron_mode: deny
 
 # ---------------------------------------------------------------------------
-# Modelo
+# Modelo y cadena de proveedores (Fase 13)
 # ---------------------------------------------------------------------------
-# Proveedor anthropic (alias claude-code) autenticado con la sesión Pro
-# compartida vía CLAUDE_CODE_OAUTH_TOKEN, sin ANTHROPIC_API_KEY.
-# Ver docs/hermes/spec.md §0.1/§0.3 — y §0.2 para el riesgo de ToS asumido.
+# HISTORIA, porque explica por qué esto es una CADENA y no un proveedor único:
 #
-# Ojo: hermes-agent limpia ANTHROPIC_API_KEY del .env cuando se activa esta
-# ruta. Si defines una API key, tomará esa en su lugar y dejarás de usar la
-# suscripción Pro compartida.
+# Hasta la Fase 12 aquí ponía `provider: anthropic` a secas, autenticado con la
+# sesión Pro compartida vía CLAUDE_CODE_OAUTH_TOKEN. Eso dejó de funcionar el
+# 2026-08-26: Anthropic clasifica a hermes-agent como *third-party app* y
+# rechaza su consumo del plan Pro con
+#
+#   HTTP 400 — "Third-party apps now draw from your extra usage, not your
+#              plan limits."
+#
+# No es cuota agotada, es política. El runner NO está afectado (ejecuta el
+# binario oficial `claude -p`, que Anthropic sí acepta) — ver docs/roadmap.md
+# Fase 12 US-12.3.
+#
+# La lección no es "cambiar de proveedor", que sería repetir el mismo error con
+# otro nombre: es no tener un único punto de fallo de proveedor. De ahí la
+# cadena.
+#
+# `fallback_providers` es un mecanismo nativo de hermes-agent (top-level en
+# config.yaml, gestionado con `hermes fallback` — hermes_cli/fallback_cmd.py).
+# No hay que construir nada, solo configurarlo.
+#
+# ORDEN DECIDIDO, de barato a caro:
+#
+#   1. ollama    — modelo local. Coste por turno: cero. Sin cuota, sin red.
+#                  Es el eslabón por defecto porque el loop de hermes sobre
+#                  todo ORQUESTA (decide qué tool llamar y formatea la
+#                  respuesta); el trabajo caro de verdad lo hace Claude Code
+#                  dentro del runner, que sigue en la suscripción Pro.
+#   2. <barato>  — proveedor comercial pequeño, PENDIENTE de elegir con precios
+#                  reales (US-13.4). Cubre el caso de que el modelo local no dé
+#                  la talla en una petición concreta.
+#   3. anthropic — último recurso consciente, contra usage credits y con tope
+#                  de gasto mensual. Calidad de Claude cuando de verdad hace
+#                  falta, pagando por ello a sabiendas.
+#
+# NO se aplica copiando este fichero (ver cabecera). Se aplica con:
+#   hermes config set model.provider ollama
+#   hermes fallback add anthropic
+#
+# ADVERTENCIA vigente: si defines ANTHROPIC_API_KEY en el .env, hermes-agent la
+# tomará en lugar de cualquier otra ruta de Anthropic. Sigue sin haber ninguna.
 model:
-  provider: anthropic
+  provider: ollama
+
+# El eslabón intermedio se añadirá aquí cuando US-13.4 lo haya elegido con
+# precios verificados. Mientras tanto, la cadena tiene dos eslabones reales.
+fallback_providers:
+  - anthropic

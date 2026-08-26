@@ -355,3 +355,68 @@ y se toleran acentos y mayúsculas (`/Métricas`). `/ayuda` lista los comandos.
 Añadir un comando nuevo es añadir una entrada a `COMMANDS` en
 `apps/control-bot/src/commands.ts`: la superficie es exactamente esa lista, no
 un intérprete genérico.
+
+## 10. Cadena de proveedores y modelo local (Fase 13)
+
+Desde el 2026-08-26 el agent loop de Hermes **no puede usar la suscripción
+Pro**: Anthropic lo clasifica como _third-party app_ y lo rechaza con `HTTP
+400` (ver Fase 12 del roadmap). El runner no está afectado — ejecuta el binario
+oficial `claude -p`, que sí se acepta.
+
+La respuesta no es cambiar de proveedor, que sería repetir el mismo error con
+otro nombre, sino una **cadena** con degradación ordenada:
+`ollama` (local, gratis) → _eslabón barato por decidir_ → `anthropic` (créditos,
+con tope).
+
+### Despliegue en el Mac Mini (16 GB)
+
+```bash
+# 1. Levantar Ollama. Está detrás de un PROFILE: `docker compose up -d` a secas
+#    NO lo arranca, para que en una máquina sin RAM suficiente no muera por OOM
+#    arrastrando la sensación de que el compose está roto.
+docker compose --profile local-llm up -d ollama
+
+# 2. Descargar el modelo. SIN esto el contenedor arranca, el healthcheck pasa,
+#    y la cadena falla igual en el primer turno — el fallo más traicionero de
+#    todo este montaje. `/proveedores` lo distingue explícitamente.
+docker compose exec ollama ollama pull qwen2.5:3b
+
+# 3. Apuntar hermes a la cadena (NO se aplica copiando hermes.config.yaml —
+#    ver la cabecera de ese fichero).
+hermes config set model.provider ollama
+hermes config set model.base_url http://ollama:11434
+hermes fallback add anthropic
+hermes fallback list
+
+# 4. Comprobar desde el bot de control, sin gastar un token:
+#    /proveedores
+```
+
+Ajustes disponibles en el `.env` del compose: `OLLAMA_MEMORY_LIMIT` (8g por
+defecto) y `OLLAMA_KEEP_ALIVE` (5m — descarga el modelo de RAM tras ese tiempo
+sin uso, para no quitarle memoria a Postgres, Brain y el runner todo el día).
+
+### `/proveedores` en el bot de control
+
+Sondea cada eslabón y dice si responde. Para Ollama además **lista los modelos
+descargados**, que es lo que distingue "vivo pero inútil" de "vivo y listo".
+
+Lo que **no** hace, y el propio comando lo advierte en su salida: no lee la
+cadena viva de hermes. Esa vive en su `config.yaml`, dentro de un volumen que
+contiene también `auth.json` con el token OAuth; montarlo en el bot de control
+—el proceso que ingiere texto de Telegram— contradiría SEC-1.5. Así que sondea
+la lista **declarada** en `CONTROL_BOT_PROVIDER_PROBES`, y si cambias la cadena
+con `hermes fallback` tienes que actualizar esa variable también.
+
+Tampoco responde "qué proveedor atendió el último turno": hermes-agent solo
+deja caer eso en texto de log al hacer fallback (`auxiliary_client.py`), sin
+registro estructurado. Afirmarlo sería inventarse un dato que no existe.
+
+### Antes de dar la cadena por buena
+
+El riesgo real no es la RAM, es la fiabilidad de las **tool calls**: los
+modelos pequeños son flojos llamando a herramientas, y el bug 2 de la Fase 8 ya
+demostró que un modelo mal equipado fabrica resultados plausibles en vez de
+fallar. Por eso US-13.1 es una puerta: hay que ver una petición real de Telegram
+disparando `run_coding_task` **de verdad** (fila nueva en `runner.task_runs`),
+no descrita en texto, antes de confiar en el eslabón local.

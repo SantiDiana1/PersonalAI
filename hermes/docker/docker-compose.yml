@@ -164,6 +164,48 @@ services:
       BRAIN_API_TOKEN: ${BRAIN_API_TOKEN:?falta BRAIN_API_TOKEN}
 
   # -------------------------------------------------------------------------
+  # Modelo local (Fase 13). Primer eslabón de la cadena de proveedores del
+  # agent loop de Hermes — ver hermes/config/hermes.config.yaml.
+  #
+  # DETRÁS DE UN PROFILE a propósito: `docker compose up -d` NO lo arranca.
+  # Solo se levanta con `--profile local-llm`, porque un modelo local necesita
+  # varios GB de RAM y en una máquina que no los tenga el contenedor moriría
+  # por OOM arrastrando la percepción de que "el compose está roto".
+  #
+  # Dimensionado para el destino real (Mac Mini, 16 GB). Medido en el portátil
+  # donde se desarrolló esto: 7,8 GB totales y ~1,9 libres — ahí NO cabe, y por
+  # eso el profile no es una precaución teórica.
+  #
+  # Sin `ports:` (SEC-3.1): solo alcanzable desde la red interna. Publicarlo
+  # expondría un endpoint de inferencia sin autenticación — Ollama no trae
+  # ninguna.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [local-llm]
+    restart: unless-stopped
+    networks: [personalai]
+    volumes:
+      # Los modelos pesan GB: sin volumen se re-descargan en cada recreate.
+      - ollama-models:/root/.ollama
+    environment:
+      # Descarga el modelo tras 5 min sin uso y libera la RAM. En una máquina
+      # compartida con Postgres, Brain y el runner, mantenerlo residente sería
+      # quitarle memoria al resto todo el día.
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+    deploy:
+      resources:
+        limits:
+          memory: ${OLLAMA_MEMORY_LIMIT:-8g}
+    healthcheck:
+      # /api/tags es el endpoint más barato que confirma que el servidor
+      # responde; no carga ningún modelo.
+      test: ['CMD-SHELL', 'ollama list >/dev/null 2>&1 || exit 1']
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  # -------------------------------------------------------------------------
   # Bot de control (US-9.2). SEGUNDO bot de Telegram, con su propio token:
   # Telegram solo admite UN consumidor de updates por token, así que no puede
   # compartir el de `hermes` — los dos harían getUpdates y se robarían los
@@ -196,6 +238,17 @@ services:
       # alcanzable por cualquiera que descubra el nombre del bot.
       CONTROL_BOT_ALLOWED_USERS: ${CONTROL_BOT_ALLOWED_USERS:?falta CONTROL_BOT_ALLOWED_USERS}
       DATABASE_URL: postgresql://${POSTGRES_USER:-personalai}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatoria}@postgres:5432/${POSTGRES_DB:-personalai}
+      # Fase 13 (US-13.5): eslabones de la cadena de proveedores que el bot
+      # sondea para `/proveedores`. Formato: nombre|tipo|url, separados por
+      # comas. Tipos: `ollama` (lista además los modelos descargados) y `http`
+      # (solo alcanzabilidad).
+      #
+      # OJO, limitación honesta: esto declara los eslabones que se ESPERAN, no
+      # lee la cadena real de hermes (que vive en su config.yaml, dentro de un
+      # volumen con un token de por medio que este bot no debe montar). Si se
+      # cambia la cadena con `hermes fallback`, hay que actualizar esto también
+      # — el comando lo advierte en su propia salida.
+      CONTROL_BOT_PROVIDER_PROBES: ${CONTROL_BOT_PROVIDER_PROBES:-ollama|ollama|http://ollama:11434,anthropic|http|https://api.anthropic.com/v1/models}
 
   hermes:
     build:
@@ -263,3 +316,4 @@ networks:
 
 volumes:
   postgres-data:
+  ollama-models:

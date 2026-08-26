@@ -42,7 +42,10 @@ export async function runBot(
         continue;
       }
 
-      const reply = await handleCommand(message.text, { db });
+      const reply = await handleCommand(message.text, {
+        db,
+        providerProbes: config.providerProbes,
+      });
       try {
         await telegram.sendMessage(message.chatId, reply);
       } catch (err: unknown) {

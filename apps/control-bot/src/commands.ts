@@ -8,9 +8,14 @@
  */
 import { collectMetrics, formatMetrics, type Queryable } from '@personalai/shared';
 import { logger } from './logger.js';
+import { formatProbes, probeAll, type ProviderProbe } from './providers.js';
 
 export interface CommandDeps {
   db: Queryable;
+  /** Vacío si no hay eslabones configurados — `/proveedores` lo dirá. */
+  providerProbes?: ProviderProbe[];
+  /** Inyectable para poder testear las sondas sin red. */
+  fetchImpl?: typeof fetch;
 }
 
 export interface Command {
@@ -27,6 +32,15 @@ export const COMMANDS: Command[] = [
     aliases: ['metrics', 'metricas@', 'm'],
     description: 'Métricas de uso: tareas resueltas, tasa de éxito por tool y eventos en Brain.',
     run: async ({ db }) => formatMetrics(await collectMetrics(db)),
+  },
+  {
+    name: 'proveedores',
+    aliases: ['providers', 'p'],
+    description: 'Estado de los eslabones de la cadena de proveedores del agent loop de Hermes.',
+    run: async ({ providerProbes, fetchImpl }) => {
+      const probes = providerProbes ?? [];
+      return formatProbes(probes, await probeAll(probes, fetchImpl));
+    },
   },
 ];
 

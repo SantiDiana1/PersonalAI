@@ -14,6 +14,7 @@ const CONFIG: ControlBotConfig = {
   allowedUsers: new Set([OPERADOR]),
   databaseUrl: 'no-usado',
   pollTimeoutSeconds: 1,
+  providerProbes: [],
 };
 
 /** Base de datos falsa con datos suficientes para un informe real. */

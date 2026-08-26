@@ -4,6 +4,8 @@
  * que no arranca — puede quedarse escuchando sin allowlist.
  */
 
+import { parseProbes, type ProviderProbe } from './providers.js';
+
 export interface ControlBotConfig {
   telegramToken: string;
   /** IDs numéricos de Telegram autorizados. Nunca vacío. */
@@ -11,6 +13,12 @@ export interface ControlBotConfig {
   databaseUrl: string;
   /** Segundos de long polling contra getUpdates. */
   pollTimeoutSeconds: number;
+  /**
+   * Eslabones de la cadena de proveedores a sondear con `/proveedores`.
+   * Opcional y puede quedar vacía: el bot sigue sirviendo `/metricas`, que no
+   * depende de ningún proveedor.
+   */
+  providerProbes: ProviderProbe[];
 }
 
 export class ConfigError extends Error {}
@@ -63,7 +71,10 @@ export function loadConfig(): ControlBotConfig {
     );
   }
 
+  const rawProbes = process.env['CONTROL_BOT_PROVIDER_PROBES']?.trim() ?? '';
+
   return {
+    providerProbes: rawProbes.length > 0 ? parseProbes(rawProbes) : [],
     telegramToken: required('CONTROL_BOT_TELEGRAM_TOKEN'),
     allowedUsers: parseAllowedUsers(required('CONTROL_BOT_ALLOWED_USERS')),
     databaseUrl: required('DATABASE_URL'),
