@@ -66,3 +66,7 @@ La cuenta de tareas de las últimas 5 h es un **proxy** de la ventana de cuota d
 ## Licencia
 
 Este proyecto es de uso personal y no está licenciado para redistribución.
+
+## Autor
+
+Santiago Diana
