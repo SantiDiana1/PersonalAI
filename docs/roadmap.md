@@ -74,6 +74,7 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 | 12     | Auditoría de facturación (Pro vs. créditos)             | Sé con evidencia si el consumo va contra la suscripción o contra créditos de pago, y lo corto    | Fase 8                         |
 | 13     | Independencia de proveedor (fallback + coste)           | Hermes deja de tener un único punto de fallo de proveedor, y su gasto tiene tope                 | Fase 12                        |
 | 14     | Jira como fuente primaria de tareas                     | Etiqueto un ticket de Jira y Hermes abre un PR, igual que ya hace con GitHub                     | Fase 7, 13                     |
+| 15     | Selección de modelo desde Telegram                      | Cambio el modelo/proveedor activo del agent loop escribiéndole a Hermes, sin `docker exec`       | Fase 13                        |
 | 11     | Company Brain completo (consolidación real) — **v3**    | Brain deja de ser un vector store simple y cumple las 4 propiedades de un company brain real     | Fase 4 + cola backend/infra    |
 
 **Milestone v1 = Fases 0 a 5. Cumplido.** Ver más abajo [Milestone v2](#milestone-v2--qué-es-la-segunda-versión) para las Fases 6 a 11 — lo que antes vivía como Futuribles sueltos, ahora secuenciado igual que v1.
@@ -586,8 +587,7 @@ Hipótesis a descartar, en orden de probabilidad:
 ### User stories
 
 - **US-12.1** — Como Operador, quiero saber si mi cuenta tiene usage credits habilitados y si se han consumido, para confirmar o descartar la hipótesis 1 antes de tocar nada.
-  - [ ] Estado de `Settings > Usage` en claude.ai documentado con captura: créditos habilitados sí/no, saldo, límite de gasto mensual, auto-reload, e historial de consumo.
-  - [ ] El historial se cruza contra las fechas/horas de ejecuciones reales de `runner.task_runs` — si el consumo de créditos coincide con tareas de Hermes, la hipótesis queda **confirmada**, no supuesta.
+  - [x] **Confirmada por el Operador (2026-08-27), sin captura adjunta** — declaración directa del propio dueño de la cuenta sobre `Settings > Usage`, no una inspección con evidencia visual cruzada contra `runner.task_runs` como pedía el criterio original. Se registra así, sin maquillarlo como si hubiera habido captura: es la única fuente posible para este dato (nadie más tiene acceso a esa pantalla), y el Operador la da por buena explícitamente.
 - **US-12.2** — Como Operador, quiero verificar que no existe ninguna `ANTHROPIC_API_KEY` en ninguna capa del despliegue real, para descartar la hipótesis 2.
   - [x] **Hipótesis 2 descartada.** `env | grep -iE "anthropic|claude"` ejecutado en las tres capas del despliegue real: host (solo variables de la sesión de Claude Code del Operador, ajenas al despliegue), contenedor `hermes` (únicamente `CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat…`) y contenedor `claude-code-runner` (el mismo token, más su propia configuración `CLAUDE_CODE_RUNNER_*`). Ninguna `ANTHROPIC_API_KEY` en ninguna parte.
   - [x] Config real revisada — y **corregido un supuesto del propio spec**: el `config.yaml` operativo no está en `~/.hermes/` sino en `/opt/data/`, porque el contenedor define `HERMES_HOME=/opt/data`. Contenido: `provider: anthropic`, `default: claude-sonnet-4-5-20250929`, `providers: {}` **vacío**, `fallback_providers: []`. Sin rastro del `openrouter` residual de la Fase 0. El `.env` de `HERMES_HOME` solo tiene un `# LLM_MODEL=` comentado, inerte.
@@ -672,7 +672,7 @@ Está documentado con evidencia real —no por diseño— a qué se imputa cada 
   - [x] **Verificado con mocks y contra el entorno real.** 13 tests nuevos contra respuestas con la misma forma que documenta la API de Ollama (`/api/tags` → `{models: [{name}]}`), cubriendo servidor con modelos, servidor sin modelos, servidor caído, y el 401 sin credenciales que cuenta como alcanzable. Y desplegado de verdad en el compose del Operador: con el profile apagado responde `1/2 eslabones alcanzables` — `ollama CAÍDO`, `anthropic OK (HTTP 401, sin credenciales en la sonda)`. Es exactamente el escenario del Mac Mini antes de instalar Ollama.
 - **US-13.6** — Como Operador, quiero Anthropic como último eslabón consciente, para no perder la calidad de Claude cuando de verdad haga falta.
   - [x] Créditos reactivados por el Operador el 2026-08-26 — condición para que el agent loop volviera a funcionar.
-  - [ ] **Tope de gasto mensual explícito** configurado en `Settings > Usage`, con el valor elegido y su porqué documentados aquí. Requiere acceso del Operador a su cuenta. Es hoy el **único freno real** al gasto: sin él, un cron mal dimensionado o un bucle de reintentos gasta hasta agotar el saldo.
+  - [x] **Tope de gasto mensual configurado por el Operador (2026-08-27): 50 €/mes.** Motivo declarado: cifra que al Operador le parece razonable, no derivada de un cálculo de uso proyectado — a título de referencia, la Fase 13 estima en US-13.4 un gasto equivalente a precio de lista de Anthropic de ~142 $/mes para el volumen conversacional medido, por lo que 50 €/mes es un freno real, no meramente simbólico, aunque más ajustado que holgado si el uso creciera.
   - [ ] **Absorbido de US-12.4** (fusionada aquí el 2026-08-26): decidir y registrar qué debe hacer Hermes al agotar la ventana — fallar y avisar por Telegram, o encolar y reintentar. Hoy no hay ninguna política, y con créditos activos "reintentar" tiene un coste que antes no tenía. Es una decisión sobre la cadena de proveedores, por eso vive aquí y no en la Fase 12.
   - [ ] Verificado que el eslabón de respaldo solo entra cuando el primario falla, no como primera opción por descuido de configuración.
 - **US-13.7** — Como Operador, quiero el spec corregido, para que no siga describiendo una arquitectura que ya no existe.
@@ -737,6 +737,44 @@ Todos comprobados con llamadas reales a `santidiana.atlassian.net` (proyecto `MY
 Un ticket real de Jira etiquetado `hermes` + `repo:<owner>/<nombre>` produce un PR abierto y queda en `hermes:done`, disparado por el cron sin intervención manual, con SEC-2.5 verificado. **Hoy no se puede cerrar**: depende de la Fase 13.
 
 **Estado real**: el procedimiento está escrito y sus seis supuestos verificados uno a uno contra la API real (arriba). Lo que falta es ejercicio real, no diseño — y está bloqueado por dos cosas distintas: el agent loop caído (Fase 13) y la ausencia de un ticket etiquetado por el Operador. Ninguna de las dos se puede resolver escribiendo más código.
+
+---
+
+## Fase 15 — Selección de modelo desde Telegram
+
+**Objetivo**: que el Operador pueda cambiar el modelo/proveedor activo del agent loop conversando por Telegram, sin `docker exec` a mano.
+
+**Depende de**: Fase 13 (la cadena de proveedores que esta fase expondría) y del patrón de mínimo privilegio de US-9.2/SEC-1.5, que esta fase pone a prueba directamente.
+
+**Motivo**: preguntado el 2026-08-27 si esto ya era posible. **No lo es**, verificado contra el despliegue real, no asumido:
+
+- `model.default`/`model.provider` en `/opt/data/config.yaml` es config estática que el gateway **carga solo al arrancar** — el mismo "gotcha operacional" ya documentado en la Fase 2 para `TELEGRAM_ALLOWED_USERS` y `mcp_servers`: cambiarla exige `docker compose restart hermes`.
+- El único mecanismo para cambiarla es CLI dentro del contenedor: `hermes model` (wizard **interactivo**, abre navegador para OAuth — no automatizable) o `hermes config set model.provider|model.default <valor>` (no interactivo, sí automatizable — verificado listando su `--help` real).
+- Ni el bot de control ni ningún skill de hermes-agent lo exponen hoy. `COMMANDS` de `apps/control-bot/src/commands.ts` es, literalmente, `metricas`, `proveedores`, `cron` — no hay un cuarto comando ni interpretación de lenguaje natural para esto.
+
+**Preguntas que hay que verificar antes de construir nada, no asumir:**
+
+- **¿Sigue siendo el bot de control el sitio correcto?** Hoy es a propósito el proceso menos privilegiado del compose (SEC-1.5): sin socket de Docker, sin acceso al volumen de Hermes. Darle escritura sobre `config.yaml` (o capacidad de disparar un `docker exec`) es una escalada de privilegios real, no cosmética. La alternativa —un skill del propio agent loop que se ejecute `hermes config set` a sí mismo— evita ese problema pero significa que la sesión se reinicia a mitad de su propio turno.
+- **¿Qué le pasa a una tarea en vuelo cuando el contenedor se reinicia?** Un `restart` corta cualquier cron o turno de Telegram en curso. Hay que probarlo, no asumir que "simplemente se reintenta".
+- **¿Se permite cualquier modelo del catálogo, o solo los eslabones ya configurados?** Abrir el catálogo completo reintroduce el problema que la Fase 13 ya resolvió con cuidado: un modelo sin tools verificadas (ver `thinkingmachines/inkling:free`, US-13.3) entrando en producción sin probarse, o un cambio que dispara gasto sin querer. Restringir a `fallback_providers` + primario es la opción sensata por defecto.
+- **¿Pide confirmación antes de reiniciar el gateway?**, dado que el efecto no es instantáneo ni gratis en disponibilidad.
+
+### User stories
+
+- **US-15.1** — Como Operador, quiero preguntar por Telegram qué modelo/proveedor está activo ahora mismo, para no tener que mirar `config.yaml` a mano.
+  - [ ] Comando que lea el eslabón **activo** real (`model.default`/`model.provider`), distinto de `/proveedores` (que sondea alcanzabilidad de todos los eslabones, no cuál está en uso).
+- **US-15.2** — Como Operador, quiero cambiar el modelo/proveedor activo escribiéndole a Hermes, para no necesitar acceso al servidor.
+  - [ ] Mecanismo elegido y justificado entre las opciones de arriba, con su impacto en SEC-1.5 explícito.
+  - [ ] Restringido a los eslabones ya configurados en `fallback_providers` + primario — nunca al catálogo completo de hermes-agent.
+  - [ ] Verificado con un cambio real: pedirlo por Telegram, confirmar que `config.yaml` cambió, y que el turno siguiente usa de verdad el modelo nuevo.
+- **US-15.3** — Como Operador, quiero que un cambio de modelo no tumbe silenciosamente una tarea en curso, para no perder trabajo de un cron a mitad de ejecución.
+  - [ ] Comportamiento del restart frente a un cronjob en vuelo, probado y documentado — no asumido.
+- **US-15.4** — Como Operador, quiero que cada cambio de modelo quede auditado, para saber después cuándo y por qué se cambió.
+  - [ ] Cada cambio deja rastro con timestamp, visible por `/proveedores` o un comando equivalente.
+
+### Definition of Done
+
+Un mensaje real de Telegram cambia el modelo/proveedor activo del agent loop, verificado con un turno posterior que efectivamente lo usa, sin ampliar el privilegio del bot de control (o de quien haga el cambio) más allá de lo que esta fase decida conscientemente, y sin dejar una tarea en curso rota en silencio.
 
 ---
 
