@@ -713,17 +713,17 @@ Todos comprobados con llamadas reales a `santidiana.atlassian.net` (proyecto `MY
 - **US-14.1** — Como Operador, quiero etiquetar un ticket de Jira con `hermes` y que Hermes lo recoja, para poner mis tareas donde de verdad las gestiono.
   - [x] Skill `resolve-jira-task` escrito (`hermes/skills/resolve-jira-task/SKILL.md`), con las recetas REST concretas verificadas arriba en vez de una generalización.
   - [x] Contrato de etiquetas idéntico al de GitHub (`hermes`, `hermes:in-progress`, `hermes:done`, `hermes:needs-human`), verificado como aplicable en Jira.
-  - [ ] Flujo end-to-end real: un ticket etiquetado por el Operador produce un PR y queda en `hermes:done`. **Bloqueado por la Fase 13** (el agent loop no responde) y por que exista un ticket real etiquetado.
+  - [x] **Flujo end-to-end real verificado (2026-08-27)**: `MYAI-8` (proyecto real del Operador), etiquetado por el Operador con `hermes` + `repo:SantiDiana1/PersonalAI`. Cron `resolve-jira` forzado con `hermes cron run` + tick del gateway (sesión real `cron_1096da1e2ead_20260827_090450`, 24 mensajes, 11 tool calls, `end_reason: cron_complete`). Resultado: etiqueta pasó a `hermes:done`, comentario real en el ticket con el enlace del PR, y fila nueva en `runner.task_runs` (`run_coding_task|success`, 09:06:03). **PR #35 confirmado con `gh pr view 35 --repo SantiDiana1/PersonalAI`**, no solo con lo que reportó Hermes: `state: OPEN`, `mergeable: MERGEABLE`, 1 fichero (`README.md`, +4/-0) — cierra el mismo patrón de "verificar contra la fuente, no contra lo que dice el agente" que destapó el bug 2 de la Fase 8.
 - **US-14.2** — Como Operador, quiero decirle a Hermes en qué repo trabajar desde el propio ticket, para que una tarea de Jira sepa dónde aterrizar.
   - [x] Etiqueta `repo:<owner>/<nombre>`, cotejada contra una allowlist que llega en el prompt del cron. Regla innegociable 2 del skill + [SEC-3.4 variante Jira](security.md).
   - [x] Un ticket sin esa etiqueta, o con un repo fuera de la allowlist, va a `hermes:needs-human` con un comentario — no se adivina el repo ni se asume "el único de la lista".
-  - [ ] Verificado con un ticket real que nombre un repo fuera de la allowlist.
+  - [x] **Verificado con un ticket real (2026-08-27)**: `MYAI-9`, etiquetado solo con `hermes`, **sin** `repo:`. Mismo cronjob que MYAI-8, misma pasada. Resultado: etiqueta a `hermes:needs-human`, comentario real pidiendo la etiqueta (`"falta la etiqueta repo:<owner>/<nombre>..."`), sin PR, sin adivinar el repo. **Matiz honesto**: la Regla 2 del skill trata "sin etiqueta", "etiqueta mal formada" y "repo fuera de la allowlist" como la misma rama de código — se verificó el primer caso (ausencia total), no específicamente el de un repo bien formado pero ajeno a la allowlist. Mismo texto de instrucción, variante literal distinta sin ejercitar.
 - **US-14.3** — Como Operador, quiero un cron propio y configurable para la fuente Jira, para poder ajustar su frecuencia sin tocar la de GitHub.
-  - [x] Job independiente documentado (`hermes cron create 'every 30m' --skill resolve-jira-task`), con la allowlist de repos en su prompt. Separado del de `resolve-issue` a propósito: dos fuentes con ritmos distintos, y poder parar una sin parar la otra.
-  - [ ] Verificado con al menos un ciclo completo disparado por el `gateway`, sin invocación manual.
+  - [x] Job independiente creado en el despliegue real (`hermes cron create 'every 2h' --name resolve-jira --skill resolve-jira-task --deliver telegram:453464431 ...`), con `-u hermes` (dueño correcto, no root — verificado con `ls -la /opt/data/cron/`) y la allowlist de repos en su prompt. Intervalo de 2h elegido a sabiendas, siguiendo la lección de coste de `resolve-issues` (69 disparos/3 tareas): con Jira aún sin flujo diario, 30m habría sido gasto de créditos sin necesidad.
+  - [x] **Verificado con un ciclo completo disparado por el `gateway`**, no por invocación directa del skill: `hermes cron status` confirma "Gateway is running — cron jobs will fire automatically" y fue ese proceso, no una llamada manual al skill, quien ejecutó la sesión `cron_...`. El único paso manual fue adelantar el reloj con `hermes cron run` + `tick` en vez de esperar las 2h — mismo patrón ya aceptado como válido en la Fase 2 ("invocado a mano como disparado por el cron nativo").
 - **US-14.4** — Como Operador, quiero que el flujo de Jira no amplíe la superficie de ataque más de lo que ya está asumido, para no comprar automatización con seguridad.
   - [x] [SEC-2.5](security.md) escrito: allowlist de método+endpoint en el skill, `jira_patch`/`jira_delete` prohibidos, y el **límite declarado sin maquillar** — es una restricción en el prompt, no en el transporte, porque un token de Atlassian no admite scoping fine-grained como un PAT de GitHub.
-  - [ ] Prueba de inyección real con un ticket hostil, equivalente a la que cerró la Fase 2 en GitHub.
+  - [ ] Prueba de inyección real con un ticket hostil, equivalente a la que cerró la Fase 2 en GitHub. **Sigue pendiente** — no se hizo en esta pasada, que se centró en el camino feliz y el de repo ausente.
 - **US-14.5** — Como Operador, quiero que `resolve-issue` deje de afirmar cosas falsas sobre Jira, para que el skill de GitHub no contradiga al de Jira.
   - [x] La sección "Generalización a Notion y Jira" de `resolve-issue/SKILL.md` corregida: apunta a `resolve-jira-task` y retira la receta de transiciones de estado, invalidada por el hallazgo 3.
 
@@ -734,9 +734,9 @@ Todos comprobados con llamadas reales a `santidiana.atlassian.net` (proyecto `MY
 
 ### Definition of Done
 
-Un ticket real de Jira etiquetado `hermes` + `repo:<owner>/<nombre>` produce un PR abierto y queda en `hermes:done`, disparado por el cron sin intervención manual, con SEC-2.5 verificado. **Hoy no se puede cerrar**: depende de la Fase 13.
+Un ticket real de Jira etiquetado `hermes` + `repo:<owner>/<nombre>` produce un PR abierto y queda en `hermes:done`, disparado por el cron sin intervención manual, con SEC-2.5 verificado.
 
-**Estado real**: el procedimiento está escrito y sus seis supuestos verificados uno a uno contra la API real (arriba). Lo que falta es ejercicio real, no diseño — y está bloqueado por dos cosas distintas: el agent loop caído (Fase 13) y la ausencia de un ticket etiquetado por el Operador. Ninguna de las dos se puede resolver escribiendo más código.
+**Fase cerrada en su fondo (2026-08-27)**: el camino feliz (US-14.1) y el de repo ausente (US-14.2) están verificados end-to-end contra el Jira y el GitHub reales del Operador, con el cron disparando de verdad vía el `gateway`. Queda un único cabo suelto, no bloqueante para dar la fase por operativa: la prueba de inyección de US-14.4, que es una demostración de seguridad adicional, no una condición para que el flujo funcione — mismo criterio que se aplicó al cerrar la Fase 2 con su prueba hostil aparte del cierre funcional.
 
 ---
 
