@@ -156,10 +156,24 @@ de verdad; el estado es una comodidad visual, no una condición de éxito.
 
 ### Paso 0 — De dónde salen el proyecto, la allowlist de repos y el JQL
 
-Igual que en `resolve-issue`: **siempre de quien te invoca**. El prompt del job
-de cron trae la lista de repos permitidos **y el proyecto (o proyectos) de
-Jira** sobre los que operar. Si te invocan sin cualquiera de los dos, no
-adivines: di que falta y termina.
+Igual que en `resolve-issue`: **siempre de quien te invoca**, y quien te
+invoca puede ser un cron **o el Operador escribiendo por Telegram en un turno
+normal** — este skill no necesita cron para activarse, se carga igual que
+`run-task`/`ask-brain` (Fase 6) en cuanto el mensaje coincide con lo que hace.
+En ambos casos la fuente es la misma: el prompt del job de cron, o el propio
+mensaje del Operador, trae la lista de repos permitidos **y el proyecto (o
+proyectos) de Jira** sobre los que operar. Si te invocan sin cualquiera de los
+dos —sea cron o chat—, no adivines: di que falta y termina.
+
+**Caso de uso real, por el que se escribe esto (2026-08-27)**: el proyecto
+`WEB` tiene un cron creado pero **pausado a propósito** (`resolve-jira-web`,
+`hermes cron pause`) — el Operador no quiere que sus tareas se disparen solas
+todavía. Eso no impide pedirlas a demanda: un mensaje de Telegram como
+_"Revisa las tareas de Jira del proyecto WEB etiquetadas hermes. Repos
+permitidos: SantiDiana1/personalWebsite."_ activa este mismo skill, con el
+mismo procedimiento, en ese turno — sin que el cron participe para nada. El
+cron pausado sigue ahí por si algún día se quiere automatizar; hasta entonces,
+la única vía es que el Operador lo pida explícitamente.
 
 **El proyecto no es opcional, aunque el sitio solo tenga uno hoy.** Un site de
 Atlassian normalmente aloja varios proyectos (verificado: este site tiene
