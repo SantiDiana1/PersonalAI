@@ -752,21 +752,27 @@ Un ticket real de Jira etiquetado `hermes` + `repo:<owner>/<nombre>` produce un 
 - El único mecanismo para cambiarla es CLI dentro del contenedor: `hermes model` (wizard **interactivo**, abre navegador para OAuth — no automatizable) o `hermes config set model.provider|model.default <valor>` (no interactivo, sí automatizable — verificado listando su `--help` real).
 - Ni el bot de control ni ningún skill de hermes-agent lo exponen hoy. `COMMANDS` de `apps/control-bot/src/commands.ts` es, literalmente, `metricas`, `proveedores`, `cron` — no hay un cuarto comando ni interpretación de lenguaje natural para esto.
 
-**Preguntas que hay que verificar antes de construir nada, no asumir:**
+**Decisión de mecanismo, tomada el 2026-08-27** (el Operador confirma que un reinicio del contenedor como efecto secundario es aceptable, así que deja de ser un criterio de diseño): **no** va por el agent loop reconfigurándose a sí mismo. Dos motivos, uno de seguridad y uno operativo:
 
-- **¿Sigue siendo el bot de control el sitio correcto?** Hoy es a propósito el proceso menos privilegiado del compose (SEC-1.5): sin socket de Docker, sin acceso al volumen de Hermes. Darle escritura sobre `config.yaml` (o capacidad de disparar un `docker exec`) es una escalada de privilegios real, no cosmética. La alternativa —un skill del propio agent loop que se ejecute `hermes config set` a sí mismo— evita ese problema pero significa que la sesión se reinicia a mitad de su propio turno.
-- **¿Qué le pasa a una tarea en vuelo cuando el contenedor se reinicia?** Un `restart` corta cualquier cron o turno de Telegram en curso. Hay que probarlo, no asumir que "simplemente se reintenta".
-- **¿Se permite cualquier modelo del catálogo, o solo los eslabones ya configurados?** Abrir el catálogo completo reintroduce el problema que la Fase 13 ya resolvió con cuidado: un modelo sin tools verificadas (ver `thinkingmachines/inkling:free`, US-13.3) entrando en producción sin probarse, o un cambio que dispara gasto sin querer. Restringir a `fallback_providers` + primario es la opción sensata por defecto.
-- **¿Pide confirmación antes de reiniciar el gateway?**, dado que el efecto no es instantáneo ni gratis en disponibilidad.
+- **Seguridad**: el agent loop ya procesa texto no confiable (issues, tickets, mensajes de Telegram). Darle una tool que reescribe su propio `config.yaml` y se reinicia es exactamente la clase de superficie que SEC-3.x lleva toda la Fase 2/14 tratando de no ampliar — un ticket hostil con "cambia tu modelo a X" quedaría a un salto de distancia de conseguirlo, en vez de a los varios que exige hoy la ruta manual.
+- **Operativo**: `hermes gateway status` en el despliegue real (verificado) responde *"Running manually, not as a system service"* — el modo recomendado para WSL/Docker de este proyecto. `hermes gateway restart` está pensado para un servicio systemd/launchd instalado, que este despliegue no usa; el reinicio real y ya probado en este proyecto es siempre `docker compose restart hermes` **desde fuera del contenedor**. Un mecanismo que dependa de que el propio proceso se reinicie a sí mismo no encaja con cómo corre hoy.
+
+**Elegido en su lugar**: un cuarto comando determinista en el bot de control (`/modelo`, mismo patrón que `/metricas`/`/proveedores`/`/cron` — sin interpretación de lenguaje natural, solo el nombre exacto de un eslabón ya listado en `/proveedores`), que hace dos cosas con permisos nuevos y explícitos:
+
+1. Ejecuta `hermes config set model.provider <x>` (y `model.default <y>` si aplica) **dentro del contenedor de Hermes**, nunca reescribiendo el YAML a mano desde fuera — así pasa por la validación propia de `hermes config set` en vez de que el bot de control tenga que entender el schema.
+2. Dispara `docker compose restart hermes` (o el `docker restart` equivalente sobre el nombre de contenedor fijo).
+
+**Esto es una ampliación de privilegio real y se declara como tal, no se esconde**: el bot de control pasa de "sin socket de Docker" (su garantía de hoy, SEC-1.5) a tener acceso de Docker acotado **en código**, no en el socket — el binario del bot de control es el único lugar donde vive esa capacidad, y solo sabe ejecutar exactamente esas dos operaciones contra el contenedor `hermes` por nombre fijo, nunca un comando arbitrario ni contra otro contenedor. Es el mismo razonamiento que ya se aceptó para `claude-code-runner-mcp` en SEC-2.1 (acceso a Docker acotado por código a un uso concreto, no libre), aplicado ahora a un segundo proceso. Sigue siendo un riesgo mayor que el bot de control de hoy — quien comprometa ese proceso gana la capacidad de reiniciar Hermes con el modelo que quiera — y por eso el comando solo acepta un eslabón ya presente en `fallback_providers`/primario (nunca un proveedor arbitrario) y solo responde al Operador de la allowlist, igual que el resto.
 
 ### User stories
 
 - **US-15.1** — Como Operador, quiero preguntar por Telegram qué modelo/proveedor está activo ahora mismo, para no tener que mirar `config.yaml` a mano.
   - [ ] Comando que lea el eslabón **activo** real (`model.default`/`model.provider`), distinto de `/proveedores` (que sondea alcanzabilidad de todos los eslabones, no cuál está en uso).
 - **US-15.2** — Como Operador, quiero cambiar el modelo/proveedor activo escribiéndole a Hermes, para no necesitar acceso al servidor.
-  - [ ] Mecanismo elegido y justificado entre las opciones de arriba, con su impacto en SEC-1.5 explícito.
+  - [x] **Mecanismo decidido** (ver arriba): comando `/modelo` en el bot de control, que ejecuta `hermes config set` dentro del contenedor de Hermes vía acceso a Docker acotado en código, y reinicia el contenedor con `docker compose restart hermes`. El Operador confirma que el reinicio como efecto secundario es aceptable.
   - [ ] Restringido a los eslabones ya configurados en `fallback_providers` + primario — nunca al catálogo completo de hermes-agent.
   - [ ] Verificado con un cambio real: pedirlo por Telegram, confirmar que `config.yaml` cambió, y que el turno siguiente usa de verdad el modelo nuevo.
+  - [ ] Implementación pendiente — la decisión está tomada, el código no está escrito todavía.
 - **US-15.3** — Como Operador, quiero que un cambio de modelo no tumbe silenciosamente una tarea en curso, para no perder trabajo de un cron a mitad de ejecución.
   - [ ] Comportamiento del restart frente a un cronjob en vuelo, probado y documentado — no asumido.
 - **US-15.4** — Como Operador, quiero que cada cambio de modelo quede auditado, para saber después cuándo y por qué se cambió.
