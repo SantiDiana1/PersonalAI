@@ -1,3 +1,4 @@
 api\.anthropic\.com$
 github\.com$
 .*\.github\.com$
+registry\.npmjs\.org$

@@ -315,6 +315,74 @@ que el modelo esté completo en un solo sitio.
 - **SEC-5.5 (innegociable) — Timeout duro.** Por defecto 30 minutos.
 - **SEC-5.6 — Sin acceso al filesystem del host** más allá del workspace efímero
   de esa tarea concreta.
+- **SEC-5.7 — Ampliación de la allowlist de red a `registry.npmjs.org`, analizada
+  antes de aplicarse (2026-08-27).** Motivo: cualquier tarea de un proyecto
+  Node/JS (p. ej. `WEB`, Next.js) necesita `pnpm install` dentro del sandbox
+  para poder verificar sus propios criterios de aceptación (`build`/`lint`/
+  `dev`) — sin esto, esas tareas siempre terminan en `needs_human_input` por
+  no poder instalar dependencias, verificado con una ejecución real contra
+  `WEB-2` (ver [roadmap.md, US-14.9](roadmap.md)).
+
+  **Qué NO cambia**: `FilterDefaultDeny Yes` se mantiene — solo se añade una
+  entrada más a `filter.allow`, con la misma sintaxis de FQDN exacto que ya
+  usan `api.anthropic.com` y `github.com`. No se abre el registro genérico ni
+  un rango de host; ver el criterio de verificación abajo.
+
+  **Riesgo real que sí introduce, analizado con precisión y no en abstracto**:
+  `npm`/`pnpm install` puede ejecutar código arbitrario de terceros de forma
+  automática, vía los scripts de ciclo de vida (`preinstall`/`postinstall`/
+  `prepare`) de cualquier paquete de la cadena de dependencias transitiva —
+  para un scaffold de Next.js eso son fácilmente varios cientos de paquetes,
+  ninguno revisado por el Operador. Esto es cualitativamente distinto del
+  riesgo que ya cubre SEC-5.2: `git clone`/`git push` contra `github.com` no
+  ejecuta código de terceros por sí solo; `npm install` sí, por diseño del
+  ecosistema.
+
+  **Superficie real dentro de ESTE sandbox, no genérica** — leído del código
+  real (`runContainer.ts`), no asumido: el contenedor efímero de la tarea
+  **no** lleva `GITHUB_TOKEN` (deliberado, ver el comentario del propio
+  fichero — Claude Code lo tendría si lo necesitara para saltarse el flujo de
+  PR). Sí lleva `CLAUDE_CODE_OAUTH_TOKEN` — la credencial más sensible del
+  sistema entero, la misma sesión Pro compartida de la Fase 12 — y `github.com`
+  y `api.anthropic.com` ya son alcanzables. Un script de instalación
+  malicioso no puede escribir en repos ajenos (no tiene el PAT), pero sí
+  podría, en teoría, leer `CLAUDE_CODE_OAUTH_TOKEN` del entorno del proceso y
+  usarlo contra `api.anthropic.com` directamente — el mismo host que ya
+  necesita Claude Code para funcionar, así que no es una ruta de red nueva,
+  es un **actor nuevo** (cualquier dependencia transitiva) operando dentro de
+  la misma frontera de confianza que ya tenía Claude Code. La allowlist
+  estricta del proxy sigue cerrando la vía de exfiltración más común
+  (mandar datos a un host propio del atacante): eso sigue bloqueado porque
+  ese host no está ni estará en `filter.allow`.
+
+  **Mitigaciones aplicadas, no solo recomendadas** — enforzadas por
+  configuración en la imagen del contenedor efímero, nunca dependientes de que
+  el prompt se acuerde de pedirlas:
+  1. `ignore-scripts=true` en un `.npmrc` global de la imagen — desactiva
+     `preinstall`/`postinstall`/`prepare` de **todas** las dependencias, no
+     solo las del proyecto. Es la mitigación que de verdad importa: corta el
+     vector de ejecución automática de código, no solo el de red. Coste
+     aceptado: algún paquete que de verdad necesite un postinstall (poco común
+     en un stack Next.js/Tailwind/ESLint puro JS; `next` resuelve sus binarios
+     de `@next/swc-*` como dependencias opcionales normales, no vía script) no
+     terminará de instalarse — se trata como una excepción a revisar caso por
+     caso si ocurre, no como motivo para desactivar la protección por defecto.
+  2. `NEXT_TELEMETRY_DISABLED=1` en el entorno del contenedor — corta una
+     llamada de red de salida que Next.js hace por defecto y que no aporta
+     nada a la tarea, reduciendo tráfico no esencial hacia fuera del sandbox
+     (mismo espíritu que `DisableViaHeader`/`FilterDefaultDeny` del proxy).
+  3. **Alcance mínimo del FQDN**: solo `registry.npmjs.org`, no un dominio
+     comodín. Si en el futuro hiciera falta otro host (p. ej. un CDN de
+     binarios de algún paquete concreto), se añade cuando el fallo real lo
+     pida — no de forma preventiva.
+
+  **Lo que este análisis NO cubre, declarado sin maquillar**: un paquete
+  malicioso con scripts ignorados podría aun así intentar dañar el propio
+  workspace (contenido que termina en un commit) — pero ese commit vive en
+  una rama `hermes/...` que **nunca se mergea sola**; el PR sigue pasando por
+  la revisión del Operador antes de llegar a `main`, que es la última barrera
+  real (mismo patrón que security.md ya asume para el propio código que
+  escribe Claude Code, sea o no honesto el ticket que lo motivó).
 
 ## 8. Capa 6 — Credenciales
 

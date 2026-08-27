@@ -10,6 +10,16 @@ RUN apt-get update \
 
 RUN npm install -g @anthropic-ai/claude-code
 
+# SEC-5.7 (docs/security.md): registry.npmjs.org está en la allowlist del
+# proxy para que las tareas de proyectos Node/JS puedan instalar dependencias,
+# pero eso no debe significar ejecutar código de terceros sin revisar. Global
+# y a nivel de imagen, no dependiente de que el prompt se acuerde de pedirlo:
+# ignora preinstall/postinstall/prepare de TODAS las dependencias, del
+# proyecto y transitivas. npm y pnpm leen ambos esta clave.
+RUN echo "ignore-scripts=true" > /etc/npmrc
+# Corta una llamada de red no esencial que hace Next.js por defecto.
+ENV NEXT_TELEMETRY_DISABLED=1
+
 RUN useradd --create-home --shell /bin/sh runner
 WORKDIR /workspace
 RUN chown runner:runner /workspace
