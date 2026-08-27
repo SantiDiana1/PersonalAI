@@ -38,15 +38,22 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Sin socket de Docker, sin token del runner, sin puertos: este proceso ingiere
-# texto de Telegram, así que se le da lo mínimo — solo lectura de Postgres.
-RUN groupadd --gid 10003 controlbot \
-  && useradd --uid 10003 --gid controlbot --shell /bin/false controlbot
-
 WORKDIR /app
-COPY --from=builder --chown=controlbot:controlbot /deploy ./
+COPY --from=builder /deploy ./
 
-USER controlbot
+# Nota deliberada sobre el usuario, actualizada en la Fase 15 (US-15.2, ver
+# docs/security.md SEC-1.6): este contenedor pasó de "sin socket de Docker,
+# sin token del runner, sin puertos" a montar el socket de Docker para poder
+# ejecutar `/modelo`. Antes corría como `controlbot` (uid 10003) sin él.
+#
+# Mismo razonamiento que ya documenta apps/claude-code-runner-mcp/Dockerfile
+# para el mismo caso: quien tiene el socket de Docker tiene control
+# equivalente al del host (SEC-1), así que un uid no-root no reduce ese poder
+# en ninguna medida real — solo daría una falsa sensación de contención.
+# Lo que sí acota de verdad este proceso es que `docker.ts` es el ÚNICO
+# lugar donde vive esa capacidad y solo sabe hacer tres cosas fijas contra un
+# único contenedor por nombre (ver ese fichero) — nunca comandos arbitrarios,
+# nunca otro contenedor.
 ENV NODE_ENV=production
 
 # Sin HEALTHCHECK HTTP: este servicio no escucha en ningún puerto (habla hacia

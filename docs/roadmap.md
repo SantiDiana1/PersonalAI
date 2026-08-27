@@ -795,20 +795,24 @@ Un ticket real de Jira etiquetado `hermes` + `repo:<owner>/<nombre>` produce un 
 ### User stories
 
 - **US-15.1** — Como Operador, quiero preguntar por Telegram qué modelo/proveedor está activo ahora mismo, para no tener que mirar `config.yaml` a mano.
-  - [ ] Comando que lea el eslabón **activo** real (`model.default`/`model.provider`), distinto de `/proveedores` (que sondea alcanzabilidad de todos los eslabones, no cuál está en uso).
+  - [x] `/modelo` sin argumento ejecuta `hermes config show` dentro del contenedor (de solo lectura, ya redacta las claves API — verificado que nunca vuelca `auth.json` ni los tokens de Jira/Notion/GitHub embebidos en `config.yaml`) y devuelve el eslabón activo real, distinto de `/proveedores` (que sondea alcanzabilidad, no cuál está en uso).
+  - [x] **Verificado contra el despliegue real (2026-08-27)**: `/modelo` devolvió `Activo ahora: anthropic / claude-sonnet-4-5-20250929`, coincidiendo con `hermes config show` ejecutado a mano.
 - **US-15.2** — Como Operador, quiero cambiar el modelo/proveedor activo escribiéndole a Hermes, para no necesitar acceso al servidor.
-  - [x] **Mecanismo decidido** (ver arriba): comando `/modelo` en el bot de control, que ejecuta `hermes config set` dentro del contenedor de Hermes vía acceso a Docker acotado en código, y reinicia el contenedor con `docker compose restart hermes`. El Operador confirma que el reinicio como efecto secundario es aceptable.
-  - [ ] Restringido a los eslabones ya configurados en `fallback_providers` + primario — nunca al catálogo completo de hermes-agent.
-  - [ ] Verificado con un cambio real: pedirlo por Telegram, confirmar que `config.yaml` cambió, y que el turno siguiente usa de verdad el modelo nuevo.
-  - [ ] Implementación pendiente — la decisión está tomada, el código no está escrito todavía.
+  - [x] Mecanismo implementado tal como se decidió: `apps/control-bot/src/docker.ts` (acceso a Docker acotado en código a tres operaciones fijas contra un único contenedor), `modelChoices.ts` (catálogo declarado), `modelAudit.ts` (rastro en Postgres). Comando `/modelo <alias>` en `commands.ts`. 75 tests nuevos/actualizados en verde, typecheck y lint limpios.
+  - [x] **Restringido al catálogo declarado**: `CONTROL_BOT_MODEL_CHOICES` (mismo patrón que `CONTROL_BOT_PROVIDER_PROBES`), hoy `anthropic`/`minimax`/`nemotron` — los tres eslabones reales de `fallback_providers` + primario (Fase 13). Un alias fuera de esa lista no toca nada, verificado con test y con una llamada real (`/modelo no-existe`).
+  - [x] **Verificado con cambios reales, no simulados**: `/modelo minimax` → `config.yaml` cambió de verdad (`hermes config show` lo confirma), el contenedor se reinició (`docker ps` con "Up 4 seconds"), y **el turno siguiente usó el modelo nuevo de verdad**: el saldo de la API key de OpenRouter pasó de `usage: 0` (Fase 13) a `usage: 0.0000116` tras un turno real — no una inferencia de logs, sino el propio proveedor confirmando consumo. Revertido a `anthropic` después, confirmado igual.
 - **US-15.3** — Como Operador, quiero que un cambio de modelo no tumbe silenciosamente una tarea en curso, para no perder trabajo de un cron a mitad de ejecución.
-  - [ ] Comportamiento del restart frente a un cronjob en vuelo, probado y documentado — no asumido.
+  - [x] **Verificado con una tarea real interrumpida a mitad** (`WEB-6`, disparada por Telegram/ad-hoc, cortada con `/modelo minimax` mientras seguía corriendo): el proceso murió con el contenedor (esperable — es un proceso más dentro de él), **sin contenedores efímeros huérfanos** (`docker ps -a --filter ancestor=claude-code-runner-image:local` vacío) y **`WEB-6` quedó exactamente como estaba** — la interrupción llegó antes del marcado atómico `hermes:in-progress` del Paso 2, así que no hay nada que limpiar.
+  - [x] **Caso no ejercitado en vivo hoy, pero ya resuelto por diseño y verificado en la Fase 2**: una interrupción **después** de marcar `hermes:in-progress` no es un caso nuevo de esta fase — es el mismo "proceso muere a mitad de tarea" que ya cubren las Notas de operación de `resolve-jira-task/SKILL.md`: el ticket queda atascado en `hermes:in-progress`, **no se recoge solo** en una pasada futura (evita duplicar trabajo), y hace falta que el Operador quite la etiqueta a mano para reintentarlo. Es agnóstico a la causa de la muerte del proceso (crash, timeout, o ahora también un reinicio por `/modelo`), así que no hace falta una prueba en vivo aparte para confirmarlo — sería repetir la misma verificación con otro disparador.
 - **US-15.4** — Como Operador, quiero que cada cambio de modelo quede auditado, para saber después cuándo y por qué se cambió.
-  - [ ] Cada cambio deja rastro con timestamp, visible por `/proveedores` o un comando equivalente.
+  - [x] Tabla `control_bot.model_changes` (Postgres), escrita **antes** de reiniciar (para que el rastro sobreviva aunque el reinicio se cuelgue). `/modelo` sin argumento muestra el último cambio.
+  - [x] **Verificado con las cuatro pruebas reales de esta fase**: la tabla real tiene las cuatro filas en orden (`minimax` → `anthropic` → `minimax` → `anthropic`), cada una con su timestamp real.
 
 ### Definition of Done
 
 Un mensaje real de Telegram cambia el modelo/proveedor activo del agent loop, verificado con un turno posterior que efectivamente lo usa, sin ampliar el privilegio del bot de control (o de quien haga el cambio) más allá de lo que esta fase decida conscientemente, y sin dejar una tarea en curso rota en silencio.
+
+**Fase cerrada (2026-08-27)**, las cuatro user stories con evidencia real — incluida la más difícil de fingir: un cambio de proveedor confirmado por el propio proveedor (`usage` de OpenRouter pasando de 0 a un valor real), no solo por lo que reportó el sistema sobre sí mismo. El único punto no ejercitado con una prueba en vivo dedicada (interrupción después de marcar `hermes:in-progress`) se apoya en un comportamiento ya verificado en la Fase 2, agnóstico a la causa de la interrupción — se documenta así en vez de fingir una verificación redundante.
 
 ---
 

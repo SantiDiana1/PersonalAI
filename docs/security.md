@@ -125,12 +125,14 @@ cualquiera puede escribirle.
   nivel.
 
   Lo que **no** tiene, deliberadamente, porque ingiere texto de Telegram igual
-  que hermes: socket de Docker, `CLAUDE_CODE_RUNNER_AUTH_TOKEN` (ese token
-  autentica también `/mcp`, que lanza contenedores), puertos publicados, y
-  acceso a workspaces o artefactos. Su única capacidad es hacer SELECTs
-  agregados contra Postgres y hablar con `api.telegram.org`. Es la aplicación
-  del mismo razonamiento de SEC-2.1: el componente expuesto a texto no
-  confiable recibe el mínimo, no la comodidad.
+  que hermes: `CLAUDE_CODE_RUNNER_AUTH_TOKEN` (ese token autentica también
+  `/mcp`, que lanza contenedores), puertos publicados, y acceso a workspaces o
+  artefactos. Su única capacidad es hacer SELECTs agregados contra Postgres y
+  hablar con `api.telegram.org` — **y, desde la Fase 15 (ver SEC-1.6 abajo),
+  una excepción más, acotada en código.** Es la aplicación del mismo
+  razonamiento de SEC-2.1: el componente expuesto a texto no confiable recibe
+  el mínimo, no la comodidad — SEC-1.6 es la única grieta deliberada en esa
+  regla, y se declara como tal.
 
   - _Excepción declarada, añadida con `/cron`_: el contenedor monta
     `$HERMES_HOME/cron` en **solo lectura** y corre con el **uid de hermes**
@@ -154,6 +156,49 @@ cualquiera puede escribirle.
     natural, así que no hay agente al que convencer de leer otra cosa. Si algún
     día se le añadiera un modelo, esta excepción deja de ser defendible y hay
     que sustituirla por un endpoint HTTP acotado.
+
+- **SEC-1.6 — El bot de control monta el socket de Docker desde la Fase 15
+  (US-15.2), acotado en código, no en el socket.** `/modelo` necesita cambiar
+  el eslabón activo del agent loop y reiniciar el contenedor de Hermes para
+  que lo cargue — el gateway solo lee `config.yaml` al arrancar (mismo
+  hallazgo operacional de las Fases 2/13). No hay forma de conseguir eso sin
+  hablar con el demonio de Docker.
+
+  - _Qué grado de acceso implica esto, sin adornarlo_: el socket de Docker es
+    la llave maestra del host (SEC-1) — quien lo tiene puede en principio
+    lanzar un contenedor con `/` del host montado y hacer cualquier cosa. Este
+    componente, que ingiere texto de Telegram sin modelo de por medio pero
+    igualmente expuesto a cualquiera que descubra el bot y esté en la
+    allowlist, pasa a tener esa capacidad si se compromete.
+  - _Qué lo mantiene acotado_: **no el socket — el código.**
+    `apps/control-bot/src/docker.ts` es el único lugar del proceso que lo
+    toca, y solo sabe hacer tres cosas, siempre contra un único contenedor por
+    nombre fijo (`CONTROL_BOT_HERMES_CONTAINER_NAME`): leer el modelo activo
+    (`hermes config show`, de solo lectura), cambiarlo (`hermes config set
+    model.provider|model.default`), y reiniciar ese contenedor. Nunca un
+    comando arbitrario, nunca `docker run`/`createContainer`, nunca otro
+    contenedor. Mismo patrón ya aceptado para `claude-code-runner-mcp` en
+    SEC-2.1 y SEC-4.1, aplicado aquí por segunda vez a un componente distinto.
+  - _Por qué el valor a cambiar no es libre_: el alias que acepta `/modelo`
+    se valida contra `CONTROL_BOT_MODEL_CHOICES`, una lista **declarada** al
+    desplegar — mismo patrón que `CONTROL_BOT_PROVIDER_PROBES` para
+    `/proveedores` — nunca contra la cadena viva de `fallback_providers`
+    (que vive en `config.yaml`, dentro del volumen con `auth.json` que este
+    bot sigue sin montar). Un alias que no está en esa lista no toca nada.
+  - _Por qué `hermes config show` es seguro de exponer_: verificado contra el
+    despliegue real, no asumido — redacta las claves API (`sk-a...gAAA`) y no
+    incluye la sección de servidores MCP, así que los tokens de Jira/Notion/
+    GitHub que viven embebidos en `config.yaml` (hallazgo de la Fase 14,
+    `mcp_servers.*.env.*`) nunca pasan por este camino.
+  - _Usuario del contenedor_: pasó de no-root (uid 10003, dedicado) a **root**
+    — mismo razonamiento ya documentado en
+    `apps/claude-code-runner-mcp/Dockerfile` para el mismo caso: con el socket
+    de Docker montado, un uid no-root no reduce ese poder en ninguna medida
+    real, solo daría una falsa sensación de contención.
+  - _Auditoría_: cada cambio queda en `control_bot.model_changes` (Postgres),
+    con timestamp — visible por `/modelo` sin argumento (US-15.4). Se escribe
+    **antes** de reiniciar el contenedor, para que quede rastro de qué se pidió
+    incluso si el reinicio se cuelga.
 
 - **SEC-1.4 — El canal de entrada no cambia las garantías.** Una tarea que llega
   por Telegram pasa exactamente por el mismo `run_coding_task`, con el mismo
@@ -485,5 +530,7 @@ evidencia pegada en el roadmap.
 | 3             | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
 | 9             | SEC-1.5, en cuanto el bot de control esté desplegado                                     |
 | 14            | SEC-2.5, SEC-3.4 (variante Jira), SEC-4.3                                                |
+| 14 (WEB)      | SEC-5.7, ampliación del proxy del sandbox a `registry.npmjs.org`                         |
+| 15            | SEC-1.6, socket de Docker acotado en código para `/modelo`                               |
 | 4–5           | Revisión de que Brain no reintroduce superficie (API solo en red interna, token propio)  |
 | Fase 10 de v2 | SEC-7.1 – SEC-7.5, en cuanto exista una instancia "Hermes trabajo"                       |

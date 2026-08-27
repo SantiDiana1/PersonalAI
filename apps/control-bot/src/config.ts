@@ -5,6 +5,7 @@
  */
 
 import { parseProbes, type ProviderProbe } from './providers.js';
+import { parseModelChoices, type ModelChoice } from './modelChoices.js';
 
 export interface ControlBotConfig {
   telegramToken: string;
@@ -25,6 +26,14 @@ export interface ControlBotConfig {
    * impedir que `/metricas` funcione por una función que no se usa.
    */
   cronJobsPath?: string;
+  /**
+   * Eslabones a los que `/modelo` puede cambiar (Fase 15, US-15.2). Opcional:
+   * sin ella, `/modelo` explica que no está configurado en vez de arrancar el
+   * bot a medias.
+   */
+  modelChoices: ModelChoice[];
+  /** Nombre del contenedor de Hermes contra el que actúa `/modelo`. */
+  hermesContainerName?: string;
 }
 
 export class ConfigError extends Error {}
@@ -79,10 +88,16 @@ export function loadConfig(): ControlBotConfig {
 
   const rawProbes = process.env['CONTROL_BOT_PROVIDER_PROBES']?.trim() ?? '';
   const cronJobsPath = process.env['CONTROL_BOT_CRON_JOBS_PATH']?.trim();
+  const rawModelChoices = process.env['CONTROL_BOT_MODEL_CHOICES']?.trim() ?? '';
+  const hermesContainerName = process.env['CONTROL_BOT_HERMES_CONTAINER_NAME']?.trim();
 
   return {
     providerProbes: rawProbes.length > 0 ? parseProbes(rawProbes) : [],
     ...(cronJobsPath !== undefined && cronJobsPath.length > 0 ? { cronJobsPath } : {}),
+    modelChoices: rawModelChoices.length > 0 ? parseModelChoices(rawModelChoices) : [],
+    ...(hermesContainerName !== undefined && hermesContainerName.length > 0
+      ? { hermesContainerName }
+      : {}),
     telegramToken: required('CONTROL_BOT_TELEGRAM_TOKEN'),
     allowedUsers: parseAllowedUsers(required('CONTROL_BOT_ALLOWED_USERS')),
     databaseUrl: required('DATABASE_URL'),

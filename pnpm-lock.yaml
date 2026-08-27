@@ -119,6 +119,9 @@ importers:
       '@personalai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      dockerode:
+        specifier: ^5.0.1
+        version: 5.0.1
       pg:
         specifier: ^8.13.1
         version: 8.23.0
@@ -126,6 +129,9 @@ importers:
         specifier: ^10.3.1
         version: 10.3.1
     devDependencies:
+      '@types/dockerode':
+        specifier: ^3.3.32
+        version: 3.3.47
       '@types/pg':
         specifier: ^8.11.10
         version: 8.23.1

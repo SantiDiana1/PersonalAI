@@ -13,10 +13,12 @@
   },
   "dependencies": {
     "@personalai/shared": "workspace:*",
+    "dockerode": "^5.0.1",
     "pg": "^8.13.1",
     "pino": "^10.3.1"
   },
   "devDependencies": {
+    "@types/dockerode": "^3.3.32",
     "@types/pg": "^8.11.10",
     "typescript": "^5.7.2",
     "vitest": "^2.1.5"

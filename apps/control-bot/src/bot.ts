@@ -3,6 +3,7 @@
  * tests lo ejerciten sin arrancar el proceso ni tocar la red.
  */
 import type pg from 'pg';
+import type Docker from 'dockerode';
 import type { ControlBotConfig } from './config.js';
 import { handleCommand } from './commands.js';
 import { logger } from './logger.js';
@@ -13,6 +14,7 @@ export async function runBot(
   telegram: TelegramClient,
   db: pg.Pool,
   shouldContinue: () => boolean,
+  docker?: Docker,
 ): Promise<void> {
   let offset = await telegram.discardBacklog();
 
@@ -46,6 +48,11 @@ export async function runBot(
         db,
         providerProbes: config.providerProbes,
         ...(config.cronJobsPath !== undefined ? { cronJobsPath: config.cronJobsPath } : {}),
+        modelChoices: config.modelChoices,
+        ...(config.hermesContainerName !== undefined
+          ? { hermesContainerName: config.hermesContainerName }
+          : {}),
+        ...(docker !== undefined ? { docker } : {}),
       });
       try {
         await telegram.sendMessage(message.chatId, reply);

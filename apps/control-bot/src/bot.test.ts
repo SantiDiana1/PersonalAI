@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type pg from 'pg';
+import type Docker from 'dockerode';
 import { runBot } from './bot.js';
 import { parseAllowedUsers, type ControlBotConfig } from './config.js';
 import { handleCommand, parseCommand } from './commands.js';
@@ -15,6 +16,7 @@ const CONFIG: ControlBotConfig = {
   databaseUrl: 'no-usado',
   pollTimeoutSeconds: 1,
   providerProbes: [],
+  modelChoices: [],
 };
 
 /** Base de datos falsa con datos suficientes para un informe real. */
@@ -166,6 +168,137 @@ describe('handleCommand', () => {
     const reply = await handleCommand('/metricas', { db: roto });
     expect(reply).not.toContain('password');
     expect(reply).toContain('Revisa los logs');
+  });
+});
+
+describe('handleCommand — /modelo (Fase 15, US-15.1/US-15.2)', () => {
+  const MODEL_CHOICES = [
+    { alias: 'anthropic', provider: 'anthropic', model: 'claude-sonnet-4-5-20250929' },
+    { alias: 'minimax', provider: 'openrouter', model: 'minimax/minimax-m3:free' },
+  ];
+
+  function auditDb(): { db: Queryable; inserted: unknown[][] } {
+    const inserted: unknown[][] = [];
+    const changes: { alias: string; provider: string; model: string; changed_at: Date }[] = [];
+    const database: Queryable = {
+      async query<T extends object>(sql: string, params?: unknown[]): Promise<{ rows: T[] }> {
+        if (sql.trim().startsWith('insert into control_bot.model_changes')) {
+          inserted.push(params ?? []);
+          const [alias, provider, model] = params as [string, string, string];
+          changes.push({ alias, provider, model, changed_at: new Date() });
+          return { rows: [] as T[] };
+        }
+        if (sql.includes('order by changed_at desc limit 1')) {
+          return { rows: (changes.length > 0 ? [changes[changes.length - 1]] : []) as T[] };
+        }
+        return { rows: [] as T[] };
+      },
+    };
+    return { db: database, inserted };
+  }
+
+  /** Cliente Docker falso: config show devuelve un modelo activo fijo, set/restart solo registran la llamada. */
+  function fakeDocker(): {
+    docker: Docker;
+    execCmds: string[][];
+    restarted: string[];
+  } {
+    const execCmds: string[][] = [];
+    const restarted: string[] = [];
+    const docker = {
+      getContainer(name: string) {
+        return {
+          async exec(opts: { Cmd: string[] }) {
+            execCmds.push(opts.Cmd);
+            const isShow = opts.Cmd.includes('show');
+            return {
+              async start() {
+                const { Readable } = await import('node:stream');
+                const output = isShow
+                  ? "Model:        {'default': 'claude-sonnet-4-5-20250929', 'provider': 'anthropic'}"
+                  : '';
+                return Readable.from([Buffer.from(output, 'utf8')]);
+              },
+              async inspect() {
+                return { ExitCode: 0 };
+              },
+            };
+          },
+          async restart() {
+            restarted.push(name);
+          },
+        };
+      },
+    } as unknown as Docker;
+    return { docker, execCmds, restarted };
+  }
+
+  it('sin argumento, informa del modelo activo, el catálogo y no cambia nada', async () => {
+    const { docker, restarted } = fakeDocker();
+    const { db: auditedDb } = auditDb();
+    const reply = await handleCommand('/modelo', {
+      db: auditedDb,
+      docker,
+      hermesContainerName: 'personalai-hermes-1',
+      modelChoices: MODEL_CHOICES,
+    });
+    expect(reply).toContain('Activo ahora: anthropic / claude-sonnet-4-5-20250929');
+    expect(reply).toContain('Último cambio: ninguno registrado todavía.');
+    expect(reply).toContain('anthropic — anthropic / claude-sonnet-4-5-20250929');
+    expect(reply).toContain('minimax — openrouter / minimax/minimax-m3:free');
+    expect(restarted).toEqual([]); // consultar nunca reinicia nada
+  });
+
+  it('con un alias válido, cambia el modelo, registra el audit y reinicia el contenedor', async () => {
+    const { docker, execCmds, restarted } = fakeDocker();
+    const { db: auditedDb, inserted } = auditDb();
+    const reply = await handleCommand('/modelo minimax', {
+      db: auditedDb,
+      docker,
+      hermesContainerName: 'personalai-hermes-1',
+      modelChoices: MODEL_CHOICES,
+    });
+    expect(reply).toContain('Cambiado a "minimax"');
+    expect(reply).toContain('reiniciando Hermes');
+    expect(restarted).toEqual(['personalai-hermes-1']);
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toEqual(['minimax', 'openrouter', 'minimax/minimax-m3:free']);
+    expect(execCmds.some((c) => c.includes('model.provider') && c.includes('openrouter'))).toBe(
+      true,
+    );
+  });
+
+  it('con un alias desconocido, no toca nada y lista los válidos', async () => {
+    const { docker, restarted } = fakeDocker();
+    const { db: auditedDb, inserted } = auditDb();
+    const reply = await handleCommand('/modelo no-existe', {
+      db: auditedDb,
+      docker,
+      hermesContainerName: 'personalai-hermes-1',
+      modelChoices: MODEL_CHOICES,
+    });
+    expect(reply).toContain('"no-existe" no es un eslabón conocido');
+    expect(reply).toContain('anthropic — anthropic');
+    expect(restarted).toEqual([]);
+    expect(inserted).toEqual([]);
+  });
+
+  it('sin Docker ni catálogo configurados, lo dice en vez de fallar', async () => {
+    const reply = await handleCommand('/modelo', { db });
+    expect(reply).toContain('no disponible');
+    expect(reply).toContain('SEC-1.6');
+  });
+
+  it('acepta el alias /model, en inglés', async () => {
+    const { docker } = fakeDocker();
+    const { db: auditedDb } = auditDb();
+    const reply = await handleCommand('/model', {
+      db: auditedDb,
+      docker,
+      hermesContainerName: 'personalai-hermes-1',
+      modelChoices: MODEL_CHOICES,
+    });
+    expect(reply).toContain('Activo ahora');
   });
 });
 
