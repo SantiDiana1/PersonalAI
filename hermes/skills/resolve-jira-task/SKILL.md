@@ -154,21 +154,41 @@ de verdad; el estado es una comodidad visual, no una condición de éxito.
 
 ## Workflow
 
-### Paso 0 — De dónde salen la allowlist de repos y el JQL
+### Paso 0 — De dónde salen el proyecto, la allowlist de repos y el JQL
 
 Igual que en `resolve-issue`: **siempre de quien te invoca**. El prompt del job
-de cron trae la lista de repos permitidos. Si te invocan sin ella, no adivines:
-di que falta y termina.
+de cron trae la lista de repos permitidos **y el proyecto (o proyectos) de
+Jira** sobre los que operar. Si te invocan sin cualquiera de los dos, no
+adivines: di que falta y termina.
+
+**El proyecto no es opcional, aunque el sitio solo tenga uno hoy.** Un site de
+Atlassian normalmente aloja varios proyectos (verificado: este site tiene
+`MYAI`, `SAM1`, `WEB`), y la etiqueta `hermes` es texto libre sin ámbito — nada
+impide que alguien la use en un proyecto distinto al que este cron atiende.
+**Hallazgo real (2026-08-27)**: 15 tickets del proyecto `WEB` aparecieron
+etiquetados `hermes` + `repo:SantiDiana1/personalWebsite` — un repo que **ni
+siquiera existe todavía en GitHub** — mientras el cron real de este proyecto
+solo tenía permitido `SantiDiana1/PersonalAI`. Sin acotar por proyecto, el
+JQL del Paso 1 los habría recogido igual (`labels = hermes` es global al
+site), y la Regla 2 los habría rechazado uno a uno — sin abrir ningún PR
+equivocado, porque el repo no estaba en la allowlist, pero gastando un ciclo
+de cron entero por ticket en puro ruido, quince veces, antes de que ningún
+ticket real de este proyecto tuviera su turno. La allowlist de repos ya
+paraba lo peligroso; **no** paraba lo derrochador.
 
 ### Paso 1 — Listar tareas candidatas
 
 `jira_get` sobre `/rest/api/3/search/jql` con:
 
 ```
-jql=labels = hermes AND statusCategory != Done ORDER BY created ASC
+jql=project = <PROYECTO> AND labels = hermes AND statusCategory != Done ORDER BY created ASC
 fields=summary,labels,status
 maxResults=20
 ```
+
+`<PROYECTO>` es el que dio quien te invoca en el Paso 0 — nunca lo omitas ni
+lo adivines de qué proyecto "suele ser". Si te dieron varios, únelos con
+`project in (A, B) AND ...`.
 
 Filtra `statusCategory` y no `status`: `statusCategory` tiene tres valores
 fijos del propio Jira (`To Do`/`In Progress`/`Done`) en vez de los nombres de
