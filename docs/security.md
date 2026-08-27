@@ -208,6 +208,15 @@ que tocan datos externos, porque es el único que ingiere texto arbitrario.
       comentar, `jira_patch` y `jira_delete` por completo. Es el mismo patrón que
       `resolve-issue` aplica a `merge_pull_request`/`create_repository`: la tool
       existe, el procedimiento no la usa.
+  - _Ampliación (2026-08-27)_: la allowlist ahora incluye
+    `GET /rest/api/3/issue/{key}/transitions` (descubrir transiciones, solo
+    lectura) y `POST /rest/api/3/issue/{key}/transitions` (ejecutarlas), para
+    que el estado visible del ticket refleje la etiqueta que ya se le puso —
+    antes solo cambiaba la etiqueta y el tablero de Jira quedaba desactualizado.
+    El `POST` está acotado en el propio skill a un cuerpo de una sola forma
+    (`{"transition": {"id": "<id>"}}`, con el `id` tomado del `GET` de ese mismo
+    ticket en el mismo turno, nunca inventado) — no abre escritura arbitraria
+    sobre el ticket, solo mover su estado por el workflow ya configurado.
   - _Límite honesto, declarado y no cerrado_: esto es una restricción **en el
     prompt**, no en el transporte. Un token de API de Atlassian hereda todos los
     permisos del usuario y no admite scoping fine-grained como un PAT de GitHub

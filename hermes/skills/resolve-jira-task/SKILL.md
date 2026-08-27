@@ -45,6 +45,13 @@ que no son estilo sino seguridad.
    - `GET /rest/api/3/search/jql` — listar candidatas
    - `GET /rest/api/2/issue/{key}` — leer un ticket
    - `PUT /rest/api/3/issue/{key}` — mover etiquetas
+   - `GET /rest/api/3/issue/{key}/transitions` — descubrir transiciones
+     disponibles desde el estado actual (ver "Transición de estado" abajo)
+   - `POST /rest/api/3/issue/{key}/transitions` — ejecutar **solo** una
+     transición ya descubierta con el GET anterior, con el cuerpo exacto
+     `{"transition": {"id": "<id>"}}` y nada más. Nunca un `id` inventado ni
+     copiado de otro ticket: cada llamada lleva el `id` que devolvió el GET de
+     **ese mismo** ticket en **ese mismo** turno.
    - `POST /rest/api/3/issue/{key}/comment` — reportar (única excepción a
      "solo GET y PUT"; comentar no es destructivo y no hay alternativa con PUT)
      Si crees necesitar cualquier otro endpoint, **no lo llames**: reporta
@@ -59,9 +66,13 @@ que no son estilo sino seguridad.
    ticket, y **solo si ese valor aparece en la allowlist de repos que te pasa
    quien te invoca** (el prompt del cron o el Operador). Si el ticket no la
    lleva, la lleva mal formada, o nombra un repo fuera de la allowlist:
-   comenta pidiendo la etiqueta, marca `hermes:needs-human`, y sigue con la
-   siguiente. **Nunca** deduzcas el repo de la descripción, del nombre del
-   proyecto Jira, ni de "el único que hay en la allowlist".
+   comenta pidiendo la etiqueta, marca `hermes:needs-human` (directamente
+   desde `hermes`, sin pasar por `hermes:in-progress` — este rechazo ocurre
+   antes del Paso 2, no después), aplica también la transición de estado a
+   **"Blocked"** siguiendo la misma regla de degradación de "Transición de
+   estado" abajo, y sigue con la siguiente. **Nunca** deduzcas el repo de la
+   descripción, del nombre del proyecto Jira, ni de "el único que hay en la
+   allowlist".
 
 ## Prerequisites
 
@@ -84,13 +95,62 @@ dos puntos y la barra son caracteres válidos en una etiqueta de Jira — `PUT`
 devuelve `204` y la etiqueta se lee de vuelta intacta. Lo único que Jira
 prohíbe en una etiqueta son los espacios.
 
-**Por qué etiquetas y no transiciones de estado**, que es como estaba escrito
-antes en `resolve-issue`: los nombres de las transiciones están **localizados**
-(en este site son "Por hacer", "En curso", "Listo") y sus IDs son propios del
-workflow del proyecto (aquí `11`/`21`/`31`/`41`/`51`). Transicionar exigiría
-descubrir IDs en cada pasada y acertar con un nombre traducido; las etiquetas
-son texto libre, idénticas a las de GitHub, y no dependen de la configuración
-del workflow. Menos piezas y menos idioma de por medio.
+**Por qué etiquetas y no transiciones de estado como mecanismo de selección**:
+los nombres de las transiciones están **localizados** (en este site, "Por
+hacer", "En curso", "Listo") y sus IDs son propios del workflow del proyecto
+(aquí `11`/`21`/`31`/`41`/`51`). Un filtro por nombre de estado se rompe en
+silencio el día que alguien lo cambia. Las etiquetas son texto libre,
+idénticas a las de GitHub, y no dependen de la configuración del workflow —
+por eso el Paso 1 sigue filtrando por `labels`/`statusCategory` y no por
+transiciones. Esto **no cambia**.
+
+Lo que sí cambia (2026-08-27, a petición del Operador): las etiquetas dejaban
+de reflejarse en el estado visible del ticket, y el tablero de Jira mentía —
+un ticket en `hermes:done` seguía viéndose como "Tareas por hacer". Ver
+"Transición de estado" abajo.
+
+## Transición de estado
+
+Las etiquetas siguen siendo la **única fuente de verdad** para qué hacer con
+un ticket (Paso 1, Regla 2). El estado de Jira (`status`/`statusCategory`) es
+ahora un **espejo best-effort** de la etiqueta, para que el tablero no
+contradiga lo que dicen las etiquetas — nunca al revés, y nunca bloqueante: si
+la transición falla, la tarea sigue con la etiqueta ya puesta.
+
+**Mecanismo, descubierto en cada turno, nunca hardcodeado por ID**: antes de
+cada cambio de etiqueta, `jira_get` sobre
+`/rest/api/3/issue/{key}/transitions` del ticket concreto. Devuelve las
+transiciones disponibles **desde el estado actual**, cada una con `id`,
+`name` y `to.statusCategory.key` (`new`/`indeterminate`/`done` — los tres
+valores fijos de Jira, nunca localizados, mismo campo que ya usa el Paso 1).
+
+Verificado contra el workflow real del proyecto `MYAI` (2026-08-27): desde
+"Tareas por hacer" hay 5 transiciones disponibles, con esta correspondencia
+observada — **válida como convención por defecto de este proyecto, no como
+garantía universal de cualquier workflow de Jira**:
+
+| Etiqueta que se pone   | Categoría destino | Nombre de transición observado | Cuándo |
+| ----------------------- | ------------------ | ------------------------------- | ------ |
+| `hermes:in-progress`    | `indeterminate`     | **"En curso"**                   | Paso 2, antes de delegar |
+| `hermes:done`           | `done`              | **"Listo"** (destino: "Finalizada") | Paso 6, tras abrir el PR |
+| `hermes:needs-human`    | `indeterminate`     | **"Blocked"**                    | Paso 6, en cualquier fallo |
+
+**Por qué el nombre exacto y no solo la categoría**: `done` y `new` tienen
+cada uno una única transición en este workflow, así que la categoría basta.
+`indeterminate` tiene **tres** candidatas ("En curso", "In Review", "Blocked")
+— la categoría sola no distingue cuál. Elegir por nombre exacto es la única
+forma de no aterrizar en un estado equivocado dentro de esa categoría, con el
+coste de ser específico a este workflow. Se documenta así, no se esconde.
+
+**Regla de degradación, sin excepción**: busca en la respuesta del GET una
+transición cuyo `name` sea exactamente el de la tabla. Si existe, ejecútala
+con el `id` real devuelto (nunca uno de otra respuesta ni de memoria). **Si no
+existe** — el workflow no tiene ese nombre, o el ticket ya no tiene esa
+transición disponible desde su estado actual — **no falles la tarea ni
+adivines otra transición**: sigue solo con el cambio de etiqueta, y si el paso
+es el de reportar (Paso 6), añade una frase al comentario indicando que el
+estado de Jira no se pudo actualizar automáticamente. La etiqueta es la fuente
+de verdad; el estado es una comodidad visual, no una condición de éxito.
 
 ## Workflow
 
@@ -131,6 +191,13 @@ Las dos operaciones van en **una sola petición** a propósito: así el cambio e
 atómico y no existe la ventana en la que el ticket no tiene ninguna etiqueta y
 una segunda pasada podría cogerlo. Es una garantía mejor que la de GitHub, donde
 quitar y poner son dos llamadas.
+
+Justo después, aplica la transición de estado a **"En curso"** siguiendo la
+regla de "Transición de estado" arriba (GET transitions → busca "En curso" →
+POST con su `id` si existe). Es una llamada aparte porque el endpoint de
+transiciones no acepta `labels` en el mismo cuerpo — no es atómico con el
+cambio de etiqueta, pero la etiqueta manda: si la transición falla, sigues
+igualmente.
 
 Hazlo **antes** de llamar a `run_coding_task`, nunca después. Procesa **una
 tarea por ejecución** salvo que el Operador diga otra cosa.
@@ -183,6 +250,9 @@ Puede tardar minutos. Espera su resultado; no la relances.
    que devolvió `create_pull_request`**, nunca uno calculado.
 3. `jira_put` sustituyendo `hermes:in-progress` por `hermes:done`, otra vez en
    una sola petición.
+4. Transición de estado a **"Listo"** (categoría `done`), misma regla de
+   degradación: si no existe esa transición desde el estado actual, no falles
+   nada — la etiqueta ya quedó en `hermes:done`, que es lo que importa.
 
 **Si es `failed`, `needs_human_input` o `timed_out`:**
 
@@ -190,6 +260,8 @@ Puede tardar minutos. Espera su resultado; no la relances.
 2. Comenta en el ticket con el `summary` literal del runner y qué significa el
    estado (mismos tres significados que en `resolve-issue`).
 3. Sustituye `hermes:in-progress` por `hermes:needs-human`.
+4. Transición de estado a **"Blocked"** (categoría `indeterminate`), misma
+   regla de degradación que arriba.
 
 Sé literal. No adornes un fallo como éxito parcial ni inventes causas que el
 `summary` no dice.
