@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [jira, atlassian, issues, automation, coding-agent, mcp]
-    related_skills: [resolve-issue]
+    related_skills: [resolve-issue, run-task]
 ---
 
 # resolve-jira-task: resolver tareas de Jira delegando en Claude Code
