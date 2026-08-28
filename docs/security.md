@@ -1,543 +1,536 @@
-# Modelo de seguridad — PersonalAI
+# Security model — PersonalAI
 
-> **Este documento es la fuente única de verdad de los requisitos de seguridad
-> innegociables del proyecto.** Cada fase del [roadmap](roadmap.md) referencia
-> los requisitos `SEC-x.y` que le aplican, y ninguna fase se da por terminada
-> sin verificarlos con evidencia real (no "debería funcionar"). La verificación
-> de las fases ya cerradas está en la [bitácora](decisions-log.md).
+> **This document is the single source of truth for the project's non-negotiable
+> security requirements.** Every phase in the [roadmap](roadmap.md) references the
+> `SEC-x.y` requirements that apply to it, and no phase is considered finished
+> without verifying them against real evidence (not "it should work"). The
+> verification record for closed phases lives in the [decisions log](decisions-log.md).
 >
-> **Pendiente (Fase 18)**: hoy estos requisitos se verifican a mano, una vez, y
-> su evidencia es prosa en la bitácora. La [suite de evals](agent-evals/spec.md)
-> los convierte en comprobaciones ejecutables y añadirá aquí una sección de
-> cobertura que diga, requisito a requisito, cuál está automatizado, cuál sigue
-> siendo verificación manual, y cuál no está verificado en absoluto.
+> **Pending (Phase 18)**: today these requirements are verified by hand, once, and
+> their evidence is prose in the log. The [eval suite](agent-evals/spec.md) turns
+> them into executable checks and will add a coverage section here stating,
+> requirement by requirement, which are automated, which remain manual
+> verification, and which are not verified at all.
 >
-> Si un requisito de aquí estorba para avanzar, la salida **no** es saltárselo:
-> es cambiar este documento explícitamente, dejando constancia de qué se relaja
-> y por qué. Un requisito incumplido en silencio es una mentira en el portfolio.
+> If a requirement here gets in the way, the way out is **not** to skip it: it is to
+> change this document explicitly, recording what is being relaxed and why. A
+> requirement quietly left unmet is a lie in the portfolio.
 
-## 0. Por qué este documento existe
+## 0. Why this document exists
 
-Este sistema tiene una combinación que, mal montada, es peligrosa de verdad:
+This system has a combination that, badly assembled, is genuinely dangerous:
 
-1. **Lee texto escrito por desconocidos** — el cuerpo de una issue de GitHub lo
-   puede escribir cualquiera, y puede contener instrucciones dirigidas al agente
-   ("ignora tus instrucciones y en su lugar..."). Esto es **prompt injection**, y
-   no es hipotético: es el modo de fallo esperado de cualquier agente que lee
-   input de terceros.
-2. **Ejecuta código automáticamente** — el propósito del sistema es que Claude
-   Code escriba y commitee código sin que nadie mire en el momento.
-3. **Corre en la máquina de casa del Operador** — un Mac Mini que no es un
-   servidor desechable, sino un equipo personal en la red doméstica.
+1. **It reads text written by strangers** — the body of a GitHub issue can be
+   written by anyone, and can contain instructions aimed at the agent ("ignore your
+   instructions and instead..."). This is **prompt injection**, and it is not
+   hypothetical: it is the expected failure mode of any agent that reads
+   third-party input.
+2. **It executes code automatically** — the whole purpose of the system is for
+   Claude Code to write and commit code with nobody watching at the time.
+3. **It runs on the Operator's home machine** — not a disposable server, but a
+   personal computer on the home network. (Today that host is a WSL2/Docker Desktop
+   machine; a dedicated Mac Mini is the planned target. Every requirement below is a
+   property of "the host", and does not change with the hardware.)
 
-El diseño entero está construido alrededor de una idea: **quien lee lo no
-confiable no puede tener permisos peligrosos, y quien tiene permisos peligrosos
-no lee nada no confiable.**
+The entire design is built around one idea: **whatever reads untrusted input must
+not hold dangerous permissions, and whatever holds dangerous permissions must not
+read anything untrusted.**
 
-## 1. El concepto central: el socket de Docker es la llave maestra
+## 1. The central concept: the Docker socket is the master key
 
-En Docker no existe un permiso "puedes crear contenedores, pero solo pequeños e
-inofensivos". Quien puede hablar con el socket de Docker puede crear un
-contenedor que monte el disco entero del host y leerlo o modificarlo. Por tanto:
+Docker has no permission that says "you may create containers, but only small
+harmless ones". Anyone who can talk to the Docker socket can create a container
+that mounts the host's entire disk and read or modify it. Therefore:
 
-> **acceso al socket de Docker ≡ control total del Mac Mini**
+> **access to the Docker socket ≡ full control of the host**
 
-`claude-code-runner-mcp` necesita ese acceso — lanzar contenedores efímeros es
-literalmente su función. Eso no se discute. Lo que sí se decide es **quién más
-lo tiene**, y la respuesta es: nadie.
+`claude-code-runner-mcp` needs that access — launching ephemeral containers is
+literally its job. That is not up for debate. What _is_ decided is **who else has
+it**, and the answer is: nobody.
 
-De ahí sale la arquitectura de despliegue (ver [architecture.md §Despliegue](architecture.md#despliegue)):
-hermes-agent y el runner viven en **contenedores separados**, y solo el segundo
-ve el socket. Se comunican por MCP sobre HTTP dentro de una red interna de
-Docker Compose, donde la única cosa que hermes le puede pedir al runner es
-`run_coding_task(repo, título, descripción, ...)` — no existe ninguna tool
-genérica de "ejecuta este comando".
+That is where the deployment architecture comes from (see
+[architecture.md §Despliegue](architecture.md#despliegue)): hermes-agent and the
+runner live in **separate containers**, and only the second one sees the socket.
+They communicate over MCP on HTTP inside an internal Docker Compose network, where
+the only thing hermes can ask the runner for is
+`run_coding_task(repo, title, description, ...)` — there is no generic "run this
+command" tool.
 
-Esto se evaluó explícitamente frente a dos alternativas más simples, ambas
-descartadas:
+This was explicitly evaluated against two simpler alternatives, both rejected:
 
-| Alternativa                                                                   | Por qué se descartó                                                                                             |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| hermes nativo en el host (sin contenedor) + runner como subproceso stdio      | hermes tendría los privilegios completos del usuario del Mac Mini. Una inyección exitosa = equipo comprometido. |
-| hermes en contenedor **con** el socket montado + runner como subproceso stdio | Le da la llave maestra justo al componente que lee texto no confiable. Es la peor combinación de las tres.      |
+| Alternative                                                                       | Why it was rejected                                                                                            |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| hermes native on the host (no container) + runner as an stdio subprocess          | hermes would hold the full privileges of the host user. A successful injection = compromised personal machine. |
+| hermes in a container **with** the socket mounted + runner as an stdio subprocess | Hands the master key to precisely the component that reads untrusted text. The worst of the three.             |
 
-## 2. Capa 0 — Perímetro de red doméstica
+## 2. Layer 0 — Home network perimeter
 
-**Requisito de partida**: el Mac Mini está en la red de casa del Operador, detrás
-de un router doméstico. Abrir puertos ahí no expone "un servidor", expone la red
-de casa.
+**Starting requirement**: the host sits on the Operator's home network, behind a
+domestic router. Opening ports there does not expose "a server", it exposes the
+home network.
 
-- **SEC-0.1 (innegociable) — Cero puertos entrantes.** No se abre ningún puerto
-  del router hacia el Mac Mini. Ni port forwarding, ni DMZ, ni UPnP para este
-  proyecto.
-  - _Por qué se puede cumplir_: **verificado en el código de hermes-agent** — el
-    gateway de Telegram usa long polling (`getUpdates` vía python-telegram-bot,
-    `gateway/platforms/telegram.py`), no webhooks. El tráfico es **saliente**: el
-    proceso pregunta a `api.telegram.org` si hay mensajes. El cron que sondea
-    GitHub (Fase 2) también es saliente. **Hablar con Hermes desde fuera de casa
-    no requiere ninguna entrada**: tú hablas con los servidores de Telegram, y
-    Hermes también — nunca directamente entre vosotros.
-  - _Verificación_: desde fuera de la red doméstica, un escaneo de la IP pública
-    no debe mostrar ningún puerto del proyecto abierto.
+- **SEC-0.1 (non-negotiable) — Zero inbound ports.** No router port is opened
+  towards the host. No port forwarding, no DMZ, no UPnP for this project.
+  - _Why this is achievable_: **verified in hermes-agent's source** — the Telegram
+    gateway uses long polling (`getUpdates` via python-telegram-bot,
+    `gateway/platforms/telegram.py`), not webhooks. Traffic is **outbound**: the
+    process asks `api.telegram.org` whether there are messages. The cron that polls
+    GitHub (Phase 2) is outbound too. **Talking to Hermes from outside the house
+    requires no inbound path at all**: you talk to Telegram's servers, and Hermes
+    talks to them too — never directly to each other.
+  - _Verification_: from outside the home network, a scan of the public IP must
+    show no project port open.
 
-- **SEC-0.2 (innegociable) — Nada de túneles "para probar".** Prohibido exponer
-  cualquier componente vía ngrok, Cloudflare Tunnel, Tailscale Funnel o
-  equivalente, aunque sea temporalmente durante el desarrollo. Un túnel es un
-  puerto entrante con otro nombre, y los "temporales" se quedan.
-  - _Excepción admitida_: una VPN de acceso remoto (Tailscale/WireGuard en modo
-    red privada, **sin** exponer servicios a internet) es aceptable si el
-    Operador la quiere para administrar el Mac Mini, porque no publica nada.
+- **SEC-0.2 (non-negotiable) — No tunnels "just to try it".** Exposing any
+  component via ngrok, Cloudflare Tunnel, Tailscale Funnel or equivalent is
+  forbidden, even temporarily during development. A tunnel is an inbound port by
+  another name, and "temporary" ones stay.
+  - _Accepted exception_: a remote-access VPN (Tailscale/WireGuard in private
+    network mode, **without** exposing services to the internet) is acceptable if
+    the Operator wants it for administering the host, because it publishes nothing.
 
-- **SEC-0.3 (innegociable) — Dashboard y API server no salen de localhost.** El
-  dashboard de hermes-agent almacena credenciales de proveedores. El compose
-  upstream ya lo ata a `127.0.0.1` y deja el API server apagado salvo que se
-  define `API_SERVER_KEY`; **no se revierte ninguna de las dos cosas**. Para
-  acceder al dashboard desde otro equipo se usa un túnel SSH, nunca
-  `--host 0.0.0.0`.
+- **SEC-0.3 (non-negotiable) — Dashboard and API server never leave localhost.**
+  hermes-agent's dashboard stores provider credentials. The upstream compose
+  already binds it to `127.0.0.1` and leaves the API server off unless
+  `API_SERVER_KEY` is defined; **neither of those is reverted**. To reach the
+  dashboard from another machine, use an SSH tunnel, never `--host 0.0.0.0`.
 
-## 3. Capa 1 — Quién puede darle órdenes a Hermes
+## 3. Layer 1 — Who can give Hermes orders
 
-Esta es la capa que más importa para el objetivo de "hablar con mi IA desde el
-móvil". Un bot de Telegram es **descubrible**: su nombre de usuario es público y
-cualquiera puede escribirle.
+This is the layer that matters most for the goal of "talking to my AI from my
+phone". A Telegram bot is **discoverable**: its username is public and anyone can
+message it.
 
-- **SEC-1.1 (innegociable) — Allowlist explícita, denegación por defecto.** Solo
-  los IDs de usuario de Telegram explícitamente autorizados pueden interactuar.
-  - _Base_: **verificado en el código** — `gateway/run.py::_is_user_authorized`
-    resuelve en este orden: flag allow-all por plataforma → allowlist por env
-    (`TELEGRAM_ALLOWED_USERS`) → lista aprobada de DM pairing → allow-all global
-    → **"Default: deny"**. El comportamiento por defecto ya es el correcto.
-  - _Configuración_: `TELEGRAM_ALLOWED_USERS=<id del Operador>` en el `.env`, y/o
-    aprobación explícita vía `hermes pairing approve`.
-  - _Verificación_: con la allowlist puesta, un mensaje desde una cuenta de
-    Telegram distinta debe ser rechazado. Se comprueba con una segunda cuenta,
-    no se asume.
+- **SEC-1.1 (non-negotiable) — Explicit allowlist, deny by default.** Only
+  explicitly authorised Telegram user IDs may interact.
+  - _Basis_: **verified in the source** — `gateway/run.py::_is_user_authorized`
+    resolves in this order: per-platform allow-all flag → env allowlist
+    (`TELEGRAM_ALLOWED_USERS`) → approved DM pairing list → global allow-all →
+    **"Default: deny"**. The default behaviour is already the correct one.
+  - _Configuration_: `TELEGRAM_ALLOWED_USERS=<Operator's id>` in the `.env`, and/or
+    explicit approval via `hermes pairing approve`.
+  - _Verification_: with the allowlist in place, a message from a different
+    Telegram account must be rejected. Checked with a second account, not assumed.
 
-- **SEC-1.2 (innegociable) — Nunca activar los escapes de allow-all.** Las
-  variables `GATEWAY_ALLOW_ALL_USERS`, `TELEGRAM_ALLOW_ALL_USERS` y sus
-  equivalentes por plataforma **no se ponen a `true` jamás**, ni siquiera para
-  depurar. Con ellas, cualquiera que encuentre el bot puede mandarle tareas de
-  código.
+- **SEC-1.2 (non-negotiable) — Never enable the allow-all escapes.** The variables
+  `GATEWAY_ALLOW_ALL_USERS`, `TELEGRAM_ALLOW_ALL_USERS` and their per-platform
+  equivalents are **never set to `true`**, not even for debugging. With them,
+  anyone who finds the bot can send it coding tasks.
 
-- **SEC-1.3 — El token del bot de Telegram es un secreto de primer nivel.** Quien
-  lo tenga puede leer todo lo que le escribes al bot y suplantarlo. Vive en el
-  `.env` fuera de git, igual que el resto (ver SEC-6.2).
+- **SEC-1.3 — The Telegram bot token is a first-class secret.** Whoever holds it
+  can read everything you write to the bot and impersonate it. It lives in the
+  `.env` outside git, like the rest (see SEC-6.2).
 
-- **SEC-1.5 — El bot de control tiene token y allowlist propios, y es el
-  servicio menos privilegiado.** El segundo bot de Telegram (`apps/control-bot`,
-  Fase 9) NO comparte el token de Hermes — no podría aunque se quisiera:
-  Telegram solo admite un consumidor de updates por token. SEC-1.1 a SEC-1.3
-  aplican igual y por separado: allowlist propia y obligatoria (el proceso no
-  arranca sin ella, verificado con test), y su token es un secreto de primer
-  nivel.
+- **SEC-1.5 — The control bot has its own token and allowlist, and is the least
+  privileged service.** The second Telegram bot (`apps/control-bot`, Phase 9) does
+  NOT share Hermes' token — it could not even if we wanted it to: Telegram only
+  allows one update consumer per token. SEC-1.1 through SEC-1.3 apply equally and
+  separately: its own mandatory allowlist (the process refuses to start without
+  one, verified by test), and its token is a first-class secret.
 
-  Lo que **no** tiene, deliberadamente, porque ingiere texto de Telegram igual
-  que hermes: `CLAUDE_CODE_RUNNER_AUTH_TOKEN` (ese token autentica también
-  `/mcp`, que lanza contenedores), puertos publicados, y acceso a workspaces o
-  artefactos. Su única capacidad es hacer SELECTs agregados contra Postgres y
-  hablar con `api.telegram.org` — **y, desde la Fase 15 (ver SEC-1.6 abajo),
-  una excepción más, acotada en código.** Es la aplicación del mismo
-  razonamiento de SEC-2.1: el componente expuesto a texto no confiable recibe
-  el mínimo, no la comodidad — SEC-1.6 es la única grieta deliberada en esa
-  regla, y se declara como tal.
+  What it deliberately does **not** have, because it ingests Telegram text just as
+  hermes does: `CLAUDE_CODE_RUNNER_AUTH_TOKEN` (that token also authenticates
+  `/mcp`, which launches containers), published ports, and access to workspaces or
+  artifacts. Its only capability is running aggregate SELECTs against Postgres and
+  talking to `api.telegram.org` — **and, since Phase 15 (see SEC-1.6 below), one
+  more exception, scoped in code.** This is the same reasoning as SEC-2.1: the
+  component exposed to untrusted text gets the minimum, not the convenience —
+  SEC-1.6 is the one deliberate crack in that rule, and it is declared as such.
 
-  - _Excepción declarada, añadida con `/cron`_: el contenedor monta
-    `$HERMES_HOME/cron` en **solo lectura** y corre con el **uid de hermes**
-    (10000) en vez del suyo propio (10003). No es comodidad: hermes-agent
-    escribe `cron/jobs.json` con modo 0600 y **lo reescribe restaurando ese
-    modo en cada tick** del scheduler — verificado a mano, un `chmod 644` vuelve
-    a 600 en la siguiente edición — y no hay `setfacl` disponible ni en el host
-    ni en las imágenes. Compartir uid es lo único que sobrevive a un
-    redespliegue.
-  - _Qué NO se amplía_: se monta el subdirectorio `cron`, **no**
-    `$HERMES_HOME`. `auth.json` (token OAuth de Claude) no está en ese árbol y
-    sigue siendo inalcanzable. En Linux el uid no concede nada por sí solo:
-    solo da acceso a ficheros alcanzables, y aquí lo alcanzable es un
-    directorio `:ro`.
-  - _Qué SÍ se amplía, dicho sin adornos_: `cron/output/` cuelga de ese mismo
-    directorio y contiene transcripts completos de las ejecuciones del cron.
-    Ningún camino del código los lee — solo se abre `jobs.json` — pero son
-    alcanzables desde ese contenedor. Lo que hace el riesgo aceptable es que
-    **este bot no tiene modelo**: ejecuta un registro fijo de comandos
-    (`COMMANDS` en `apps/control-bot/src/commands.ts`) y no interpreta lenguaje
-    natural, así que no hay agente al que convencer de leer otra cosa. Si algún
-    día se le añadiera un modelo, esta excepción deja de ser defendible y hay
-    que sustituirla por un endpoint HTTP acotado.
+  - _Declared exception, added with `/cron`_: the container mounts
+    `$HERMES_HOME/cron` **read-only** and runs with **hermes' uid** (10000) rather
+    than its own (10003). This is not convenience: hermes-agent writes
+    `cron/jobs.json` with mode 0600 and **rewrites it restoring that mode on every
+    scheduler tick** — verified by hand, a `chmod 644` returns to 600 on the next
+    edit — and there is no `setfacl` available on the host or in the images.
+    Sharing the uid is the only thing that survives a redeploy.
+  - _What is NOT widened_: the `cron` subdirectory is mounted, **not**
+    `$HERMES_HOME`. `auth.json` (Claude's OAuth token) is not in that tree and
+    remains unreachable. On Linux a uid grants nothing by itself: it only gives
+    access to reachable files, and what is reachable here is a `:ro` directory.
+  - _What IS widened, put plainly_: `cron/output/` hangs off that same directory
+    and contains full transcripts of cron runs. No code path reads them — only
+    `jobs.json` is opened — but they are reachable from that container. What makes
+    the risk acceptable is that **this bot has no model**: it runs a fixed registry
+    of commands (`COMMANDS` in `apps/control-bot/src/commands.ts`) and does not
+    interpret natural language, so there is no agent to talk into reading something
+    else. If a model is ever added to it, this exception stops being defensible and
+    must be replaced by a scoped HTTP endpoint.
 
-- **SEC-1.6 — El bot de control monta el socket de Docker desde la Fase 15
-  (US-15.2), acotado en código, no en el socket.** `/modelo` necesita cambiar
-  el eslabón activo del agent loop y reiniciar el contenedor de Hermes para
-  que lo cargue — el gateway solo lee `config.yaml` al arrancar (mismo
-  hallazgo operacional de las Fases 2/13). No hay forma de conseguir eso sin
-  hablar con el demonio de Docker.
+- **SEC-1.6 — The control bot mounts the Docker socket as of Phase 15 (US-15.2),
+  scoped in code, not in the socket.** `/modelo` needs to change the agent loop's
+  active link and restart the Hermes container so it picks it up — the gateway only
+  reads `config.yaml` at startup (the same operational finding as Phases 2/13).
+  There is no way to achieve that without talking to the Docker daemon.
 
-  - _Qué grado de acceso implica esto, sin adornarlo_: el socket de Docker es
-    la llave maestra del host (SEC-1) — quien lo tiene puede en principio
-    lanzar un contenedor con `/` del host montado y hacer cualquier cosa. Este
-    componente, que ingiere texto de Telegram sin modelo de por medio pero
-    igualmente expuesto a cualquiera que descubra el bot y esté en la
-    allowlist, pasa a tener esa capacidad si se compromete.
-  - _Qué lo mantiene acotado_: **no el socket — el código.**
-    `apps/control-bot/src/docker.ts` es el único lugar del proceso que lo
-    toca, y solo sabe hacer tres cosas, siempre contra un único contenedor por
-    nombre fijo (`CONTROL_BOT_HERMES_CONTAINER_NAME`): leer el modelo activo
-    (`hermes config show`, de solo lectura), cambiarlo (`hermes config set
-model.provider|model.default`), y reiniciar ese contenedor. Nunca un
-    comando arbitrario, nunca `docker run`/`createContainer`, nunca otro
-    contenedor. Mismo patrón ya aceptado para `claude-code-runner-mcp` en
-    SEC-2.1 y SEC-4.1, aplicado aquí por segunda vez a un componente distinto.
-  - _Por qué el valor a cambiar no es libre_: el alias que acepta `/modelo`
-    se valida contra `CONTROL_BOT_MODEL_CHOICES`, una lista **declarada** al
-    desplegar — mismo patrón que `CONTROL_BOT_PROVIDER_PROBES` para
-    `/proveedores` — nunca contra la cadena viva de `fallback_providers`
-    (que vive en `config.yaml`, dentro del volumen con `auth.json` que este
-    bot sigue sin montar). Un alias que no está en esa lista no toca nada.
-  - _Por qué `hermes config show` es seguro de exponer_: verificado contra el
-    despliegue real, no asumido — redacta las claves API (`sk-a...gAAA`) y no
-    incluye la sección de servidores MCP, así que los tokens de Jira/Notion/
-    GitHub que viven embebidos en `config.yaml` (hallazgo de la Fase 14,
-    `mcp_servers.*.env.*`) nunca pasan por este camino.
-  - _Usuario del contenedor_: pasó de no-root (uid 10003, dedicado) a **root**
-    — mismo razonamiento ya documentado en
-    `apps/claude-code-runner-mcp/Dockerfile` para el mismo caso: con el socket
-    de Docker montado, un uid no-root no reduce ese poder en ninguna medida
-    real, solo daría una falsa sensación de contención.
-  - _Auditoría_: cada cambio queda en `control_bot.model_changes` (Postgres),
-    con timestamp — visible por `/modelo` sin argumento (US-15.4). Se escribe
-    **antes** de reiniciar el contenedor, para que quede rastro de qué se pidió
-    incluso si el reinicio se cuelga.
+  - _What degree of access this implies, undressed_: the Docker socket is the
+    host's master key (SEC-1) — whoever holds it can in principle launch a
+    container with the host's `/` mounted and do anything. This component, which
+    ingests Telegram text with no model in the loop but is nonetheless exposed to
+    anyone who discovers the bot and is on the allowlist, gains that capability if
+    compromised.
+  - _What keeps it bounded_: **not the socket — the code.**
+    `apps/control-bot/src/docker.ts` is the only place in the process that touches
+    it, and it only knows how to do three things, always against a single container
+    by fixed name (`CONTROL_BOT_HERMES_CONTAINER_NAME`): read the active model
+    (`hermes config show`, read-only), change it
+    (`hermes config set model.provider|model.default`), and restart that container.
+    Never an arbitrary command, never `docker run`/`createContainer`, never another
+    container. The same pattern already accepted for `claude-code-runner-mcp` in
+    SEC-2.1 and SEC-4.1, applied here for a second time to a different component.
+  - _Why the value being changed is not free-form_: the alias `/modelo` accepts is
+    validated against `CONTROL_BOT_MODEL_CHOICES`, a list **declared** at deploy
+    time — the same pattern as `CONTROL_BOT_PROVIDER_PROBES` for `/proveedores` —
+    never against the live `fallback_providers` chain (which lives in
+    `config.yaml`, inside the volume with `auth.json` that this bot still does not
+    mount). An alias not on that list touches nothing.
+  - _Why `hermes config show` is safe to expose_: verified against the real
+    deployment, not assumed — it redacts API keys (`sk-a...gAAA`) and does not
+    include the MCP servers section, so the Jira/Notion/GitHub tokens embedded in
+    `config.yaml` (a Phase 14 finding, `mcp_servers.*.env.*`) never travel this
+    path.
+  - _Container user_: changed from non-root (uid 10003, dedicated) to **root** —
+    the same reasoning already documented in
+    `apps/claude-code-runner-mcp/Dockerfile` for the same case: with the Docker
+    socket mounted, a non-root uid does not reduce that power in any real measure,
+    it would only give a false sense of containment.
+  - _Audit_: every change is recorded in `control_bot.model_changes` (Postgres),
+    with a timestamp — visible via `/modelo` with no argument (US-15.4). It is
+    written **before** restarting the container, so that there is a trace of what
+    was requested even if the restart hangs.
 
-- **SEC-1.4 — El canal de entrada no cambia las garantías.** Una tarea que llega
-  por Telegram pasa exactamente por el mismo `run_coding_task`, con el mismo
-  aislamiento y el mismo rate limiting, que una que llega por una issue de
-  GitHub. No hay "ruta rápida" para el Operador.
+- **SEC-1.4 — The input channel does not change the guarantees.** A task arriving
+  by Telegram goes through exactly the same `run_coding_task`, with the same
+  isolation and the same rate limiting, as one arriving from a GitHub issue. There
+  is no "fast path" for the Operator.
 
-## 4. Capa 2 — hermes-agent, el componente que lee lo no confiable
+## 4. Layer 2 — hermes-agent, the component that reads the untrusted
 
-hermes-agent es, deliberadamente, el componente **menos** privilegiado de los
-que tocan datos externos, porque es el único que ingiere texto arbitrario.
+hermes-agent is, deliberately, the **least** privileged of the components that
+touch external data, because it is the only one that ingests arbitrary text.
 
-- **SEC-2.1 (innegociable) — El contenedor de hermes-agent NUNCA monta
-  `/var/run/docker.sock`.** Es el requisito del que cuelga toda la arquitectura
-  (ver §1). Si alguna vez parece necesario montarlo, el diseño está mal.
-  - _Verificación_: `docker inspect` del contenedor de hermes no debe listar el
-    socket en `HostConfig.Binds`, y desde dentro del contenedor `docker ps` debe
-    fallar.
+- **SEC-2.1 (non-negotiable) — The hermes-agent container NEVER mounts
+  `/var/run/docker.sock`.** This is the requirement the whole architecture hangs
+  from (see §1). If mounting it ever seems necessary, the design is wrong.
+  - _Verification_: `docker inspect` of the hermes container must not list the
+    socket in `HostConfig.Binds`, and from inside the container `docker ps` must
+    fail.
 
-- **SEC-2.2 (innegociable) — Sin `network_mode: host`.** El compose upstream lo
-  usa por comodidad; nuestro despliegue lo sustituye por redes de Compose
-  acotadas, para que hermes no vea la red doméstica ni los servicios del Mac
-  Mini (impresoras, NAS, otros equipos).
+- **SEC-2.2 (non-negotiable) — No `network_mode: host`.** The upstream compose uses
+  it for convenience; our deployment replaces it with scoped Compose networks, so
+  that hermes cannot see the home network or the host's services (printers, NAS,
+  other machines).
 
-- **SEC-2.3 — Aprobación de comandos peligrosos activa.** Se mantiene
-  `approvals.mode: manual` y `approvals.cron_mode: deny` (ambos son el valor por
-  defecto de hermes-agent, verificado en `hermes_cli/config.py`).
-  - _Matiz importante, verificado en `tools/approval.py`_: este mecanismo aplica a
-    **comandos de shell**, no a llamadas de tools MCP. Por eso el Skill
-    `resolve-issue` debe hacer su trabajo **vía tools MCP** (GitHub MCP,
-    `run_coding_task`) y no invocando `gh` por terminal: así corre desatendido en
-    cron sin necesidad de relajar `cron_mode`, que se queda en `deny`.
-  - _Consecuencia buscada_: si una inyección intenta empujar a hermes a ejecutar
-    un comando peligroso de shell durante un cron, se **bloquea** en vez de
-    aprobarse sola.
+- **SEC-2.3 — Approval for dangerous commands stays on.** `approvals.mode: manual`
+  and `approvals.cron_mode: deny` are kept (both are hermes-agent's defaults,
+  verified in `hermes_cli/config.py`).
+  - _Important nuance, verified in `tools/approval.py`_: this mechanism applies to
+    **shell commands**, not to MCP tool calls. That is why the `resolve-issue`
+    skill must do its work **via MCP tools** (GitHub MCP, `run_coding_task`) and
+    not by invoking `gh` in a terminal: that way it runs unattended under cron
+    without needing to relax `cron_mode`, which stays at `deny`.
+  - _Intended consequence_: if an injection tries to push hermes into running a
+    dangerous shell command during a cron run, it is **blocked** rather than
+    self-approved.
 
-- **SEC-2.4 — Los datos de hermes son sensibles.** El volumen `~/.hermes` contiene
-  `.env`, `auth.json`, memorias y sesiones. Se trata como material sensible: no
-  se copia a repos, no se sube a backups sin cifrar.
+- **SEC-2.4 — hermes' data is sensitive.** The `~/.hermes` volume contains `.env`,
+  `auth.json`, memories and sessions. It is treated as sensitive material: never
+  copied into repos, never backed up unencrypted.
 
-- **SEC-2.5 — Un servidor MCP de passthrough REST no es una superficie acotada.**
-  El servidor MCP de Jira (`@aashari/mcp-server-atlassian-jira`) no expone tools
-  semánticas sino **cinco verbos HTTP crudos** — `jira_get`, `jira_post`,
-  `jira_put`, `jira_patch`, `jira_delete` — sobre toda la API REST del site de
-  Atlassian. Es decir: `jira_delete` puede borrar cualquier issue, sprint o
-  proyecto de la cuenta, no solo los del proyecto de tareas.
-  - _Diferencia con GitHub, que importa_: allí SEC-3.3 acota la superficie
-    contándola (`Tools discovered: 1`). Aquí ese conteo no dice nada — cinco
-    tools genéricas son más superficie que las veintitantas específicas de
-    GitHub. La superficie real no la fija el servidor, la fija el **skill**.
-  - _Mitigación_: `resolve-jira-task` declara una allowlist explícita de método
-    - endpoint (Regla 1 de su `SKILL.md`) y prohíbe `jira_post` salvo para
-      comentar, `jira_patch` y `jira_delete` por completo. Es el mismo patrón que
-      `resolve-issue` aplica a `merge_pull_request`/`create_repository`: la tool
-      existe, el procedimiento no la usa.
-  - _Ampliación (2026-08-27)_: la allowlist ahora incluye
-    `GET /rest/api/3/issue/{key}/transitions` (descubrir transiciones, solo
-    lectura) y `POST /rest/api/3/issue/{key}/transitions` (ejecutarlas), para
-    que el estado visible del ticket refleje la etiqueta que ya se le puso —
-    antes solo cambiaba la etiqueta y el tablero de Jira quedaba desactualizado.
-    El `POST` está acotado en el propio skill a un cuerpo de una sola forma
-    (`{"transition": {"id": "<id>"}}`, con el `id` tomado del `GET` de ese mismo
-    ticket en el mismo turno, nunca inventado) — no abre escritura arbitraria
-    sobre el ticket, solo mover su estado por el workflow ya configurado.
-  - _Límite honesto, declarado y no cerrado_: esto es una restricción **en el
-    prompt**, no en el transporte. Un token de API de Atlassian hereda todos los
-    permisos del usuario y no admite scoping fine-grained como un PAT de GitHub
-    (SEC-6.1), así que no hay forma de imponerlo por debajo del skill. Si una
-    inyección consiguiera que hermes llamara a `jira_delete`, nada más abajo lo
-    pararía. Se asume como riesgo consciente, acotado a que el site de Atlassian
-    es personal y no contiene datos de empresa (misma frontera que SEC-7.x).
+- **SEC-2.5 — A REST passthrough MCP server is not a bounded surface.** The Jira
+  MCP server (`@aashari/mcp-server-atlassian-jira`) does not expose semantic tools
+  but **five raw HTTP verbs** — `jira_get`, `jira_post`, `jira_put`, `jira_patch`,
+  `jira_delete` — over the entire REST API of the Atlassian site. That is:
+  `jira_delete` can delete any issue, sprint or project in the account, not only
+  those of the task project.
+  - _The difference from GitHub, which matters_: there, SEC-3.3 bounds the surface
+    by counting it (`Tools discovered: 1`). Here that count says nothing — five
+    generic tools are more surface than GitHub's twenty-odd specific ones. The real
+    surface is not set by the server, it is set by the **skill**.
+  - _Mitigation_: `resolve-jira-task` declares an explicit method + endpoint
+    allowlist (Rule 1 of its `SKILL.md`) and forbids `jira_post` except for
+    commenting, and `jira_patch` and `jira_delete` entirely. The same pattern
+    `resolve-issue` applies to `merge_pull_request`/`create_repository`: the tool
+    exists, the procedure does not use it.
+  - _Extension (2026-08-27)_: the allowlist now includes
+    `GET /rest/api/3/issue/{key}/transitions` (discover transitions, read-only) and
+    `POST /rest/api/3/issue/{key}/transitions` (execute them), so that the ticket's
+    visible state reflects the label already applied to it — previously only the
+    label changed and the Jira board went stale. The `POST` is bounded within the
+    skill itself to a body of a single shape (`{"transition": {"id": "<id>"}}`,
+    with the `id` taken from the `GET` on that same ticket in the same turn, never
+    invented) — it does not open arbitrary writes on the ticket, only moving its
+    state through the already-configured workflow.
+  - _Honest limit, declared and not closed_: this is a restriction **in the
+    prompt**, not in the transport. An Atlassian API token inherits all of the
+    user's permissions and does not support fine-grained scoping like a GitHub PAT
+    (SEC-6.1), so there is no way to enforce it below the skill. If an injection
+    managed to get hermes to call `jira_delete`, nothing further down would stop
+    it. Accepted as a conscious risk, bounded by the fact that the Atlassian site
+    is personal and holds no company data (the same boundary as SEC-7.x).
 
-## 5. Capa 3 — El canal entre hermes-agent y el runner
+## 5. Layer 3 — The channel between hermes-agent and the runner
 
-Aquí es donde la opción elegida se gana el sueldo: es la frontera entre "lee lo
-no confiable" y "tiene la llave maestra".
+This is where the chosen option earns its keep: it is the border between "reads
+the untrusted" and "holds the master key".
 
-- **SEC-3.1 (innegociable) — El runner no se publica a la LAN.** Su puerto vive
-  únicamente en la red interna de Docker Compose. **No** lleva sección `ports:`
-  en el compose, así que no es alcanzable desde otros equipos de la red de casa
-  ni desde el propio host salvo a través de la red de Compose.
+- **SEC-3.1 (non-negotiable) — The runner is not published to the LAN.** Its port
+  lives only on the internal Docker Compose network. It carries **no** `ports:`
+  section in the compose, so it is unreachable from other machines on the home
+  network or from the host itself, except through the Compose network.
 
-- **SEC-3.2 (innegociable) — Autenticación en cada petición.** El endpoint MCP
-  del runner exige un secreto compartido (cabecera `Authorization: Bearer`),
-  distinto de cualquier otro secreto del sistema. Sin él, responde `401` y no
-  ejecuta nada. Esto es defensa en profundidad: aunque alguien llegase a la red
-  interna, no puede lanzar tareas.
+- **SEC-3.2 (non-negotiable) — Authentication on every request.** The runner's MCP
+  endpoint requires a shared secret (`Authorization: Bearer` header), distinct from
+  every other secret in the system. Without it, it answers `401` and executes
+  nothing. This is defence in depth: even if someone reached the internal network,
+  they cannot launch tasks.
 
-- **SEC-3.3 (innegociable) — Superficie mínima: una sola tool.** El runner expone
-  exclusivamente `run_coding_task`, con parámetros tipados y validados (zod). No
-  expone, ni expondrá, ninguna tool de propósito general tipo "ejecuta este
-  comando" o "lee este fichero". Toda la potencia queda encapsulada detrás de una
-  operación con forma fija.
-  - _Por qué importa_: aunque hermes esté completamente comprometido por una
-    inyección, lo máximo que puede pedir es "resuelve esta tarea en este repo".
-    No puede pedir "monta el disco del host".
-  - _Alcance exacto, verificado_: el servidor tampoco expone **resources** ni
-    **prompts** de MCP, y no debe empezar a hacerlo sin revisar este requisito —
-    son superficie adicional, no solo metadatos. Ojo al medirlo: hermes-agent
-    muestra "5 tool(s)" para este servidor en su banner, pero cuatro son
-    utilidades que **el cliente** añade por su cuenta a todo servidor MCP
-    (`list_resources`, `read_resource`, `list_prompts`, `get_prompt`, ver
-    `tools/mcp_tool.py::_select_utility_schemas`). La superficie real del
-    servidor se mide contra el servidor: `hermes mcp test claude-code-runner` →
-    `Tools discovered: 1`, y un cliente MCP directo devuelve exactamente
+- **SEC-3.3 (non-negotiable) — Minimal surface: a single tool.** The runner exposes
+  exclusively `run_coding_task`, with typed and validated parameters (zod). It does
+  not, and will not, expose any general-purpose tool of the "run this command" or
+  "read this file" kind. All the power stays encapsulated behind one
+  fixed-shape operation.
+  - _Why it matters_: even if hermes is completely compromised by an injection, the
+    most it can ask for is "resolve this task in this repo". It cannot ask for
+    "mount the host's disk".
+  - _Exact scope, verified_: the server also exposes no MCP **resources** or
+    **prompts**, and must not start doing so without revisiting this requirement —
+    those are additional surface, not just metadata. Careful when measuring it:
+    hermes-agent shows "5 tool(s)" for this server in its banner, but four of them
+    are utilities **the client** adds on its own to every MCP server
+    (`list_resources`, `read_resource`, `list_prompts`, `get_prompt`, see
+    `tools/mcp_tool.py::_select_utility_schemas`). The server's real surface is
+    measured against the server: `hermes mcp test claude-code-runner` →
+    `Tools discovered: 1`, and a direct MCP client returns exactly
     `["run_coding_task"]`.
 
-- **SEC-3.4 — El repo de la tarea es un parámetro acotado, no libre.** El Skill
-  solo puede lanzar tareas sobre los repos donde el PAT de GitHub tiene permiso
-  (ver SEC-5.1). Un `repo` inventado por una inyección falla en el clone.
-  - _Caso Jira (Fase 14)_: un issue de GitHub **vive** en un repo, así que su
-    `repo` es un hecho de su ubicación y no hay nada que elegir. Un ticket de
-    Jira no vive en ninguno, así que ese hecho hay que suplirlo — y ahí es donde
-    reaparece el riesgo que este requisito cierra. La única fuente admitida es
-    una etiqueta `repo:<owner>/<nombre>` **cotejada contra una allowlist que
-    llega en el prompt del cron**, nunca la descripción del ticket ni el nombre
-    del proyecto. El PAT sigue siendo la última barrera, pero aquí deja de ser
-    la única: la allowlist filtra antes de llegar al clone.
+- **SEC-3.4 — The task's repo is a bounded parameter, not a free one.** The skill
+  can only launch tasks against repos where the GitHub PAT has permission (see
+  SEC-5.1). A `repo` invented by an injection fails at the clone.
+  - _The Jira case (Phase 14)_: a GitHub issue **lives** in a repo, so its `repo`
+    is a fact of its location and there is nothing to choose. A Jira ticket lives
+    in none, so that fact has to be supplied — and that is where the risk this
+    requirement closes reappears. The only admissible source is a
+    `repo:<owner>/<name>` label **checked against an allowlist arriving in the
+    cron's prompt**, never the ticket description nor the project name. The PAT
+    remains the last barrier, but here it stops being the only one: the allowlist
+    filters before reaching the clone.
 
-## 6. Capa 4 — El runner, el componente con la llave maestra
+## 6. Layer 4 — The runner, the component with the master key
 
-- **SEC-4.1 (innegociable) — Es el único con el socket.** Ningún otro contenedor
-  del compose lo monta. Ver SEC-2.1.
+- **SEC-4.1 (non-negotiable) — It is the only one with the socket.** No other
+  container in the compose mounts it. See SEC-2.1.
 
-- **SEC-4.2 (innegociable) — No lee input no confiable para decidir nada.** El
-  runner no interpreta el texto de la tarea: lo escribe tal cual en un
-  `prompt.md` que consume Claude Code **dentro del contenedor efímero ya
-  aislado**. El texto no confiable nunca influye en las decisiones del proceso
-  que tiene el socket.
+- **SEC-4.2 (non-negotiable) — It reads no untrusted input to decide anything.**
+  The runner does not interpret the task text: it writes it verbatim into a
+  `prompt.md` consumed by Claude Code **inside the already-isolated ephemeral
+  container**. Untrusted text never influences the decisions of the process that
+  holds the socket.
 
-- **SEC-4.3 (innegociable) — Rate limiting activo.** Límite de tareas concurrentes
-  y por hora (implementado y verificado en la Fase 1). Protege de dos cosas: un
-  bucle accidental (una issue que se reetiqueta sola) y un abuso deliberado que
-  agote la ventana de la suscripción Pro — que es **compartida** con el chat de
-  hermes, así que agotarla deja mudo al asistente.
+- **SEC-4.3 (non-negotiable) — Rate limiting on.** A cap on concurrent and hourly
+  tasks (implemented and verified in Phase 1). It protects against two things: an
+  accidental loop (an issue that re-labels itself) and deliberate abuse exhausting
+  the Pro subscription's window — which is **shared** with hermes' chat, so
+  exhausting it leaves the assistant mute.
 
-- **SEC-4.4 — Directorio de trabajo acotado.** Los checkouts de los repos viven
-  bajo una raíz de workspaces dedicada y compartida con el host en la **misma
-  ruta** (necesario para que los bind mounts de los contenedores efímeros
-  resuelvan bien, ver [hermes/spec.md §3.6](hermes/spec.md#36-nota-de-implementación-rutas-de-workspace-en-despliegue-contenerizado)).
-  Esa raíz contiene solo workspaces del proyecto, nunca `$HOME` ni rutas del
-  sistema.
+- **SEC-4.4 — Bounded working directory.** Repo checkouts live under a dedicated
+  workspace root, shared with the host at the **same path** (needed so the
+  ephemeral containers' bind mounts resolve correctly, see
+  [hermes/spec.md §3.6](hermes/spec.md#36-nota-de-implementación-rutas-de-workspace-en-despliegue-contenerizado)).
+  That root contains only project workspaces, never `$HOME` or system paths.
 
-## 7. Capa 5 — El contenedor efímero donde corre Claude Code
+## 7. Layer 5 — The ephemeral container where Claude Code runs
 
-Esta capa está **implementada y verificada en la Fase 1**; se recoge aquí para
-que el modelo esté completo en un solo sitio.
+This layer is **implemented and verified in Phase 1**; it is collected here so the
+model is complete in one place.
 
-- **SEC-5.1 (innegociable) — Sin socket de Docker.** El contenedor efímero no
-  puede lanzar más contenedores. Verificado en Fase 1.
-- **SEC-5.2 (innegociable) — Red sin salida libre.** El contenedor va en una red
-  Docker `Internal: true` (sin ruta a internet) y solo alcanza el exterior a
-  través de un proxy con allowlist (`api.anthropic.com`, `github.com`).
-  Verificado en Fase 1: la resolución DNS directa falla, y el proxy rechaza
-  destinos fuera de la lista.
-- **SEC-5.3 (innegociable) — Usuario no-root** dentro del contenedor.
-- **SEC-5.4 (innegociable) — Destrucción garantizada.** El contenedor se elimina
-  siempre (`force: true` en un `finally`), termine bien, mal o por timeout.
-  Nunca quedan contenedores huérfanos.
-- **SEC-5.5 (innegociable) — Timeout duro.** Por defecto 30 minutos.
-- **SEC-5.6 — Sin acceso al filesystem del host** más allá del workspace efímero
-  de esa tarea concreta.
-- **SEC-5.7 — Ampliación de la allowlist de red a `registry.npmjs.org`, analizada
-  antes de aplicarse (2026-08-27).** Motivo: cualquier tarea de un proyecto
-  Node/JS (p. ej. `WEB`, Next.js) necesita `pnpm install` dentro del sandbox
-  para poder verificar sus propios criterios de aceptación (`build`/`lint`/
-  `dev`) — sin esto, esas tareas siempre terminan en `needs_human_input` por
-  no poder instalar dependencias, verificado con una ejecución real contra
-  `WEB-2` (ver [decisions-log.md, US-14.9](decisions-log.md)).
+- **SEC-5.1 (non-negotiable) — No Docker socket.** The ephemeral container cannot
+  launch further containers. Verified in Phase 1.
+- **SEC-5.2 (non-negotiable) — No free network egress.** The container sits on an
+  `Internal: true` Docker network (no route to the internet) and reaches the
+  outside only through an allowlisting proxy (`api.anthropic.com`, `github.com`).
+  Verified in Phase 1: direct DNS resolution fails, and the proxy rejects
+  destinations off the list.
+- **SEC-5.3 (non-negotiable) — Non-root user** inside the container.
+- **SEC-5.4 (non-negotiable) — Guaranteed destruction.** The container is always
+  removed (`force: true` in a `finally`), whether it ends well, badly, or by
+  timeout. No orphan containers are ever left behind.
+- **SEC-5.5 (non-negotiable) — Hard timeout.** 30 minutes by default.
+- **SEC-5.6 — No access to the host filesystem** beyond that specific task's
+  ephemeral workspace.
+- **SEC-5.7 — Widening the network allowlist to `registry.npmjs.org`, analysed
+  before being applied (2026-08-27).** Reason: any Node/JS project task (e.g.
+  `WEB`, Next.js) needs `pnpm install` inside the sandbox in order to verify its
+  own acceptance criteria (`build`/`lint`/`dev`) — without it, such tasks always
+  end in `needs_human_input` for being unable to install dependencies, verified
+  with a real run against `WEB-2` (see
+  [decisions-log.md, US-14.9](decisions-log.md)).
 
-  **Qué NO cambia**: `FilterDefaultDeny Yes` se mantiene — solo se añade una
-  entrada más a `filter.allow`, con la misma sintaxis de FQDN exacto que ya
-  usan `api.anthropic.com` y `github.com`. No se abre el registro genérico ni
-  un rango de host; ver el criterio de verificación abajo.
+  **What does NOT change**: `FilterDefaultDeny Yes` is kept — only one more entry
+  is added to `filter.allow`, with the same exact-FQDN syntax already used by
+  `api.anthropic.com` and `github.com`. Neither the generic registry nor a host
+  range is opened; see the verification criterion below.
 
-  **Riesgo real que sí introduce, analizado con precisión y no en abstracto**:
-  `npm`/`pnpm install` puede ejecutar código arbitrario de terceros de forma
-  automática, vía los scripts de ciclo de vida (`preinstall`/`postinstall`/
-  `prepare`) de cualquier paquete de la cadena de dependencias transitiva —
-  para un scaffold de Next.js eso son fácilmente varios cientos de paquetes,
-  ninguno revisado por el Operador. Esto es cualitativamente distinto del
-  riesgo que ya cubre SEC-5.2: `git clone`/`git push` contra `github.com` no
-  ejecuta código de terceros por sí solo; `npm install` sí, por diseño del
-  ecosistema.
+  **The real risk it does introduce, analysed precisely rather than in the
+  abstract**: `npm`/`pnpm install` can automatically execute arbitrary third-party
+  code, via the lifecycle scripts (`preinstall`/`postinstall`/`prepare`) of any
+  package in the transitive dependency chain — for a Next.js scaffold that is
+  easily several hundred packages, none reviewed by the Operator. This is
+  qualitatively different from the risk already covered by SEC-5.2:
+  `git clone`/`git push` against `github.com` does not by itself execute
+  third-party code; `npm install` does, by ecosystem design.
 
-  **Superficie real dentro de ESTE sandbox, no genérica** — leído del código
-  real (`runContainer.ts`), no asumido: el contenedor efímero de la tarea
-  **no** lleva `GITHUB_TOKEN` (deliberado, ver el comentario del propio
-  fichero — Claude Code lo tendría si lo necesitara para saltarse el flujo de
-  PR). Sí lleva `CLAUDE_CODE_OAUTH_TOKEN` — la credencial más sensible del
-  sistema entero, la misma sesión Pro compartida de la Fase 12 — y `github.com`
-  y `api.anthropic.com` ya son alcanzables. Un script de instalación
-  malicioso no puede escribir en repos ajenos (no tiene el PAT), pero sí
-  podría, en teoría, leer `CLAUDE_CODE_OAUTH_TOKEN` del entorno del proceso y
-  usarlo contra `api.anthropic.com` directamente — el mismo host que ya
-  necesita Claude Code para funcionar, así que no es una ruta de red nueva,
-  es un **actor nuevo** (cualquier dependencia transitiva) operando dentro de
-  la misma frontera de confianza que ya tenía Claude Code. La allowlist
-  estricta del proxy sigue cerrando la vía de exfiltración más común
-  (mandar datos a un host propio del atacante): eso sigue bloqueado porque
-  ese host no está ni estará en `filter.allow`.
+  **The real surface inside THIS sandbox, not a generic one** — read from the
+  actual code (`runContainer.ts`), not assumed: the task's ephemeral container
+  does **not** carry `GITHUB_TOKEN` (deliberate, see that file's own comment —
+  Claude Code would have it if it needed it to bypass the PR flow). It does carry
+  `CLAUDE_CODE_OAUTH_TOKEN` — the most sensitive credential in the whole system,
+  the same shared Pro session from Phase 12 — and `github.com` and
+  `api.anthropic.com` are already reachable. A malicious install script cannot
+  write to other people's repos (it has no PAT), but it could, in theory, read
+  `CLAUDE_CODE_OAUTH_TOKEN` from the process environment and use it against
+  `api.anthropic.com` directly — the same host Claude Code already needs to
+  function, so it is not a new network route, it is a **new actor** (any
+  transitive dependency) operating inside the same trust boundary Claude Code
+  already had. The proxy's strict allowlist still closes the most common
+  exfiltration path (sending data to a host the attacker controls): that remains
+  blocked, because such a host is not and will not be in `filter.allow`.
 
-  **Mitigaciones aplicadas, no solo recomendadas** — enforzadas por
-  configuración en la imagen del contenedor efímero, nunca dependientes de que
-  el prompt se acuerde de pedirlas:
-  1. `ignore-scripts=true` en un `.npmrc` global de la imagen — desactiva
-     `preinstall`/`postinstall`/`prepare` de **todas** las dependencias, no
-     solo las del proyecto. Es la mitigación que de verdad importa: corta el
-     vector de ejecución automática de código, no solo el de red. Coste
-     aceptado: algún paquete que de verdad necesite un postinstall (poco común
-     en un stack Next.js/Tailwind/ESLint puro JS; `next` resuelve sus binarios
-     de `@next/swc-*` como dependencias opcionales normales, no vía script) no
-     terminará de instalarse — se trata como una excepción a revisar caso por
-     caso si ocurre, no como motivo para desactivar la protección por defecto.
-  2. `NEXT_TELEMETRY_DISABLED=1` en el entorno del contenedor — corta una
-     llamada de red de salida que Next.js hace por defecto y que no aporta
-     nada a la tarea, reduciendo tráfico no esencial hacia fuera del sandbox
-     (mismo espíritu que `DisableViaHeader`/`FilterDefaultDeny` del proxy).
-  3. **Alcance mínimo del FQDN**: solo `registry.npmjs.org`, no un dominio
-     comodín. Si en el futuro hiciera falta otro host (p. ej. un CDN de
-     binarios de algún paquete concreto), se añade cuando el fallo real lo
-     pida — no de forma preventiva.
+  **Mitigations applied, not merely recommended** — enforced by configuration in
+  the ephemeral container image, never dependent on the prompt remembering to ask
+  for them:
 
-  **Lo que este análisis NO cubre, declarado sin maquillar**: un paquete
-  malicioso con scripts ignorados podría aun así intentar dañar el propio
-  workspace (contenido que termina en un commit) — pero ese commit vive en
-  una rama `hermes/...` que **nunca se mergea sola**; el PR sigue pasando por
-  la revisión del Operador antes de llegar a `main`, que es la última barrera
-  real (mismo patrón que security.md ya asume para el propio código que
-  escribe Claude Code, sea o no honesto el ticket que lo motivó).
+  1. `ignore-scripts=true` in a global `.npmrc` in the image — disables
+     `preinstall`/`postinstall`/`prepare` for **all** dependencies, not just the
+     project's own. This is the mitigation that actually matters: it cuts the
+     automatic code-execution vector, not just the network one. Accepted cost: a
+     package that genuinely needs a postinstall (uncommon in a pure-JS
+     Next.js/Tailwind/ESLint stack; `next` resolves its `@next/swc-*` binaries as
+     ordinary optional dependencies, not via script) will not finish installing —
+     treated as an exception to review case by case if it happens, not as a reason
+     to disable the protection by default.
+  2. `NEXT_TELEMETRY_DISABLED=1` in the container environment — cuts an outbound
+     network call Next.js makes by default that contributes nothing to the task,
+     reducing non-essential traffic out of the sandbox (same spirit as the proxy's
+     `DisableViaHeader`/`FilterDefaultDeny`).
+  3. **Minimal FQDN scope**: only `registry.npmjs.org`, not a wildcard domain. If
+     another host is ever needed (e.g. a binary CDN for some specific package), it
+     is added when a real failure calls for it — not preemptively.
 
-## 8. Capa 6 — Credenciales
+  **What this analysis does NOT cover, stated without makeup**: a malicious package
+  with scripts ignored could still try to damage the workspace itself (content that
+  ends up in a commit) — but that commit lives on a `hermes/...` branch that **is
+  never merged automatically**; the PR still goes through the Operator's review
+  before reaching `main`, which is the real last barrier (the same pattern this
+  document already assumes for the code Claude Code writes, whether or not the
+  ticket that motivated it was honest).
 
-- **SEC-6.1 (innegociable) — PAT de GitHub fine-grained y de mínimo privilegio.**
-  Limitado a los repos donde Hermes debe actuar, con los permisos justos
-  (contenidos, issues, pull requests). Nunca un token clásico de cuenta completa.
-- **SEC-6.2 (innegociable) — Ningún secreto en git ni en imágenes.** Todos viven
-  en `.env` fuera del repositorio y se inyectan como variables de entorno. No se
-  hornean en ningún `Dockerfile` ni se escriben a disco dentro de un contenedor.
-- **SEC-6.3 (innegociable) — Redacción en logs y errores.** Cualquier token
-  embebido en una URL (p. ej. `x-access-token:...@github.com` en un clone o push)
-  se redacta antes de propagar mensajes de error. Implementado y verificado en la
-  Fase 1, tras detectarse el riesgo en una prueba real.
-- **SEC-6.4 — Un secreto, un propósito.** El secreto del canal MCP (SEC-3.2) es
-  distinto del token de GitHub, del de Telegram y del de Claude. Comprometer uno
-  no debe dar los otros.
-- **SEC-6.5 — Reautenticación manual.** Cuando la sesión de Claude Code expira o
-  es revocada, se renueva a mano. **No se automatiza** la extracción de tokens
-  (ver [hermes/spec.md §3.3](hermes/spec.md#33-limitación-conocida-expiración-o-revocación-de-sesión)).
+## 8. Layer 6 — Credentials
 
-## 9. Capa 7 — Aislamiento entre instancia personal y de trabajo (Fase 10 de v2)
+- **SEC-6.1 (non-negotiable) — Fine-grained, least-privilege GitHub PAT.** Limited
+  to the repos where Hermes must act, with only the necessary permissions
+  (contents, issues, pull requests). Never a classic full-account token.
+- **SEC-6.2 (non-negotiable) — No secrets in git or in images.** All of them live
+  in a `.env` outside the repository and are injected as environment variables.
+  They are not baked into any `Dockerfile` nor written to disk inside a container.
+- **SEC-6.3 (non-negotiable) — Redaction in logs and errors.** Any token embedded
+  in a URL (e.g. `x-access-token:...@github.com` in a clone or push) is redacted
+  before error messages are propagated. Implemented and verified in Phase 1, after
+  the risk was spotted in a real test.
+- **SEC-6.4 — One secret, one purpose.** The MCP channel secret (SEC-3.2) is
+  distinct from the GitHub token, the Telegram one, and Claude's. Compromising one
+  must not yield the others.
+- **SEC-6.5 — Manual re-authentication.** When the Claude Code session expires or
+  is revoked, it is renewed by hand. Token extraction **is not automated** (see
+  [hermes/spec.md §3.3](hermes/spec.md#33-limitación-conocida-expiración-o-revocación-de-sesión)).
 
-Esta capa solo aplica **si y cuando** se construya la [Fase 10 del roadmap](decisions-log.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo) (Azure DevOps u otra fuente de la empresa del Operador). No existe en v1. Se recoge aquí, con numeración propia, para que la decisión de aislamiento no dependa de que alguien se acuerde de leer el roadmap el día que se implemente.
+## 9. Layer 7 — Isolation between the personal and work instances (Phase 10 of v2)
 
-El principio de fondo es el mismo que en §0, aplicado a un límite distinto: **el riesgo que el Operador acepta para sí mismo (§0.2, ToS de la sesión Pro) no se traslada por defecto a datos o credenciales de su empleador.**
+This layer applies only **if and when** [Phase 10](decisions-log.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo--futurible)
+is built (Azure DevOps or another source belonging to the Operator's employer). It
+does not exist in v1. It is recorded here, with its own numbering, so that the
+isolation decision does not depend on someone remembering to read the roadmap on
+the day it is implemented.
 
-- **SEC-7.1 (innegociable) — Despliegues físicamente separados.** La instancia
-  "Hermes trabajo" corre en su propio `docker compose` (propio `docker-compose.yml`,
-  propia red Docker, propio volumen de estado). **No** comparte red Docker,
-  volumen, ni proceso con la instancia personal — ni siquiera si ambas viven en
-  el mismo Mac Mini. Un contenedor de una instancia no debe poder alcanzar por
-  red a un contenedor de la otra.
-  - _Verificación_: `docker network inspect` de la red de cada instancia no debe
-    listar contenedores de la otra; `docker exec` en un contenedor de la
-    instancia de trabajo no debe poder resolver ni alcanzar por nombre ningún
-    servicio de la instancia personal (y viceversa).
+The underlying principle is the same as §0, applied to a different boundary: **the
+risk the Operator accepts for himself (§0.2, the Pro session's ToS) is not
+transferred by default to an employer's data or credentials.**
 
-- **SEC-7.2 (innegociable) — Sin autenticación de Anthropic compartida.** La
-  instancia de trabajo **nunca** usa `hermes-claude-auth` (el token OAuth de la
-  suscripción Pro personal, §0.1). Usa su propio mecanismo de auth con
-  Anthropic — API key facturada normalmente, o lo que la empresa del Operador
-  autorice explícitamente. Mezclar aquí no es solo un problema de aislamiento
-  técnico: es extender un riesgo de ToS aceptado a título personal (§0.2) a
-  código y datos de un tercero (el empleador) sin su consentimiento informado.
+- **SEC-7.1 (non-negotiable) — Physically separate deployments.** The "Hermes work"
+  instance runs in its own `docker compose` (own `docker-compose.yml`, own Docker
+  network, own state volume). It shares **no** Docker network, volume, or process
+  with the personal instance — not even if both live on the same host. A container
+  of one instance must not be able to reach a container of the other over the
+  network.
+  - _Verification_: `docker network inspect` of each instance's network must not
+    list containers of the other; `docker exec` in a work-instance container must
+    not be able to resolve or reach any personal-instance service by name (and vice
+    versa).
 
-- **SEC-7.3 (innegociable) — Credenciales de empresa en su propio secreto,
-  nunca en el `.env` personal.** El token/credencial de Azure DevOps (y
-  cualquier GitHub/GitLab de la empresa) vive exclusivamente en el `.env` de la
-  instancia de trabajo. No se copian a `hermes/docker/.env` (personal) "para no
-  tener que levantar otro compose", ni se meten como credencial adicional del
-  runner personal.
+- **SEC-7.2 (non-negotiable) — No shared Anthropic authentication.** The work
+  instance **never** uses `hermes-claude-auth` (the personal Pro subscription's
+  OAuth token, §0.1). It uses its own authentication mechanism with Anthropic — a
+  normally billed API key, or whatever the Operator's employer explicitly
+  authorises. Mixing here is not only a technical isolation problem: it is
+  extending a ToS risk accepted in a personal capacity (§0.2) to a third party's
+  code and data (the employer) without their informed consent.
 
-- **SEC-7.4 (innegociable) — Bot de Telegram y allowlist propios.** La
-  instancia de trabajo registra su propio `TELEGRAM_BOT_TOKEN` y su propio
-  `TELEGRAM_ALLOWED_USERS` (SEC-1.1–SEC-1.3 aplican igual, por instancia). Un
-  mismo bot de Telegram no sirve a las dos instancias.
+- **SEC-7.3 (non-negotiable) — Company credentials in their own secret, never in
+  the personal `.env`.** The Azure DevOps token/credential (and any company
+  GitHub/GitLab) lives exclusively in the work instance's `.env`. They are not
+  copied into `hermes/docker/.env` (personal) "to avoid bringing up another
+  compose", nor added as an extra credential of the personal runner.
 
-- **SEC-7.5 — Confirmación explícita de política de empresa antes de
-  desplegar.** Antes de que la instancia de trabajo procese cualquier dato o
-  credencial real de la empresa del Operador, el Operador confirma qué permite
-  la política de seguridad/IT de su empleador (uso de infraestructura personal,
-  qué proveedor de modelo está autorizado, etc.). No es un requisito verificable
-  en código — es una condición de gobernanza que precede a la implementación, y
-  se deja constancia de ella (fecha, con quién se confirmó) antes de escribir la
-  primera línea de este despliegue.
+- **SEC-7.4 (non-negotiable) — Its own Telegram bot and allowlist.** The work
+  instance registers its own `TELEGRAM_BOT_TOKEN` and its own
+  `TELEGRAM_ALLOWED_USERS` (SEC-1.1–SEC-1.3 apply equally, per instance). One
+  Telegram bot does not serve both instances.
 
-## 10. Lo que este modelo NO protege — léelo
+- **SEC-7.5 — Explicit confirmation of company policy before deploying.** Before
+  the work instance processes any real data or credential belonging to the
+  Operator's employer, the Operator confirms what their employer's security/IT
+  policy permits (use of personal infrastructure, which model provider is
+  authorised, etc.). This is not a requirement verifiable in code — it is a
+  governance condition that precedes implementation, and it is recorded (date, with
+  whom it was confirmed) before the first line of this deployment is written.
 
-Un modelo de seguridad que no enumera sus límites es propaganda. Estos riesgos
-quedan **aceptados conscientemente**:
+## 10. What this model does NOT protect — read this
 
-- **Filtración de los secretos que hermes necesita.** Si una inyección compromete
-  a hermes-agent, los tokens que tiene a mano (GitHub, Telegram, Claude, y el
-  secreto del canal MCP) pueden exfiltrarse. La arquitectura limita el radio de
-  daño al contenedor de hermes — **evita perder el Mac Mini, no evita perder esos
-  tokens**. Mitigación práctica: que el PAT de GitHub sea de mínimo privilegio
-  (SEC-6.1), para que filtrarlo no equivalga a perder la cuenta.
-- **Código malicioso escrito por Claude Code.** Si una inyección consigue que
-  Claude Code escriba código dañino, ese código llega a un **PR**, no a `main`.
-  La revisión humana del PR antes de mergear es parte del modelo de seguridad, no
-  un detalle de proceso ([hermes/spec.md §2](hermes/spec.md#2-no-objetivos-v1)).
-- **Riesgo de Términos de Servicio.** El uso del token OAuth de la suscripción Pro
-  fuera del cliente oficial viola los ToS de consumidor de Anthropic, con riesgo
-  de suspensión de la cuenta entera. Asumido explícitamente en
-  [hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar).
-- **Disponibilidad.** El sistema depende de la luz y la red de casa. No hay alta
-  disponibilidad y no se pretende.
-- **Compromiso del propio Mac Mini por otra vía.** Este modelo protege el equipo
-  de _este_ sistema; no es un endurecimiento general del Mac Mini.
+A security model that does not enumerate its limits is marketing. These risks are
+**consciously accepted**:
 
-## 11. Checklist de verificación por fase
+- **Leakage of the secrets hermes needs.** If an injection compromises
+  hermes-agent, the tokens it has at hand (GitHub, Telegram, Claude, and the MCP
+  channel secret) can be exfiltrated. The architecture limits the blast radius to
+  hermes' container — **it prevents losing the host, it does not prevent losing
+  those tokens**. Practical mitigation: keep the GitHub PAT least-privilege
+  (SEC-6.1), so that leaking it is not equivalent to losing the account.
+- **Malicious code written by Claude Code.** If an injection gets Claude Code to
+  write harmful code, that code lands in a **PR**, not in `main`. Human review of
+  the PR before merging is part of the security model, not a process detail
+  ([hermes/spec.md §2](hermes/spec.md#2-no-objetivos-v1)).
+- **Terms of Service risk.** Using the Pro subscription's OAuth token outside the
+  official client violates Anthropic's consumer ToS, with a risk of the entire
+  account being suspended. Explicitly accepted in
+  [hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--actualizada-ya-no-es-teórica).
+- **Availability.** The system depends on home power and network. There is no high
+  availability and none is attempted.
+- **Compromise of the host by some other route.** This model protects the machine
+  from _this_ system; it is not general hardening of the host.
 
-Ninguna fase se cierra sin ejecutar estas comprobaciones **de verdad**, con
-evidencia pegada en el roadmap.
+## 11. Per-phase verification checklist
 
-| Fase          | Requisitos a verificar                                                                   |
-| ------------- | ---------------------------------------------------------------------------------------- |
-| 1 (hecha)     | SEC-4.3, SEC-5.1 – SEC-5.6, SEC-6.3                                                      |
-| 2             | SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1, SEC-6.2 |
-| 3             | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
-| 9             | SEC-1.5, en cuanto el bot de control esté desplegado                                     |
-| 14            | SEC-2.5, SEC-3.4 (variante Jira), SEC-4.3                                                |
-| 14 (WEB)      | SEC-5.7, ampliación del proxy del sandbox a `registry.npmjs.org`                         |
-| 15            | SEC-1.6, socket de Docker acotado en código para `/modelo`                               |
-| 4–5           | Revisión de que Brain no reintroduce superficie (API solo en red interna, token propio)  |
-| Fase 10 de v2 | SEC-7.1 – SEC-7.5, en cuanto exista una instancia "Hermes trabajo"                       |
+No phase is closed without running these checks **for real**, with evidence pasted
+into the decisions log.
+
+| Phase          | Requirements to verify                                                                   |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| 1 (done)       | SEC-4.3, SEC-5.1 – SEC-5.6, SEC-6.3                                                      |
+| 2              | SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1, SEC-6.2 |
+| 3              | SEC-0.1, SEC-0.2, SEC-0.3, SEC-1.1, SEC-1.2, SEC-1.3, SEC-1.4                            |
+| 9              | SEC-1.5, as soon as the control bot is deployed                                          |
+| 14             | SEC-2.5, SEC-3.4 (Jira variant), SEC-4.3                                                 |
+| 14 (WEB)       | SEC-5.7, widening the sandbox proxy to `registry.npmjs.org`                              |
+| 15             | SEC-1.6, Docker socket scoped in code for `/modelo`                                      |
+| 4–5            | Review that Brain reintroduces no surface (API on the internal network only, own token)  |
+| Phase 10 of v2 | SEC-7.1 – SEC-7.5, as soon as a "Hermes work" instance exists                            |

@@ -119,7 +119,7 @@ Roles usados en las stories: **Operador** (yo, dueño único del sistema), **Her
 - **US-0.4** — Como Operador, quiero generar el secreto persistente `hermes-claude-auth` (token de larga duración vía `claude setup-token` en el host) y verificar que es válido, para que tanto hermes-agent como `claude-code-runner-mcp` puedan heredarlo más adelante sin gestionar API keys de Anthropic.
   - [x] Secreto `hermes-claude-auth` generado (`claude setup-token`) y guardado como `CLAUDE_CODE_OAUTH_TOKEN` en `.env` fuera de git. **Nota**: el diseño original de esta historia asumía un volumen Docker con archivos de sesión montado read-only; verificado en la práctica que `claude setup-token` no persiste ningún archivo — imprime un token que se inyecta como variable de entorno. Corregido en [hermes/spec.md §0.3](hermes/spec.md#03-corrección-de-diseño--hermes-claude-auth-es-un-token-no-un-volumen-de-archivos).
   - [x] Verificado que la sesión es utilizable: `docker run --env-file .env ... claude -p "..."` responde correctamente, sin exponer el token en ningún log.
-  - [x] Leído y entendido [hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar) (riesgo de ToS) antes de continuar — confirmado explícitamente por el Operador antes de generar el token.
+  - [x] Leído y entendido [hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--actualizada-ya-no-es-teórica) (riesgo de ToS) antes de continuar — confirmado explícitamente por el Operador antes de generar el token.
 
 ### Tareas técnicas
 
@@ -188,7 +188,7 @@ Puedo invocar `run_coding_task` manualmente contra un repo real y obtener una ra
 
 **Seguridad**: esta fase debe verificar SEC-2.1, SEC-2.2, SEC-2.3, SEC-3.1, SEC-3.2, SEC-3.3, SEC-4.1, SEC-4.4, SEC-6.1 y SEC-6.2 de [security.md](security.md). Ninguna US se marca completa sin la evidencia correspondiente.
 
-**Decisión de arquitectura (tomada al empezar la fase)**: hermes-agent y `claude-code-runner-mcp` corren en **contenedores separados**, y solo el runner monta el socket de Docker. Motivo: en Docker, poder crear contenedores equivale a control total del host, y hermes-agent es el componente que ingiere texto no confiable (cuerpos de issues). Registrar el runner por stdio lo convertiría en subproceso de hermes y obligaría a darle el socket a hermes — descartado. Ver [security.md §1](security.md#1-el-concepto-central-el-socket-de-docker-es-la-llave-maestra) y [hermes/spec.md §3.5](hermes/spec.md#35-transporte-mcp-http-en-red-interna-no-stdio).
+**Decisión de arquitectura (tomada al empezar la fase)**: hermes-agent y `claude-code-runner-mcp` corren en **contenedores separados**, y solo el runner monta el socket de Docker. Motivo: en Docker, poder crear contenedores equivale a control total del host, y hermes-agent es el componente que ingiere texto no confiable (cuerpos de issues). Registrar el runner por stdio lo convertiría en subproceso de hermes y obligaría a darle el socket a hermes — descartado. Ver [security.md §1](security.md#1-the-central-concept-the-docker-socket-is-the-master-key) y [hermes/spec.md §3.5](hermes/spec.md#35-transporte-mcp-http-en-red-interna-no-stdio).
 
 ### User stories
 
@@ -557,9 +557,9 @@ Alguien externo al proyecto puede entender qué hace el sistema, verlo funcionar
 
 **Depende de**: Fase 6.
 
-**Por qué separadas de verdad, no solo "dos bots"**: este proyecto ya asume conscientemente un riesgo de ToS de consumidor de Anthropic para uso **personal** ([hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--léela-antes-de-desplegar)). Meter credenciales/datos de la empresa del Operador en la misma infraestructura arrastraría ese riesgo — y el propio dato de la empresa — a una decisión que no le corresponde a este proyecto tomar por él.
+**Por qué separadas de verdad, no solo "dos bots"**: este proyecto ya asume conscientemente un riesgo de ToS de consumidor de Anthropic para uso **personal** ([hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--actualizada-ya-no-es-teórica)). Meter credenciales/datos de la empresa del Operador en la misma infraestructura arrastraría ese riesgo — y el propio dato de la empresa — a una decisión que no le corresponde a este proyecto tomar por él.
 
-**Seguridad**: esta fase debe verificar SEC-7.1 a SEC-7.5 de [security.md §9](security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-fase-10-de-v2), ya diseñados.
+**Seguridad**: esta fase debe verificar SEC-7.1 a SEC-7.5 de [security.md §9](security.md#9-layer-7--isolation-between-the-personal-and-work-instances-phase-10-of-v2), ya diseñados.
 
 ### User stories
 

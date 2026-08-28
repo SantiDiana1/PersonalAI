@@ -189,13 +189,13 @@ Los requisitos completos y numerados viven en **[docs/security.md](../security.m
 - Sin acceso al filesystem del host más allá del workspace efímero de esa tarea (SEC-5.6).
 - `claude-code-runner-mcp` es el **único** componente del sistema con acceso al socket de Docker del host (SEC-4.1) — ni hermes-agent, ni brain-mcp lo tienen.
 
-Esta es la parte de seguridad más sensible del proyecto: un agente que ejecuta código arbitrario delegado por otro agente es, por definición, una superficie de ataque. Especial cuidado con **prompt injection** desde el cuerpo de issues de terceros (ver sección 6 y [security.md §0](../security.md#0-por-qué-este-documento-existe)).
+Esta es la parte de seguridad más sensible del proyecto: un agente que ejecuta código arbitrario delegado por otro agente es, por definición, una superficie de ataque. Especial cuidado con **prompt injection** desde el cuerpo de issues de terceros (ver sección 6 y [security.md §0](../security.md#0-why-this-document-exists)).
 
 ### 3.5 Transporte MCP: HTTP en red interna, no stdio
 
 **Decisión de arquitectura (Fase 2).** El runner se expone por **Streamable HTTP** (`StreamableHTTPServerTransport` del SDK oficial), no por stdio, y corre en **su propio contenedor** — el único con el socket de Docker montado.
 
-El motivo es directo: un servidor MCP stdio corre como _subproceso del cliente_. Si registrásemos el runner por stdio, viviría dentro del contenedor de hermes-agent, y ese contenedor necesitaría el socket de Docker — justo el componente que ingiere texto no confiable. Eso rompe SEC-2.1, que es el requisito del que cuelga toda la arquitectura. Ver la comparativa de alternativas descartadas en [security.md §1](../security.md#1-el-concepto-central-el-socket-de-docker-es-la-llave-maestra).
+El motivo es directo: un servidor MCP stdio corre como _subproceso del cliente_. Si registrásemos el runner por stdio, viviría dentro del contenedor de hermes-agent, y ese contenedor necesitaría el socket de Docker — justo el componente que ingiere texto no confiable. Eso rompe SEC-2.1, que es el requisito del que cuelga toda la arquitectura. Ver la comparativa de alternativas descartadas en [security.md §1](../security.md#1-the-central-concept-the-docker-socket-is-the-master-key).
 
 Consecuencias:
 
@@ -275,11 +275,11 @@ Registro en hermes-agent (`hermes/config/hermes.config.yaml` + `hermes mcp add <
 
 ### 4.1 Despliegue dual: instancia personal vs. instancia de trabajo (post-v1)
 
-**Decisión de arquitectura** (detalle completo y motivación en [decisions-log.md — Fase 10](../decisions-log.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo)): en cuanto Azure DevOps (u otra fuente de la empresa del Operador) entra en juego, **no** se añade como un servidor MCP más a la instancia de hermes-agent ya desplegada. Se despliega una **segunda instancia completa**, aislada de la primera: `docker-compose.yml` propio, `.env` propio, red Docker propia, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos), y — crucialmente — **auth propia con Anthropic**, no `hermes-claude-auth`. El riesgo de ToS descrito en §0.2 se asume explícitamente para uso personal; no se traslada sin más a datos y credenciales de un empleador.
+**Decisión de arquitectura** (detalle completo y motivación en [decisions-log.md — Fase 10](../decisions-log.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo--futurible)): en cuanto Azure DevOps (u otra fuente de la empresa del Operador) entra en juego, **no** se añade como un servidor MCP más a la instancia de hermes-agent ya desplegada. Se despliega una **segunda instancia completa**, aislada de la primera: `docker-compose.yml` propio, `.env` propio, red Docker propia, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos), y — crucialmente — **auth propia con Anthropic**, no `hermes-claude-auth`. El riesgo de ToS descrito en §0.2 se asume explícitamente para uso personal; no se traslada sin más a datos y credenciales de un empleador.
 
 Consecuencia directa para `claude-code-runner-mcp`: si la instancia de trabajo llega a necesitar ejecutar tareas de código, es un **despliegue separado** del componente (su propio contenedor, su propio `CLAUDE_CODE_RUNNER_AUTH_TOKEN`, su propia base de Postgres) — no un parámetro de "cliente" añadido al runner personal. El aislamiento de §3.4 aplica igual, pero por partida doble.
 
-Requisitos numerados y verificables en [security.md §9 (SEC-7.1–SEC-7.5)](../security.md#9-capa-7--aislamiento-entre-instancia-personal-y-de-trabajo-fase-10-de-v2).
+Requisitos numerados y verificables en [security.md §9 (SEC-7.1–SEC-7.5)](../security.md#9-layer-7--isolation-between-the-personal-and-work-instances-phase-10-of-v2).
 
 ## 5. El Skill `resolve-issue`
 
