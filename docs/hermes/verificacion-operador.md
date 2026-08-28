@@ -107,7 +107,7 @@ allowlist". Si lo adivina, es un fallo de seguridad, no una comodidad.
 ```bash
 docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes \
   cron create '30m' --name resolve-jira --skill resolve-jira-task \
-  --deliver telegram:453464431 \
+  --deliver telegram:<TELEGRAM_ID> \
   'Procesa tareas de Jira. Repos permitidos: SantiDiana1/PersonalAI.'
 ```
 

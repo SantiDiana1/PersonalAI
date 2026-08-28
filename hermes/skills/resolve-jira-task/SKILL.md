@@ -90,7 +90,7 @@ Las mismas cuatro que en GitHub, con los mismos nombres, deliberadamente:
 `hermes`, `hermes:in-progress`, `hermes:done`, `hermes:needs-human`. Más
 `repo:<owner>/<nombre>` para el destino.
 
-Verificado contra el Jira real del Operador (`santidiana.atlassian.net`): los
+Verificado contra el Jira real del Operador (`<tu-dominio>.atlassian.net`): los
 dos puntos y la barra son caracteres válidos en una etiqueta de Jira — `PUT`
 devuelve `204` y la etiqueta se lee de vuelta intacta. Lo único que Jira
 prohíbe en una etiqueta son los espacios.

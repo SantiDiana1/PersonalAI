@@ -15,7 +15,7 @@ flowchart LR
         NT[Notas personales / journal]
     end
 
-    subgraph VPS["Servidor local — Mac Mini (Docker Compose)"]
+    subgraph VPS["Servidor local — hoy WSL2/Docker Desktop, destino planeado un Mac Mini (Docker Compose)"]
         subgraph HAC["Contenedor hermes-agent — SIN socket Docker"]
             subgraph HA["hermes-agent (NousResearch, upstream)"]
                 LOOP["Agent loop + memoria propia + cron"]
@@ -116,13 +116,15 @@ GitHub, Notion y Jira se resuelven con servidores MCP **ya existentes** de esas 
 
 ## Despliegue
 
-Un único servidor local — un Mac Mini del Operador, siempre encendido, con Docker y Docker Compose — en vez de un VPS: para este proyecto de uso personal ("andar por casa", ver [hermes/spec.md §0](hermes/spec.md#0-aclaración-importante-qué-es-hermes-aquí)) el coste recurrente de un VPS no compensa, y ni el flujo de GitHub (cron sondeando, Fase 2) ni el de Telegram (long-polling, Fase 3) necesitan puertos de entrada expuestos a internet ni IP pública — todo el tráfico que genera hermes-agent es saliente. Esto sí implica que la disponibilidad depende de la luz/red doméstica del Operador, algo asumido conscientemente dado el alcance personal del proyecto.
+Un único servidor local, siempre encendido, con Docker y Docker Compose — en vez de un VPS: para este proyecto de uso personal ("andar por casa", ver [hermes/spec.md §0](hermes/spec.md#0-aclaración-importante-qué-es-hermes-aquí)) el coste recurrente de un VPS no compensa, y ni el flujo de GitHub (cron sondeando, Fase 2) ni el de Telegram (long-polling, Fase 3) necesitan puertos de entrada expuestos a internet ni IP pública — todo el tráfico que genera hermes-agent es saliente. Esto sí implica que la disponibilidad depende de la luz/red doméstica del Operador, algo asumido conscientemente dado el alcance personal del proyecto.
+
+**Estado real hoy vs. destino planeado**: el despliegue corre hoy sobre WSL2/Docker Desktop en la máquina de escritorio del Operador — no hay todavía un Mac Mini. Un Mac Mini dedicado es el destino planeado (ver [docs/roadmap.md, Futuribles](roadmap.md#futuribles-sin-fase-asignada)); el diseño de despliegue (single-host, Docker Compose, sin puertos entrantes) es el mismo en ambos casos, así que migrar no exige rediseñar nada de lo de aquí abajo.
 
 - `hermes/docker/docker-compose.yml` levanta: `hermes-agent` (imagen construida del upstream de NousResearch, sin modificar su código), `brain`, `brain-mcp`, `claude-code-runner-mcp`, `postgres` (con `pgvector`).
 - `hermes-agent` se configura (`hermes/config/hermes.config.yaml` + `hermes mcp add ...`) para registrar los 5 servidores MCP (GitHub, Notion, Jira, brain-mcp, claude-code-runner-mcp).
 - **Separación de privilegios (el punto de diseño más importante del despliegue)**: `claude-code-runner-mcp` corre en **su propio contenedor** y es el **único** con el socket de Docker montado; `hermes-agent` corre en un contenedor **sin** socket. Se comunican por MCP sobre Streamable HTTP en una red interna de Compose, autenticada con un secreto compartido y sin publicar el puerto al host ni a la LAN.
 
-  El motivo: en Docker, poder crear contenedores equivale a control total del host (se puede crear uno que monte el disco entero), y hermes-agent es precisamente el componente que ingiere texto no confiable (cuerpos de issues) — darle esa capacidad convierte cualquier prompt injection en compromiso del Mac Mini. Registrar el runner por stdio lo haría subproceso de hermes y forzaría exactamente eso, por lo que se descarta. Requisitos completos en [security.md](security.md) (SEC-2.1, SEC-3.1 – SEC-3.3, SEC-4.1); detalle de transporte en [hermes/spec.md §3.5](hermes/spec.md#35-transporte-mcp-http-en-red-interna-no-stdio).
+  El motivo: en Docker, poder crear contenedores equivale a control total del host (se puede crear uno que monte el disco entero), y hermes-agent es precisamente el componente que ingiere texto no confiable (cuerpos de issues) — darle esa capacidad convierte cualquier prompt injection en compromiso del host. Registrar el runner por stdio lo haría subproceso de hermes y forzaría exactamente eso, por lo que se descarta. Requisitos completos en [security.md](security.md) (SEC-2.1, SEC-3.1 – SEC-3.3, SEC-4.1); detalle de transporte en [hermes/spec.md §3.5](hermes/spec.md#35-transporte-mcp-http-en-red-interna-no-stdio).
 
 - La sesión de Claude Code compartida (`hermes-claude-auth`) es un **secreto** (token `CLAUDE_CODE_OAUTH_TOKEN`, `.env`/secret store), no un volumen Docker con archivos de sesión — ver [hermes/spec.md §0.3](hermes/spec.md#03-corrección-de-diseño--hermes-claude-auth-es-un-token-no-un-volumen-de-archivos), corregido durante la Fase 0 al verificarlo en la práctica.
 - El scheduler que dispara periódicamente el Skill `resolve-issue` es el **cron nativo de hermes-agent** (`hermes cron`), no un scheduler propio.

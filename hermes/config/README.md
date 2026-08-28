@@ -443,7 +443,7 @@ Jira usa **las mismas cuatro etiquetas** que GitHub (`hermes`,
 No hay que crear ninguna: a diferencia de GitHub, donde un label debe existir
 en el repo antes de aplicarse, las etiquetas de Jira son texto libre y nacen al
 asignarlas. Los dos puntos y la barra son caracteres válidos (verificado contra
-`santidiana.atlassian.net`); lo único prohibido son los espacios.
+`<tu-dominio>.atlassian.net`); lo único prohibido son los espacios.
 
 ### Crear el cron
 
