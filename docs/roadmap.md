@@ -25,7 +25,7 @@ written down. `decisions-log.md` is mostly a record of that happening.
 | --------- | ------------------------ | -------------------------------------- |
 | **v1**    | Phases 0–5               | ✅ Complete                            |
 | **v2**    | Phases 6–15              | ✅ Complete                            |
-| **v3**    | Phases 16–19             | 🚧 **Current** — a public, usable repo |
+| **v3**    | Phases 16–20             | 🚧 **Current** — a public, usable repo |
 | **v4**    | Phase 11 — Company Brain | 📋 Planned, deliberately last          |
 
 **What exists and runs today**: an agent (a deployment of
@@ -96,6 +96,12 @@ sandbox as an installable package _before_ there is a suite demonstrating its bo
 ask users to trust the author's word as the only evidence. The evals turn `security.md` from a
 document into a reproducible proof; only then does the package have something verifiable to
 claim. This is a dependency, not a preference.
+
+**Second ordering note — Phase 20 before Phase 18, added 2026-08-28 after a real incident.**
+Phase 20 keeps its number for chronology but runs earlier than 18, because it changes what the
+eval suite has to cover: the failure it fixes is a prompt the agent wrote for _itself_, and the
+taxonomy in US-18.1 as currently drafted assumes hostile input arrives from outside. A suite
+built before Phase 20 would be blind to that class by construction.
 
 ### Phase 16 — Language and front door
 
@@ -178,6 +184,99 @@ architecture doc and correctly explain what the system does and what its securit
 
 A person who is not the Operator, following only the written quickstart, gets the system
 running and completes one real task end to end. Verified with an actual person, not asserted.
+
+### Phase 20 — Jira as the axis: skill boundaries and a deterministic launch surface
+
+**Objective**: the skill layer stops depending on the model picking correctly between
+overlapping skills; Jira becomes the primary task path structurally and not only in daily
+practice; and a task can be launched with no natural-language routing at all.
+
+**Depends on**: nothing technically. Runs **before Phase 18** — see the second ordering note
+above.
+
+**Why this phase exists — a real incident, not a hypothetical.** On 2026-08-28 the Operator
+asked over Telegram for three `WEB` tickets to be worked. The agent created three one-shot cron
+jobs with `"skills": []`, whose prompts instructed the sub-turn to _"actualiza WEB-6 y WEB-7 en
+Jira a Done usando `jira_post` con transición al estado completado"_. That sub-turn would
+therefore run unattended, with all 82 MCP tools available, writing to Jira, with none of
+`resolve-jira-task`'s rules loaded: no transition discovery (`GET /issue/{key}/transitions`
+before any `POST`), no labels-as-source-of-truth, and none of the endpoint allowlist that
+`SEC-2.5` exists to enforce. Nothing attacked the system. Two individually documented
+affordances combined into a hole:
+
+1. `run-task` claims every code request _"SIEMPRE, sin excepción"_ and — unlike `resolve-issue`,
+   which explicitly refuses Jira and defers to `resolve-jira-task` — carries no rule for
+   yielding when the request originates in a ticket. Both skills match; only one has a
+   carve-out.
+2. `run-task` Step 3 authorises `skills: []` on the grounds that the prompt is self-contained.
+   That holds while the sub-turn only calls `run_coding_task` and opens a PR. It stops holding
+   the moment the prompt also writes to a task source — and the skill never contemplated that
+   case, so it does not exclude it.
+
+#### User stories
+
+- **US-20.1** — As the Operator, I want source adapters separated from execution, with Jira as
+  the primary path, so that two skills can never both believe they own the same request.
+  - [ ] The skill layer restructured along one axis: **source** (Jira, GitHub, chat) owns
+        selection, marking and reporting; **execution** (`run_coding_task` → PR) is shared and
+        source-agnostic.
+  - [ ] Exactly one skill owns each source. Every skill that could plausibly match a
+        ticket-shaped request carries an explicit yield rule naming the skill that wins — the
+        rule `resolve-issue` already has for Jira, applied in both directions and to `run-task`.
+  - [ ] Jira documented as the primary path and GitHub as secondary, matching where the work
+        actually lives.
+  - [ ] **Treated as a change to production prompts, not to documentation.** Phase 6 found three
+        real bugs caused by prompt phrasing alone, one of which skipped container isolation
+        entirely. Every rewritten skill is re-verified against a real run before this phase
+        closes. No skill is edited and assumed working.
+- **US-20.2** — As the Operator, I want a contract on what a self-authored cron prompt may
+  instruct, so that the security rules cannot be bypassed by the agent simply not loading them.
+  - [ ] A one-shot cron prompt may not instruct writes to a task source (Jira
+        transitions/labels/comments, GitHub labels/comments) in freehand text.
+  - [ ] When a sub-turn must touch a source, the skill governing that source is propagated via
+        `skills:` — replacing the current blanket permission to leave it empty.
+  - [ ] The restriction stated where it is enforceable (in the skills that create cron jobs) and
+        cross-referenced from `security.md` under its own `SEC-x.y`. `SEC-2.5` currently assumes
+        this boundary holds; on 2026-08-28 it did not, and nothing recorded that.
+- **US-20.3** — As the Operator, I want to launch a known ticket without describing it in natural
+  language, so that routing stops being probabilistic for the cases where I already know the key.
+  - [ ] A command on the control-bot's deterministic surface (`/tarea <KEY>`), consistent with
+        its stated design: _"no hay interpretación de lenguaje natural, ni un comando genérico
+        'ejecuta X'"_.
+  - [ ] It creates the job through `hermes cron create` with `skills:` set explicitly and a
+        **templated** prompt — never freehand text — so execution stays governed by the source
+        skill instead of bypassing it.
+  - [ ] Executed as **uid 10000** (`docker exec -u hermes`), through the bounded Docker client
+        already used by `/modelo` (`SEC-1.6`). Non-negotiable and not cosmetic: a root-owned
+        `cron/jobs.json` is mode 0600, unreadable by the gateway, and the cron then stops firing
+        **silently**. Found in Phase 2, reproduced in Phase 6, and reproduced a third time on
+        2026-08-28 while relaunching the jobs from this very incident — by an assistant that had
+        the warning in `hermes/config/README.md §5` available and did not follow it. A written
+        warning has now failed three times; this story is where it becomes code.
+  - [ ] The control-bot's scope explicitly widened from "only reports" to "launches, through a
+        fixed template", recorded as a decision — `cron.ts` currently states the opposite in its
+        header comment.
+  - [ ] An unknown or malformed key is answered with the help text, never guessed at or
+        interpreted.
+- **US-20.4** — As a reader, I want the documentation's centre of gravity to match reality, so
+  that Jira stops reading as an afterthought.
+  - [ ] `spec.md §5` no longer titled after `resolve-issue` with Jira as a Phase-7 addendum.
+  - [ ] `spec.md §9.2` ("De mensaje a tarea") covers the Jira path and the yield rules. It
+        currently routes to `run-task` without mentioning Jira once.
+  - [ ] `hermes/config/README.md` documents `/tarea` alongside the existing cron setup.
+- **US-20.5** — As the Operator, I want this specific failure to be catchable by the Phase 18
+  suite, so that it cannot quietly reopen.
+  - [ ] "Self-authored prompt escaping its own skill's rules" added to the Phase 18 taxonomy
+        (US-18.1) as its own attack class, distinct from hostile external input.
+  - [ ] The 2026-08-28 incident included verbatim as a case, with the offending prompt as
+        evidence — the same treatment `MYAI-11` gets.
+
+#### Definition of Done
+
+A request naming a Jira ticket is handled by exactly one skill, demonstrated by a real run
+rather than by reading the prompts. `/tarea <KEY>` takes a ticket end to end without the model
+choosing a route. A cron sub-turn that writes to Jira does so with `resolve-jira-task` loaded,
+verified by inspecting a real job's `skills:` field rather than assumed.
 
 ### Phase 18 — Agent injection eval suite
 

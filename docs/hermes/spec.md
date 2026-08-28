@@ -4,7 +4,7 @@
 
 ## 0. Aclaración importante: qué es "Hermes" aquí
 
-**Hermes = [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) desplegado en un servidor local (Mac Mini del Operador, no un VPS — decisión de coste, ver [architecture.md §Despliegue](../architecture.md#despliegue))**, no un orquestador que construimos desde cero. Es un proyecto open-source (MIT, ~230k★) de Nous Research que ya trae:
+**Hermes = [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) desplegado en un servidor local (Mac Mini del Operador, no un VPS — decisión de coste, ver [architecture.md §Despliegue](../architecture.md#deployment))**, no un orquestador que construimos desde cero. Es un proyecto open-source (MIT, ~230k★) de Nous Research que ya trae:
 
 - Un **agent loop** con modelo intercambiable (Anthropic, OpenAI, OpenRouter, Nous Portal, endpoints propios).
 - **Memoria persistente** propia (memoria curada, búsqueda FTS5 de sesiones, modelado de usuario) y un **sistema de skills** (memoria procedimental, compatible con el estándar abierto [agentskills.io](https://agentskills.io/)).
@@ -17,7 +17,7 @@
 Dado esto, **nuestro trabajo no es reimplementar nada de lo anterior**. Es construir las tres piezas que le faltan para este caso de uso concreto:
 
 1. **`claude-code-runner-mcp`** — servidor MCP que sabe lanzar Claude Code en un contenedor Docker efímero por tarea (sección 3).
-2. **`brain-mcp`** — servidor MCP adaptador sobre la API de nuestro Personal Brain (contrato detallado en [personal-brain/spec.md](../personal-brain/spec.md#52-api-vía-mcp-appsbrain-mcp-lo-que-realmente-consume-hermes)).
+2. **`brain-mcp`** — servidor MCP adaptador sobre la API de nuestro Personal Brain (contrato detallado en [personal-brain/spec.md](../personal-brain/spec.md#52-the-mcp-api-appsbrain-mcp-what-hermes-actually-consumes)).
 3. **El Skill `resolve-issue`** — el procedimiento, en el formato de skills de hermes-agent, que le dice al agente qué hacer y en qué orden (sección 5).
 
 Todo lo demás (leer GitHub Issues, leer Notion, leer Jira) se resuelve registrando servidores MCP **de terceros ya existentes** para esas plataformas — no se escriben conectores propios.

@@ -30,7 +30,7 @@ Recordatorio: "Hermes" = [NousResearch/hermes-agent](https://github.com/NousRese
 
 **Estado: cumplido. Fases 0-5 completadas.**
 
-Este proyecto es, ante todo, mi sistema de IA personal — backed by Claude Code, desplegado en un servidor local (Mac Mini, ver [architecture.md §Despliegue](architecture.md#despliegue)). v1 es la primera versión **utilizable de verdad para uso personal**, no un portfolio pulido. Se considera cumplido cuando las **Fases 0 a 5** están terminadas:
+Este proyecto es, ante todo, mi sistema de IA personal — backed by Claude Code, desplegado en un servidor local (Mac Mini, ver [architecture.md §Despliegue](architecture.md#deployment)). v1 es la primera versión **utilizable de verdad para uso personal**, no un portfolio pulido. Se considera cumplido cuando las **Fases 0 a 5** están terminadas:
 
 - Hermes desplegado en local, resolviendo issues de GitHub etiquetadas de principio a fin, sin intervención manual (Fase 2).
 - Hermes hablable desde Telegram: puedo mandarle una tarea ad-hoc por chat, me confirma que la ha aceptado, y me avisa con el resultado cuando termina (Fase 3).
@@ -313,7 +313,7 @@ Puedo escribirle a mi bot de Telegram (solo yo, DM pairing verificado) pidiendo 
 
 ## Fase 4 — Brain básico (ingest + retrieval, sin consolidación)
 
-**Objetivo**: poder ingestar una nota de texto y recuperarla por similitud semántica vía una API HTTP interna. **Esto es deliberadamente todo lo que Brain hace en este proyecto** — no un "company brain" completo. La capa de consolidación (extracción de observations, reconciliación, mental models) está diseñada en el spec pero **no se construye aquí**; queda como trabajo futuro del Operador (ver [personal-brain/spec.md §4.2](personal-brain/spec.md#42-consolidation--fuera-de-alcance-de-este-proyecto-diseño-de-referencia-únicamente)).
+**Objetivo**: poder ingestar una nota de texto y recuperarla por similitud semántica vía una API HTTP interna. **Esto es deliberadamente todo lo que Brain hace en este proyecto** — no un "company brain" completo. La capa de consolidación (extracción de observations, reconciliación, mental models) está diseñada en el spec pero **no se construye aquí**; queda como trabajo futuro del Operador (ver [personal-brain/spec.md §4.2](personal-brain/spec.md#42-consolidation--out-of-scope-for-this-project-design-reference-only)).
 
 **Depende de**: Fase 0.
 
@@ -323,14 +323,14 @@ Puedo escribirle a mi bot de Telegram (solo yo, DM pairing verificado) pidiendo 
 
 **Segundo hallazgo, de entorno, no de diseño**: el Postgres de `docker-compose.dev.yml` (`personalai-dev-postgres-1`) tenía la contraseña real desincronizada del `POSTGRES_PASSWORD` actual del `.env` — igual que el hallazgo de Postgres de la Fase 3, cambiar la variable de entorno no repite `initdb` sobre un volumen ya inicializado. Corregido con `ALTER USER ... WITH PASSWORD` en caliente, sin perder el volumen. Además, la conexión desde el host a `localhost:5432` (el puerto publicado) fallaba con un error de autenticación mientras que la misma contraseña funcionaba perfectamente desde otro contenedor en la misma red Docker — un problema de red específico de este entorno (WSL2/Docker Desktop) enrutando mal `localhost` hacia el puerto publicado, no un problema de Postgres. Verificado el servicio arrancándolo dentro de un contenedor en la red `personalai-dev_default` en vez de depender de ese puerto publicado del host.
 
-**Decisión de arquitectura (tomada al construir la fase)**: proveedor de embeddings = **Hugging Face Inference API**, modelo `BAAI/bge-m3` (multilingüe, 1024 dimensiones) — decisión explícita del Operador, resuelve la pregunta abierta de [personal-brain/spec.md §11](personal-brain/spec.md#11-preguntas-abiertas). La API HTTP usa `node:http` nativo (sin Fastify/Express) para seguir la misma convención sin-framework que `apps/claude-code-runner-mcp`.
+**Decisión de arquitectura (tomada al construir la fase)**: proveedor de embeddings = **Hugging Face Inference API**, modelo `BAAI/bge-m3` (multilingüe, 1024 dimensiones) — decisión explícita del Operador, resuelve la pregunta abierta de [personal-brain/spec.md §11](personal-brain/spec.md#11-open-questions). La API HTTP usa `node:http` nativo (sin Fastify/Express) para seguir la misma convención sin-framework que `apps/claude-code-runner-mcp`.
 
 ### User stories
 
 - **US-4.1** — Como Operador, quiero un endpoint/CLI para ingestar manualmente un documento de texto (nota markdown, descripción de PR pegada a mano) como `RawEvent`, para empezar a poblar Brain sin depender de conectores automáticos.
   - [x] `POST /v1/ingest` acepta `{ source, sourceAuthority, text, externalRef? }` y persiste un `RawEvent`. Implementado en `apps/brain/src/httpServer.ts`, verificado con tests de integración HTTP reales (`httpServer.test.ts`) contra `db.ts` mockeado.
   - [x] Valida que `sourceAuthority` sea `canonical` o `supporting` (rechaza cualquier otro valor). Zod enum en `apps/brain/src/validation.ts`, verificado en `validation.test.ts` y `httpServer.test.ts` ("rechaza un sourceAuthority inválido... sin tocar la base de datos").
-  - [x] **Añadido, no pedido explícitamente por la US pero exigido por [personal-brain/spec.md §7](personal-brain/spec.md#7-permisos-y-privacidad-aunque-sea-single-user)**: filtro de sanitización que rechaza (400) texto que parece contener un secreto (patrones conocidos de GitHub/OpenAI/Anthropic/AWS/Slack/claves PEM + detector genérico de alta entropía) antes de persistir nada. `apps/brain/src/sanitize.ts`, 8 tests (`sanitize.test.ts`) sin falsos positivos verificados sobre prosa/URLs/commit SHAs reales.
+  - [x] **Añadido, no pedido explícitamente por la US pero exigido por [personal-brain/spec.md §7](personal-brain/spec.md#7-permissions-and-privacy-even-though-it-is-single-user)**: filtro de sanitización que rechaza (400) texto que parece contener un secreto (patrones conocidos de GitHub/OpenAI/Anthropic/AWS/Slack/claves PEM + detector genérico de alta entropía) antes de persistir nada. `apps/brain/src/sanitize.ts`, 8 tests (`sanitize.test.ts`) sin falsos positivos verificados sobre prosa/URLs/commit SHAs reales.
 - **US-4.2** — Como Sistema, quiero generar y almacenar el embedding de cada `RawEvent` ingestado en pgvector, para poder hacer búsqueda por similitud más adelante.
   - [x] Cada `RawEvent` ingestado genera un embedding (proveedor configurable vía `EmbeddingProvider`, `apps/brain/src/embeddings.ts`) y se persiste junto al texto. Se calcula de forma asíncrona tras responder (spec §5.1) — inserta la fila sin embedding, responde `201`, y actualiza la fila cuando el embedding llega (`updateEmbedding`). Verificado contra Postgres/pgvector real: la fila queda con `embedding is not null` tras ~1-2s, confirmado por consulta directa (`select id, embedding is null from brain.raw_events`).
 - **US-4.3** — Como Operador, quiero consultar `POST /v1/query` con una pregunta en lenguaje natural y recibir los fragmentos más relevantes por similitud semántica, para validar que la recuperación básica funciona.
@@ -383,7 +383,7 @@ Puedo pegarle una nota por API y preguntarle algo relacionado, y me devuelve el 
 
 ### Tareas técnicas
 
-- `apps/brain-mcp`: servidor MCP con las tres tools (`brain_query`, `brain_ingest`, `brain_record_observation`) envolviendo la API HTTP de Brain (ver [personal-brain/spec.md §5.2](personal-brain/spec.md#52-api-vía-mcp-appsbrain-mcp-lo-que-realmente-consume-hermes)). Cliente HTTP propio (`brainClient.ts`) con timeout corto explícito (US-5.2). 10 tests en verde.
+- `apps/brain-mcp`: servidor MCP con las tres tools (`brain_query`, `brain_ingest`, `brain_record_observation`) envolviendo la API HTTP de Brain (ver [personal-brain/spec.md §5.2](personal-brain/spec.md#52-the-mcp-api-appsbrain-mcp-what-hermes-actually-consumes)). Cliente HTTP propio (`brainClient.ts`) con timeout corto explícito (US-5.2). 10 tests en verde.
 - Registro de `brain-mcp` en la configuración de hermes-agent (`hermes/config/hermes.config.yaml` + `/opt/data/config.yaml` del despliegue real) — verificado con `hermes mcp list`/`hermes mcp test brain-mcp`: conectado, 3 tools descubiertas.
 - Despliegue: `apps/brain/Dockerfile` + `apps/brain-mcp/Dockerfile` (ambos no-root, sin privilegios especiales — a diferencia del runner, ninguno de los dos toca Docker), servicios `brain`/`brain-mcp` añadidos a `hermes/docker/docker-compose.yml`, reutilizando el Postgres existente con un esquema propio (`brain`, separado del `runner` del ejecutor).
 - Ampliación de los Skills `resolve-issue` (Pasos 3 y 6, renumerados) y `run-task` (dentro del prompt del cronjob) con las llamadas a `brain_query`/`brain_record_observation` — ver [hermes/spec.md §5](hermes/spec.md#5-el-skill-resolve-issue).
@@ -860,7 +860,7 @@ Ideas conscientemente aparcadas: tienen sentido, pero hoy no resuelven ningún p
 
 ## Fase 11 — Company Brain completo (consolidación real)
 
-**Objetivo**: retomar la capa de consolidación ya diseñada en [personal-brain/spec.md §4.2](personal-brain/spec.md#42-consolidation--fuera-de-alcance-de-este-proyecto-diseño-de-referencia-únicamente) — extracción de `Observation` vía LLM, reconciliación de contradicciones, `MentalModel` agregados — para que Brain deje de ser un vector store simple y cumpla de verdad las 4 propiedades del patrón "company brain" (shared, enforceable, evolving, agent-readable).
+**Objetivo**: retomar la capa de consolidación ya diseñada en [personal-brain/spec.md §4.2](personal-brain/spec.md#42-consolidation--out-of-scope-for-this-project-design-reference-only) — extracción de `Observation` vía LLM, reconciliación de contradicciones, `MentalModel` agregados — para que Brain deje de ser un vector store simple y cumpla de verdad las 4 propiedades del patrón "company brain" (shared, enforceable, evolving, agent-readable).
 
 **Depende de**: Fase 4. Técnicamente construible desde hace tiempo — lo que la bloquea no es una dependencia sino una decisión de orden: no se empieza hasta que el backend/infra de v2 esté cerrado (ver arriba).
 

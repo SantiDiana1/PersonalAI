@@ -49,7 +49,7 @@ literally its job. That is not up for debate. What _is_ decided is **who else ha
 it**, and the answer is: nobody.
 
 That is where the deployment architecture comes from (see
-[architecture.md §Despliegue](architecture.md#despliegue)): hermes-agent and the
+[architecture.md §Despliegue](architecture.md#deployment)): hermes-agent and the
 runner live in **separate containers**, and only the second one sees the socket.
 They communicate over MCP on HTTP inside an internal Docker Compose network, where
 the only thing hermes can ask the runner for is
