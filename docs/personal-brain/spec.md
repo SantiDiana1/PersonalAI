@@ -195,7 +195,7 @@ interface BrainRecordObservationInput {
 }
 ```
 
-This is the contract registered in hermes-agent's configuration (`hermes mcp add brain-mcp ...`) and used by the `resolve-issue` Skill (see [hermes/spec.md](../hermes/spec.md#5-el-skill-resolve-issue)). If `brain-mcp` does not respond, it must fail safe: hermes-agent must be able to continue the task without context (the Skill treats it as "no context available", never as blocking).
+This is the contract registered in hermes-agent's configuration (`hermes mcp add brain-mcp ...`) and used by the `resolve-issue` Skill (see [hermes/spec.md](../hermes/spec.md#5-the-resolve-issue-skill)). If `brain-mcp` does not respond, it must fail safe: hermes-agent must be able to continue the task without context (the Skill treats it as "no context available", never as blocking).
 
 ## 6. Data model (Postgres, `brain` schema)
 

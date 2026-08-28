@@ -272,7 +272,7 @@ touch external data, because it is the only one that ingests arbitrary text.
 - **SEC-2.6 — A cron job's prompt is not a place to smuggle privileged
   instructions.** A skill that creates a one-shot cron job to escape the
   interactive turn (`run-task`, and any future skill following the same
-  pattern — see [hermes/spec.md §9.3](hermes/spec.md#93-confirmación-inmediata-y-notificación-de-finalización))
+  pattern — see [hermes/spec.md §9.3](hermes/spec.md#93-immediate-confirmation-and-completion-notification))
   must not write, freehand, an instruction that calls a task-source write
   operation — a Jira transition/label/comment, a GitHub label/comment —
   directly into the prompt string. When the sub-turn needs to touch a source,
@@ -368,7 +368,7 @@ the untrusted" and "holds the master key".
 - **SEC-4.4 — Bounded working directory.** Repo checkouts live under a dedicated
   workspace root, shared with the host at the **same path** (needed so the
   ephemeral containers' bind mounts resolve correctly, see
-  [hermes/spec.md §3.6](hermes/spec.md#36-nota-de-implementación-rutas-de-workspace-en-despliegue-contenerizado)).
+  [hermes/spec.md §3.6](hermes/spec.md#36-implementation-note-workspace-paths-in-a-containerised-deployment)).
   That root contains only project workspaces, never `$HOME` or system paths.
 
 ## 7. Layer 5 — The ephemeral container where Claude Code runs
@@ -474,7 +474,7 @@ model is complete in one place.
   must not yield the others.
 - **SEC-6.5 — Manual re-authentication.** When the Claude Code session expires or
   is revoked, it is renewed by hand. Token extraction **is not automated** (see
-  [hermes/spec.md §3.3](hermes/spec.md#33-limitación-conocida-expiración-o-revocación-de-sesión)).
+  [hermes/spec.md §3.3](hermes/spec.md#33-known-limitation-session-expiry-or-revocation)).
 
 ## 9. Layer 7 — Isolation between the personal and work instances (Phase 10 of v2)
 
@@ -540,11 +540,11 @@ A security model that does not enumerate its limits is marketing. These risks ar
 - **Malicious code written by Claude Code.** If an injection gets Claude Code to
   write harmful code, that code lands in a **PR**, not in `main`. Human review of
   the PR before merging is part of the security model, not a process detail
-  ([hermes/spec.md §2](hermes/spec.md#2-no-objetivos-v1)).
+  ([hermes/spec.md §2](hermes/spec.md#2-non-objectives-v1)).
 - **Terms of Service risk.** Using the Pro subscription's OAuth token outside the
   official client violates Anthropic's consumer ToS, with a risk of the entire
   account being suspended. Explicitly accepted in
-  [hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--actualizada-ya-no-es-teórica).
+  [hermes/spec.md §0.2](hermes/spec.md#02-risk-note--updated-no-longer-theoretical).
 - **Availability.** The system depends on home power and network. There is no high
   availability and none is attempted.
 - **Compromise of the host by some other route.** This model protects the machine
