@@ -110,12 +110,7 @@ es la Opción B de este mismo README, y es lo que se usó aquí.
 
 Verificado (`hermes mcp test notion` / `hermes mcp test jira`): ambos
 conectan y descubren sus tools, y ambos tokens autentican de verdad contra
-las APIs reales (llamadas de prueba con 200 OK). **Pendiente de un único paso
-del Operador en la propia UI de Notion**: compartir la base de datos "Hermes
-Tasks" con la integración (menú "..." de la base de datos → Connections) —
-sin eso, Notion devuelve resultados vacíos aunque el token sea válido. Jira no
-tiene un bloqueo equivalente: la JQL ya apunta a un proyecto/label reales, solo
-está vacía porque aún no hay ningún issue etiquetado.
+las APIs reales (llamadas de prueba con 200 OK).
 
 **Jira ya no lo maneja `resolve-issue`**: tiene skill propio,
 `resolve-jira-task` (Fase 14, ver §11). El motivo es que este servidor MCP
@@ -162,7 +157,7 @@ vea:
 
   Deliberadamente **fuera** de `/opt/data` (`$HERMES_HOME`), no debajo — ver
   el comentario en `hermes/docker/docker-compose.yml` (US-6.2 de
-  `docs/roadmap.md`): montarlo bajo `$HERMES_HOME` hacía que el `chown -R`
+  `docs/decisions-log.md`): montarlo bajo `$HERMES_HOME` hacía que el `chown -R`
   recursivo del entrypoint fallara en él (es `:ro`), produciendo en cada
   arranque el warning "chown failed (rootless container?)" — engañoso, no
   tiene nada que ver con Podman rootless.
@@ -211,7 +206,7 @@ repos en el prompt posicional — ver §11.
 3. Reinicia el contenedor de hermes tras cambiar cualquiera de las dos
    variables (`docker compose restart hermes`) — igual que con `mcp_servers`,
    el gateway carga la config al arrancar (ver "gotcha operacional" de la
-   Fase 2 en `docs/roadmap.md`).
+   Fase 2 en `docs/decisions-log.md`).
 4. Verifica desde tu cuenta de Telegram que el bot responde, y desde una
    **segunda cuenta** no listada en `TELEGRAM_ALLOWED_USERS` que el mensaje se
    rechaza (SEC-1.1, verificado, no asumido).

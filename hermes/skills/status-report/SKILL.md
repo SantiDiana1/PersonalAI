@@ -23,7 +23,7 @@ este skill tiene que evitar:
 | "¿cómo estás?", "¿algo pendiente?", "¿está viva la sesión?"                                                          | `get_runner_status` | ¿está todo bien **ahora**?    |
 | "¿cuántas tareas has resuelto?", "dame las métricas", "¿cuál es tu tasa de éxito?", "¿cuánto has ingerido en Brain?" | `get_metrics`       | ¿cuánto se ha **usado** esto? |
 
-Y tres disparadores (docs/roadmap.md, Fase 6 US-6.3/US-6.4, y Fase 9 US-9.2):
+Y tres disparadores (docs/decisions-log.md, Fase 6 US-6.3/US-6.4, y Fase 9 US-9.2):
 
 - **Estado, a demanda** — el Operador pregunta por la salud del sistema en
   cualquier chat (Telegram u otro).

@@ -127,7 +127,7 @@ Llama a `brain_query` con el título + cuerpo de la issue como `question`
 relevante ya conocido (convenciones del repo, decisiones previas, incidencias
 similares) para inyectarlo en la tarea real.
 
-**Regla no negociable (US-5.2 de `docs/roadmap.md`)**: si `brain_query` falla,
+**Regla no negociable (US-5.2 de `docs/decisions-log.md`)**: si `brain_query` falla,
 tarda demasiado, o `brain-mcp` no está registrado/conectado, **continúa sin
 contexto** — nunca bloquees ni canceles la tarea por esto. Trátalo igual que
 cualquier otra tool opcional que no responde: sigue al Paso 4 con
@@ -208,7 +208,7 @@ o `timed_out`), llama a `brain_record_observation` con:
   / etc. para que quede legible en futuras consultas.
 - `externalRef`: el link al PR si se abrió uno; si no, omítelo.
 
-Esto es lo que cierra el bucle de aprendizaje (US-5.3 de `docs/roadmap.md`):
+Esto es lo que cierra el bucle de aprendizaje (US-5.3 de `docs/decisions-log.md`):
 cada ejecución, incluidos los fallos, queda como contexto disponible para
 futuras consultas de `brain_query`. **No es opcional**, pero tampoco es
 bloqueante: si `brain_record_observation` falla, no reintentes ni falles la
@@ -218,7 +218,7 @@ perder este registro concreto no lo deshace.
 ## Generalización a Notion y Jira (Fase 7)
 
 Todo lo anterior (Pasos 0–6) se escribió pensando en GitHub Issues, pero
-generaliza directamente a Notion y Jira (`docs/roadmap.md`, Fase 7, US-7.1/
+generaliza directamente a Notion y Jira (`docs/decisions-log.md`, Fase 7, US-7.1/
 US-7.2) en cuanto sus servidores MCP estén registrados (ver el bloque
 comentado en `hermes/config/hermes.config.yaml`) — **no es un flujo nuevo**,
 solo sustituye la tool de listado/reporte por la del servidor equivalente:

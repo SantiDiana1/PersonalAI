@@ -4,7 +4,7 @@ import { httpOptionsFromEnv, startHttpServer } from './httpServer.js';
 
 /**
  * Arranque del servicio HTTP de Brain (docs/personal-brain/spec.md §5.1,
- * Fase 4 de docs/roadmap.md). Sin MCP todavía — eso es `apps/brain-mcp`,
+ * Fase 4 de docs/decisions-log.md). Sin MCP todavía — eso es `apps/brain-mcp`,
  * Fase 5.
  */
 export async function startServer(): Promise<void> {

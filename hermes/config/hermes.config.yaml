@@ -53,7 +53,7 @@ mcp_servers:
     # coincidir con BRAIN_MCP_AUTH_TOKEN del compose.
     headers:
       Authorization: Bearer ${MCP_BRAIN_MCP_API_KEY}
-    # Corto a propósito (US-5.2 de docs/roadmap.md): si Brain no responde, la
+    # Corto a propósito (US-5.2 de docs/decisions-log.md): si Brain no responde, la
     # tarea debe poder seguir sin contexto en vez de bloquearse. Debe ser
     # MAYOR que el timeout interno de brainClient.ts (BRAIN_REQUEST_TIMEOUT_MS,
     # 25s por defecto — subido desde 10s tras verificar en vivo que un "cold
@@ -82,7 +82,7 @@ mcp_servers:
       # con permisos mínimos (contenidos, issues, pull requests).
       GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
 
-  # Notion (Fase 7, US-7.2 de docs/roadmap.md) — servidor MCP oficial de
+  # Notion (Fase 7, US-7.2 de docs/decisions-log.md) — servidor MCP oficial de
   # Notion, pensado para la base de datos "Hermes Tasks" (propiedad
   # `status = Ready for Hermes`), fuente personal del Operador.
   #
@@ -102,7 +102,7 @@ mcp_servers:
       # interna creada por el Operador en notion.so/my-integrations).
       NOTION_TOKEN: ${NOTION_TOKEN}
 
-  # Jira (Fase 7, US-7.1 de docs/roadmap.md) — servidor MCP de comunidad
+  # Jira (Fase 7, US-7.1 de docs/decisions-log.md) — servidor MCP de comunidad
   # (@aashari/mcp-server-atlassian-jira, stdio vía npx), JQL fijo
   # `labels = hermes AND status = "To Do"`, sobre proyectos personales del
   # Operador (nunca proyectos de empresa — esos esperan a Azure DevOps + la
@@ -141,7 +141,7 @@ skills:
   # ajústala; si prefieres no montarlo, copia hermes/skills/resolve-issue a
   # ~/.hermes/skills/ y deja esta lista vacía.
   # Fuera de /opt/data ($HERMES_HOME) a propósito — ver el comentario del
-  # mount en hermes/docker/docker-compose.yml (US-6.2 de docs/roadmap.md).
+  # mount en hermes/docker/docker-compose.yml (US-6.2 de docs/decisions-log.md).
   external_dirs:
     - /opt/skills-repo
 
@@ -173,7 +173,7 @@ approvals:
 #              plan limits."
 #
 # No es cuota agotada, es política. El runner NO está afectado (ejecuta el
-# binario oficial `claude -p`, que Anthropic sí acepta) — ver docs/roadmap.md
+# binario oficial `claude -p`, que Anthropic sí acepta) — ver docs/decisions-log.md
 # Fase 12 US-12.3.
 #
 # La lección no es "cambiar de proveedor", que sería repetir el mismo error con

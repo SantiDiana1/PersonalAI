@@ -6,7 +6,7 @@ import { logger } from './logger.js';
  * Es el único lugar donde brain-mcp sabe hablar HTTP con Brain — las tres
  * tools MCP (mcpServer.ts) son wrappers finos sobre estas tres funciones.
  *
- * Timeout explícito y corto a propósito (US-5.2 de docs/roadmap.md): si Brain
+ * Timeout explícito y corto a propósito (US-5.2 de docs/decisions-log.md): si Brain
  * no responde a tiempo, la tarea de Hermes debe poder seguir sin contexto en
  * vez de bloquearse — este cliente lanza rápido en vez de colgarse.
  */

@@ -40,7 +40,7 @@ hermes-agent hace peticiones HTTP directas a `api.anthropic.com` y **nunca invoc
 
 Todo lo conversacional depende del camino 2 — `run-task`, `resolve-issue`, `resolve-jira-task`, `status-report`, `ask-brain`, `run-design-task`— porque todos pasan por el agent loop. El bot de control (`apps/control-bot`) es la única superficie que sobrevive a un corte de ambos caminos, precisamente por no usar modelo alguno.
 
-**Consecuencia operativa, que es lo que de verdad importa**: mientras el agent loop consuma créditos, **cada turno cuesta dinero real**, incluida cada pasada de un cronjob que no encuentra nada que hacer. El control de gasto deja de ser higiene y pasa a ser el freno principal — ver US-13.6 del roadmap (tope mensual explícito) y la nota de coste del cron en [roadmap.md](../roadmap.md#milestone-v2--qué-es-la-segunda-versión).
+**Consecuencia operativa, que es lo que de verdad importa**: mientras el agent loop consuma créditos, **cada turno cuesta dinero real**, incluida cada pasada de un cronjob que no encuentra nada que hacer. El control de gasto deja de ser higiene y pasa a ser el freno principal — ver US-13.6 del roadmap (tope mensual explícito) y la nota de coste del cron en [decisions-log.md](../decisions-log.md#milestone-v2--qué-es-la-segunda-versión).
 
 El secreto sigue siendo uno solo (`hermes-claude-auth`, el valor del token OAuth), compartido por ambos caminos vía sus respectivos `.env`. Lo que cambió no es cómo se guarda la credencial, sino **contra qué se factura cada uso**.
 
@@ -94,7 +94,7 @@ El componente más parecido a "construir un ejecutor desde cero" de todo el proy
 ### 3.1 Contrato MCP
 
 Expone dos tools. `run_coding_task` es la principal (la única hasta la Fase 5);
-`get_runner_status` se añadió en la Fase 6 ([roadmap.md — Fase 6](../roadmap.md#fase-6--cierre-operativo-y-superficie-conversacional),
+`get_runner_status` se añadió en la Fase 6 ([decisions-log.md — Fase 6](../decisions-log.md#fase-6--cierre-operativo-y-superficie-conversacional),
 US-6.3/US-6.4) como excepción acotada al principio de "una sola tool" del
 diseño original — es de solo lectura, sin parámetros, y no amplía la
 superficie de ataque de la forma en que lo haría una tool genérica de
@@ -218,7 +218,7 @@ Al meter el runner en un contenedor, esto **se rompe en silencio**: el runner pe
 
 **Nota operativa**: como el contenedor del runner corre como root (ver el razonamiento en su `Dockerfile`), los directorios de workspace aparecen en el host propiedad de root. No es un problema de funcionamiento — quien los crea y los borra es el propio runner, que es root dentro de su contenedor — pero conviene saberlo al inspeccionar o limpiar esa raíz a mano desde el host.
 
-### 3.7 `run_claude_command` (Fase 8 del [roadmap](../roadmap.md#fase-8--comandos-de-claude-code-vía-chat-run_claude_command))
+### 3.7 `run_claude_command` (Fase 8 del [roadmap](../decisions-log.md#fase-8--comandos-de-claude-code-vía-chat-run_claude_command))
 
 **Implementada, con el contrato rediseñado tras verificar empíricamente US-8.1** — ver el hallazgo real más abajo. El diseño original de esta sección (previo a la implementación) proponía devolver un `artifactUrl` ya publicado; se descarta por evidencia real, no por hipótesis.
 
@@ -268,14 +268,14 @@ Se usan servidores MCP ya existentes y mantenidos, no conectores propios:
 
 - **GitHub**: [github/github-mcp-server](https://github.com/github/github-mcp-server) (oficial). Se autentica con un GitHub App o PAT fine-grained, scoped solo a los repos donde quiero que Hermes actúe (`issues:write`, `contents:write`, `pull_requests:write` — nada más).
 - **Notion**: servidor MCP oficial de Notion. Apunta a una base de datos concreta ("Hermes Tasks") filtrando por una propiedad `status`.
-- **Jira**: servidor MCP de Atlassian/comunidad, configurado con un JQL fijo (por defecto `labels = hermes AND status = "To Do"`). Fuente **personal** del Operador (post-v1, [roadmap.md — Fase 7](../roadmap.md#fase-7--ampliar-fuentes-y-canales)).
+- **Jira**: servidor MCP de Atlassian/comunidad, configurado con un JQL fijo (por defecto `labels = hermes AND status = "To Do"`). Fuente **personal** del Operador (post-v1, [decisions-log.md — Fase 7](../decisions-log.md#fase-7--ampliar-fuentes-y-canales)).
 - **Azure DevOps**: servidor MCP oficial o de comunidad (evaluar [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp) al implementar), con un filtro de work items equivalente al JQL de Jira. Fuente **de la empresa** del Operador — **nunca** registrado en la misma instancia de hermes-agent que las fuentes personales. Ver §4.1.
 
 Registro en hermes-agent (`hermes/config/hermes.config.yaml` + `hermes mcp add <server>`), cada uno con sus propias credenciales de mínimo privilegio. Estas credenciales (GitHub/Notion/Jira/Azure DevOps) sí son API keys/tokens convencionales — solo la parte de modelo Anthropic usa la sesión Pro compartida (§0.1), y solo en la instancia personal (§4.1).
 
 ### 4.1 Despliegue dual: instancia personal vs. instancia de trabajo (post-v1)
 
-**Decisión de arquitectura** (detalle completo y motivación en [roadmap.md — Fase 10](../roadmap.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo)): en cuanto Azure DevOps (u otra fuente de la empresa del Operador) entra en juego, **no** se añade como un servidor MCP más a la instancia de hermes-agent ya desplegada. Se despliega una **segunda instancia completa**, aislada de la primera: `docker-compose.yml` propio, `.env` propio, red Docker propia, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos), y — crucialmente — **auth propia con Anthropic**, no `hermes-claude-auth`. El riesgo de ToS descrito en §0.2 se asume explícitamente para uso personal; no se traslada sin más a datos y credenciales de un empleador.
+**Decisión de arquitectura** (detalle completo y motivación en [decisions-log.md — Fase 10](../decisions-log.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo)): en cuanto Azure DevOps (u otra fuente de la empresa del Operador) entra en juego, **no** se añade como un servidor MCP más a la instancia de hermes-agent ya desplegada. Se despliega una **segunda instancia completa**, aislada de la primera: `docker-compose.yml` propio, `.env` propio, red Docker propia, bot de Telegram propio (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS` distintos), y — crucialmente — **auth propia con Anthropic**, no `hermes-claude-auth`. El riesgo de ToS descrito en §0.2 se asume explícitamente para uso personal; no se traslada sin más a datos y credenciales de un empleador.
 
 Consecuencia directa para `claude-code-runner-mcp`: si la instancia de trabajo llega a necesitar ejecutar tareas de código, es un **despliegue separado** del componente (su propio contenedor, su propio `CLAUDE_CODE_RUNNER_AUTH_TOKEN`, su propia base de Postgres) — no un parámetro de "cliente" añadido al runner personal. El aislamiento de §3.4 aplica igual, pero por partida doble.
 
@@ -337,7 +337,7 @@ create table task_runs (
 
 ## 9. Interacción conversacional (Telegram)
 
-Hermes no es solo "un bot que cierra issues de GitHub" — el objetivo de este proyecto (ver `docs/roadmap.md` §Milestone v1) es que sea mi sistema de IA personal, hablable desde el móvil. hermes-agent ya trae un gateway multi-plataforma de fábrica (§0); esta sección documenta cómo se usa el canal de Telegram concretamente, implementado en la Fase 3 del roadmap.
+Hermes no es solo "un bot que cierra issues de GitHub" — el objetivo de este proyecto (ver `docs/decisions-log.md` §Milestone v1) es que sea mi sistema de IA personal, hablable desde el móvil. hermes-agent ya trae un gateway multi-plataforma de fábrica (§0); esta sección documenta cómo se usa el canal de Telegram concretamente, implementado en la Fase 3 del roadmap.
 
 ### 9.1 Configuración del gateway
 

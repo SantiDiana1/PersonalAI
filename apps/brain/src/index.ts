@@ -1,7 +1,7 @@
 /**
  * apps/brain — servicio de memoria (Personal Brain).
  *
- * Fase 4 (docs/roadmap.md): ingestion + retrieval semántico vía API HTTP
+ * Fase 4 (docs/decisions-log.md): ingestion + retrieval semántico vía API HTTP
  * interna. Deliberadamente básico — ver docs/personal-brain/spec.md §0.
  * Sin MCP todavía (eso es apps/brain-mcp, Fase 5).
  */

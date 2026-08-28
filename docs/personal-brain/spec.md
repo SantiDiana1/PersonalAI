@@ -2,7 +2,7 @@
 
 ## 0. Alcance de este proyecto — léelo antes que nada
 
-> **Decisión de alcance (Fase 0/tras Fase 0)**: en este proyecto, Brain se construye deliberadamente **básico**: ingestión de eventos + búsqueda por similitud semántica, nada más. La capa de **consolidación** (extracción de observations vía LLM, reconciliación de contradicciones, mental models — sección 4.2) es la pieza que de verdad convertiría esto en un "company brain" real, y **está diseñada en este documento pero no se construye en este proyecto**. Es trabajo futuro que el Operador retomará por su cuenta, cuando quiera, fuera del roadmap de `docs/roadmap.md`.
+> **Decisión de alcance (Fase 0/tras Fase 0)**: en este proyecto, Brain se construye deliberadamente **básico**: ingestión de eventos + búsqueda por similitud semántica, nada más. La capa de **consolidación** (extracción de observations vía LLM, reconciliación de contradicciones, mental models — sección 4.2) es la pieza que de verdad convertiría esto en un "company brain" real, y **está diseñada en este documento pero no se construye en este proyecto**. Es trabajo futuro **que ya tiene sitio asignado**: [Milestone v4, Fase 11](../roadmap.md#milestone-v4--company-brain) — deliberadamente el último bloque del proyecto, por la regla de no abrir la pieza más grande hasta tener cerrada la base bajo ella. (Hasta el 2026-08-28 esta nota decía "fuera del roadmap"; dejó de ser cierto al planificarse v4.)
 >
 > Por qué: el objetivo de este proyecto es demostrar bien el patrón Hermes ↔ MCP ↔ Brain con un Brain simple pero real (no un stub vacío), no construir de fondo el sistema completo de consolidación — eso el Operador prefiere diseñarlo y construirlo él mismo más adelante, con calma. El resto de este spec sigue describiendo la visión completa del "company brain" (útil como referencia de diseño para ese trabajo futuro), pero cada sección indica explícitamente qué parte se construye aquí y qué parte no.
 
@@ -42,7 +42,7 @@ Fuentes soportadas, por prioridad:
 
 1. **Notas personales** (Markdown — de un vault de Obsidian/Notion export, o archivos sueltos) — vía import manual/CLI en Fase 4, vía sync automático en trabajo futuro.
 2. **GitHub** — descripciones de PR, comentarios de review y commits de mis propios repos (fuente canónica para "por qué se hizo X en el código").
-3. **Notion / Jira** — páginas/tickets marcados como fuente de contexto (no todas las tareas, solo documentos de referencia: decisiones, runbooks) — Fase 7 de v2 (post-v1, ver `docs/roadmap.md`).
+3. **Notion / Jira** — páginas/tickets marcados como fuente de contexto (no todas las tareas, solo documentos de referencia: decisiones, runbooks) — Fase 7 de v2 (post-v1, ver `docs/decisions-log.md`).
 4. **Resultados de Hermes** — cada llamada a `brain_record_observation` (vía `brain-mcp`, ver sección 5.2) que hermes-agent hace tras ejecutar una tarea (por GitHub o por Telegram) es, en sí mismo, una fuente de ingestion (la más valiosa, porque es feedback directo de una acción real) — Fase 5. En v1 esto se persiste tal cual como `RawEvent` (`source: 'hermes_feedback'`), sin extracción LLM.
 
 Filtro de canonicidad (tomado del artículo, sí se construye): cada fuente se etiqueta con una `source_authority` (`canonical` | `supporting`). Un PR description es `canonical`; una nota rápida sin revisar es `supporting`. En v1 este campo se persiste y se puede usar para ordenar/filtrar resultados, pero no hay lógica de reconciliación que lo use activamente (eso es consolidación, fuera de alcance).
@@ -65,7 +65,7 @@ Este es el **único** modelo de datos "de contenido" que se construye en v1, jun
 
 ### 4.2 Consolidation — FUERA DE ALCANCE DE ESTE PROYECTO (diseño de referencia únicamente)
 
-> No se implementa nada de esta sección en el roadmap actual (`docs/roadmap.md`). Se documenta tal cual estaba planeada originalmente, como diseño de referencia para cuando el Operador quiera construirla por su cuenta. Ningún código de `apps/brain/src/consolidation` se escribe en este proyecto.
+> Nada de esta sección está construido todavía. Es el contenido de [Milestone v4, Fase 11](../roadmap.md#milestone-v4--company-brain), el último bloque planificado del proyecto: hasta que se abra, `apps/brain/src/consolidation` no existe y esta sección es diseño de referencia, no descripción de algo que corra.
 
 La capa que, según el artículo de referencia, diferencia un company brain real de "un vector store con extra pasos" — tres trabajos:
 

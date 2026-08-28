@@ -91,7 +91,9 @@ personalAI/
     shared/                    # tipos compartidos entre brain, brain-mcp y claude-code-runner-mcp
   docs/
     architecture.md            # este documento
-    roadmap.md
+    roadmap.md                 # estado actual y qué viene
+    decisions-log.md           # la bitácora completa: cada fase, cada bug, cada decisión revertida
+    agent-evals/spec.md
     hermes/spec.md
     personal-brain/spec.md
 ```
@@ -118,7 +120,7 @@ GitHub, Notion y Jira se resuelven con servidores MCP **ya existentes** de esas 
 
 Un único servidor local, siempre encendido, con Docker y Docker Compose — en vez de un VPS: para este proyecto de uso personal ("andar por casa", ver [hermes/spec.md §0](hermes/spec.md#0-aclaración-importante-qué-es-hermes-aquí)) el coste recurrente de un VPS no compensa, y ni el flujo de GitHub (cron sondeando, Fase 2) ni el de Telegram (long-polling, Fase 3) necesitan puertos de entrada expuestos a internet ni IP pública — todo el tráfico que genera hermes-agent es saliente. Esto sí implica que la disponibilidad depende de la luz/red doméstica del Operador, algo asumido conscientemente dado el alcance personal del proyecto.
 
-**Estado real hoy vs. destino planeado**: el despliegue corre hoy sobre WSL2/Docker Desktop en la máquina de escritorio del Operador — no hay todavía un Mac Mini. Un Mac Mini dedicado es el destino planeado (ver [docs/roadmap.md, Futuribles](roadmap.md#futuribles-sin-fase-asignada)); el diseño de despliegue (single-host, Docker Compose, sin puertos entrantes) es el mismo en ambos casos, así que migrar no exige rediseñar nada de lo de aquí abajo.
+**Estado real hoy vs. destino planeado**: el despliegue corre hoy sobre WSL2/Docker Desktop en la máquina de escritorio del Operador — no hay todavía un Mac Mini. Un Mac Mini dedicado es el destino planeado (ver [docs/decisions-log.md, Futuribles](decisions-log.md#futuribles-sin-fase-asignada)); el diseño de despliegue (single-host, Docker Compose, sin puertos entrantes) es el mismo en ambos casos, así que migrar no exige rediseñar nada de lo de aquí abajo.
 
 - `hermes/docker/docker-compose.yml` levanta: `hermes-agent` (imagen construida del upstream de NousResearch, sin modificar su código), `brain`, `brain-mcp`, `claude-code-runner-mcp`, `postgres` (con `pgvector`).
 - `hermes-agent` se configura (`hermes/config/hermes.config.yaml` + `hermes mcp add ...`) para registrar los 5 servidores MCP (GitHub, Notion, Jira, brain-mcp, claude-code-runner-mcp).

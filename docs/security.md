@@ -3,7 +3,14 @@
 > **Este documento es la fuente única de verdad de los requisitos de seguridad
 > innegociables del proyecto.** Cada fase del [roadmap](roadmap.md) referencia
 > los requisitos `SEC-x.y` que le aplican, y ninguna fase se da por terminada
-> sin verificarlos con evidencia real (no "debería funcionar").
+> sin verificarlos con evidencia real (no "debería funcionar"). La verificación
+> de las fases ya cerradas está en la [bitácora](decisions-log.md).
+>
+> **Pendiente (Fase 18)**: hoy estos requisitos se verifican a mano, una vez, y
+> su evidencia es prosa en la bitácora. La [suite de evals](agent-evals/spec.md)
+> los convierte en comprobaciones ejecutables y añadirá aquí una sección de
+> cobertura que diga, requisito a requisito, cuál está automatizado, cuál sigue
+> siendo verificación manual, y cuál no está verificado en absoluto.
 >
 > Si un requisito de aquí estorba para avanzar, la salida **no** es saltárselo:
 > es cambiar este documento explícitamente, dejando constancia de qué se relaja
@@ -366,7 +373,7 @@ que el modelo esté completo en un solo sitio.
   para poder verificar sus propios criterios de aceptación (`build`/`lint`/
   `dev`) — sin esto, esas tareas siempre terminan en `needs_human_input` por
   no poder instalar dependencias, verificado con una ejecución real contra
-  `WEB-2` (ver [roadmap.md, US-14.9](roadmap.md)).
+  `WEB-2` (ver [decisions-log.md, US-14.9](decisions-log.md)).
 
   **Qué NO cambia**: `FilterDefaultDeny Yes` se mantiene — solo se añade una
   entrada más a `filter.allow`, con la misma sintaxis de FQDN exacto que ya
@@ -450,7 +457,7 @@ que el modelo esté completo en un solo sitio.
 
 ## 9. Capa 7 — Aislamiento entre instancia personal y de trabajo (Fase 10 de v2)
 
-Esta capa solo aplica **si y cuando** se construya la [Fase 10 del roadmap](roadmap.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo) (Azure DevOps u otra fuente de la empresa del Operador). No existe en v1. Se recoge aquí, con numeración propia, para que la decisión de aislamiento no dependa de que alguien se acuerde de leer el roadmap el día que se implemente.
+Esta capa solo aplica **si y cuando** se construya la [Fase 10 del roadmap](decisions-log.md#fase-10--despliegue-dual-instancia-personal-vs-instancia-de-trabajo) (Azure DevOps u otra fuente de la empresa del Operador). No existe en v1. Se recoge aquí, con numeración propia, para que la decisión de aislamiento no dependa de que alguien se acuerde de leer el roadmap el día que se implemente.
 
 El principio de fondo es el mismo que en §0, aplicado a un límite distinto: **el riesgo que el Operador acepta para sí mismo (§0.2, ToS de la sesión Pro) no se traslada por defecto a datos o credenciales de su empleador.**
 

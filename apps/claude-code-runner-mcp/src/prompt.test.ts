@@ -69,7 +69,7 @@ describe('buildCommandPrompt', () => {
 
   it('nunca pide publicar un Artifact — pide escribir artifact-output.html (Fase 8, US-8.1)', () => {
     // No es cosmético: claude -p en modo headless no tiene la tool Artifact
-    // disponible (verificado empíricamente, ver docs/roadmap.md — Fase 8).
+    // disponible (verificado empíricamente, ver docs/decisions-log.md — Fase 8).
     // Pedírselo solo le hace perder turnos intentando algo que va a fallar.
     const prompt = buildCommandPrompt({ slashCommand: '/dataviz', prompt: 'dashboard de ventas' });
     expect(prompt).toContain('No tienes disponible la tool `Artifact`');

@@ -315,7 +315,7 @@ services:
       # ningún cambio aquí para que hermes lo vea.
       #
       # Deliberadamente FUERA de $HERMES_HOME (/opt/data), no debajo de él
-      # (US-6.2 de docs/roadmap.md): el entrypoint de hermes-agent hace
+      # (US-6.2 de docs/decisions-log.md): el entrypoint de hermes-agent hace
       # `chown -R hermes:hermes $HERMES_HOME` en cada arranque, y como este
       # mount es `:ro`, ese chown fallaba en él ("Read-only file system"),
       # produciendo el warning "chown failed (rootless container?)" en cada

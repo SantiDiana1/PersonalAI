@@ -1,7 +1,7 @@
 /**
  * Consultas de métricas sobre las dos fuentes de verdad del sistema:
  * `runner.task_runs` (tareas delegadas a Claude Code) y `brain.raw_events`
- * (lo que Brain ha ingerido). Ver docs/roadmap.md US-9.2.
+ * (lo que Brain ha ingerido). Ver docs/decisions-log.md US-9.2.
  *
  * Todo lo de este módulo es de SOLO LECTURA y trabaja contra una interfaz
  * mínima (`Queryable`) en vez de contra `pg.Pool` directamente. Eso da dos

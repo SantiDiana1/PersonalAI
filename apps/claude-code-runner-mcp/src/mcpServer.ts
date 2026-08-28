@@ -81,7 +81,7 @@ export function loadDeps(): RunCodingTaskDeps {
  * con acceso al socket de Docker, así que cualquier operación que exponga es,
  * en la práctica, ejecutable por quien controle al cliente MCP.
  *
- * `get_runner_status` (US-6.3/US-6.4 de docs/roadmap.md — Fase 6) y
+ * `get_runner_status` (US-6.3/US-6.4 de docs/decisions-log.md — Fase 6) y
  * `get_metrics` (US-9.2 — Fase 9) son excepciones acotadas: ambas son de solo
  * lectura y sin parámetros — no amplían la superficie de ataque de la forma
  * en que lo haría un `run_shell_command` genérico. `get_runner_status` no

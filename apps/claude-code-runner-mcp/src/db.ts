@@ -119,7 +119,7 @@ export async function finishTaskRun(
 }
 
 /**
- * Lectura para `get_runner_status` (US-6.3/US-6.4 de docs/roadmap.md — Fase
+ * Lectura para `get_runner_status` (US-6.3/US-6.4 de docs/decisions-log.md — Fase
  * 6). Devuelve `null` si no hay persistencia configurada, en vez de lanzar —
  * este tool es de solo lectura para un resumen operativo, no debe romper el
  * flujo de status-report/cron por un `DATABASE_URL` ausente en un despliegue

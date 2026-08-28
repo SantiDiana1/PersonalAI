@@ -18,7 +18,7 @@ metadata:
 `run-task` antes de delegar una tarea de código. Este skill expone las
 mismas dos tools (`brain_query`, `brain_ingest`) **directamente en la
 conversación**, para cuando el Operador quiere memoria sin que haga falta una
-tarea de código de por medio — docs/roadmap.md, Fase 6, US-6.5. No se toca
+tarea de código de por medio — docs/decisions-log.md, Fase 6, US-6.5. No se toca
 `apps/brain`/`apps/brain-mcp`: es una capa de conversación encima de tools ya
 existentes.
 

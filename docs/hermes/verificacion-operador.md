@@ -4,7 +4,7 @@ Siete criterios que **no necesitaban una sola línea de código**: hacían falta
 mensajes reales tuyos. Estaban agrupados aquí porque compartían la misma causa
 de bloqueo. **Estado (2026-08-28): solo queda abierto el criterio 1 (US-6.4,
 el "¿cómo estás?" literal) — el resto ya está verificado**, la mayoría al
-cerrar sus fases en `docs/roadmap.md` y el de la nota de voz (criterio 3,
+cerrar sus fases en `docs/decisions-log.md` y el de la nota de voz (criterio 3,
 US-7.5) confirmado directamente por el Operador ese mismo día.
 
 **Por qué llevaban parados**: casi todos exigen que el agent loop de Hermes
@@ -77,7 +77,7 @@ transcripción **en el servidor**, sin mandar la voz a ninguna API externa.
 
 ## 4. US-14.1, US-14.2, US-14.3 — el flujo de Jira de punta a punta — ✅ hecho
 
-Verificado con evidencia real al cerrar la Fase 14 (ver `docs/roadmap.md`).
+Verificado con evidencia real al cerrar la Fase 14 (ver `docs/decisions-log.md`).
 Se deja el procedimiento aquí como referencia, no como pendiente.
 
 ### 4.1 Un ticket que debe funcionar
@@ -158,5 +158,5 @@ valioso que un aprobado: los tres bugs reales más graves del proyecto (el skill
 que no cargaba, el owner inventado, la tool `memory` en vez de Brain) salieron
 de tandas como esta, no de los tests.
 
-Luego se marcan los criterios en `docs/roadmap.md` con la evidencia real
+Luego se marcan los criterios en `docs/decisions-log.md` con la evidencia real
 pegada, que es la regla del proyecto: nada se da por cerrado por diseño.
