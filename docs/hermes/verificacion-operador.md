@@ -1,8 +1,11 @@
 # Tanda de verificación del Operador
 
-Siete criterios abiertos en cuatro fases que **no necesitan una sola línea de
-código**: hacen falta mensajes reales tuyos. Están agrupados aquí porque
-comparten la misma causa de bloqueo y se pueden despachar de una sentada.
+Siete criterios que **no necesitaban una sola línea de código**: hacían falta
+mensajes reales tuyos. Estaban agrupados aquí porque compartían la misma causa
+de bloqueo. **Estado (2026-08-28): solo queda abierto el criterio 1 (US-6.4,
+el "¿cómo estás?" literal) — el resto ya está verificado**, la mayoría al
+cerrar sus fases en `docs/roadmap.md` y el de la nota de voz (criterio 3,
+US-7.5) confirmado directamente por el Operador ese mismo día.
 
 **Por qué llevaban parados**: casi todos exigen que el agent loop de Hermes
 responda, y estuvo caído desde el cambio de política de Anthropic (Fase 12).
@@ -63,20 +66,19 @@ resultado plausible. Anótalo, es grave.
 
 ---
 
-## 3. US-7.5 — nota de voz
+## 3. US-7.5 — nota de voz — ✅ hecho (2026-08-28)
 
-**Manda una nota de voz** por Telegram con el mismo tipo de petición (o algo más
-simple, como "¿Qué sabemos del proyecto Cronos?").
-
-La infraestructura ya está lista y verificada: `faster-whisper` instalado,
-`stt.enabled: true`, `provider: local` — o sea, transcripción **en el servidor**,
-sin mandar tu voz a ninguna API externa. Lo único que falta es un audio real.
+**Confirmado por el Operador**: mandó una nota de voz real por Telegram y
+funcionó bien de punta a punta. Infraestructura que lo hizo posible:
+`faster-whisper` instalado, `stt.enabled: true`, `provider: local` — o sea,
+transcripción **en el servidor**, sin mandar la voz a ninguna API externa.
 
 ---
 
-## 4. US-14.1, US-14.2, US-14.3 — el flujo de Jira de punta a punta
+## 4. US-14.1, US-14.2, US-14.3 — el flujo de Jira de punta a punta — ✅ hecho
 
-Es el más largo, y el que cierra una fase entera.
+Verificado con evidencia real al cerrar la Fase 14 (ver `docs/roadmap.md`).
+Se deja el procedimiento aquí como referencia, no como pendiente.
 
 ### 4.1 Un ticket que debe funcionar
 
