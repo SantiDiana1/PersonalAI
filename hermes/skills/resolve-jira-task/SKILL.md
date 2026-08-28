@@ -129,11 +129,11 @@ Verificado contra el workflow real del proyecto `MYAI` (2026-08-27): desde
 observada — **válida como convención por defecto de este proyecto, no como
 garantía universal de cualquier workflow de Jira**:
 
-| Etiqueta que se pone   | Categoría destino | Nombre de transición observado | Cuándo |
-| ----------------------- | ------------------ | ------------------------------- | ------ |
-| `hermes:in-progress`    | `indeterminate`     | **"En curso"**                   | Paso 2, antes de delegar |
-| `hermes:done`           | `done`              | **"Listo"** (destino: "Finalizada") | Paso 6, tras abrir el PR |
-| `hermes:needs-human`    | `indeterminate`     | **"Blocked"**                    | Paso 6, en cualquier fallo |
+| Etiqueta que se pone | Categoría destino | Nombre de transición observado      | Cuándo                     |
+| -------------------- | ----------------- | ----------------------------------- | -------------------------- |
+| `hermes:in-progress` | `indeterminate`   | **"En curso"**                      | Paso 2, antes de delegar   |
+| `hermes:done`        | `done`            | **"Listo"** (destino: "Finalizada") | Paso 6, tras abrir el PR   |
+| `hermes:needs-human` | `indeterminate`   | **"Blocked"**                       | Paso 6, en cualquier fallo |
 
 **Por qué el nombre exacto y no solo la categoría**: `done` y `new` tienen
 cada uno una única transición en este workflow, así que la categoría basta.

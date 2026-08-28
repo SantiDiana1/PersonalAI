@@ -175,7 +175,7 @@ cualquiera puede escribirle.
     toca, y solo sabe hacer tres cosas, siempre contra un único contenedor por
     nombre fijo (`CONTROL_BOT_HERMES_CONTAINER_NAME`): leer el modelo activo
     (`hermes config show`, de solo lectura), cambiarlo (`hermes config set
-    model.provider|model.default`), y reiniciar ese contenedor. Nunca un
+model.provider|model.default`), y reiniciar ese contenedor. Nunca un
     comando arbitrario, nunca `docker run`/`createContainer`, nunca otro
     contenedor. Mismo patrón ya aceptado para `claude-code-runner-mcp` en
     SEC-2.1 y SEC-4.1, aplicado aquí por segunda vez a un componente distinto.
