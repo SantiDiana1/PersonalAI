@@ -130,14 +130,14 @@ describe('createDeterministicTask', () => {
       skill: 'resolve-jira-task',
       prompt: 'Ticket de Jira ya seleccionado, sin búsqueda: WEB-6.',
       deliver: 'telegram:42',
-      schedule: '2026-09-01T12:00:10.000Z',
+      schedule: '1m',
     });
 
     expect(execCalls[0]?.cmd).toEqual([
       '/opt/hermes/.venv/bin/hermes',
       'cron',
       'create',
-      '2026-09-01T12:00:10.000Z',
+      '1m',
       '--name',
       'tarea-WEB-6-123',
       '--skill',
@@ -157,7 +157,7 @@ describe('createDeterministicTask', () => {
         skill: 'resolve-jira-task',
         prompt: 'x',
         deliver: 'telegram:42',
-        schedule: '2026-09-01T12:00:10.000Z',
+        schedule: '1m',
       }),
     ).rejects.toThrow(DockerOperationError);
   });

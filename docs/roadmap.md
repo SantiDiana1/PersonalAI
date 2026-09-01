@@ -263,13 +263,11 @@ affordances combined into a hole:
   above are coded (`apps/control-bot/src/jiraTask.ts`, `docker.ts::createDeterministicTask`,
   `commands.ts::runTareaCommand`), unit-tested with a mocked Docker client, typechecked and
   linted clean. Left unchecked on purpose, consistent with this project's rule that nothing is
-  marked done without real evidence: **one open point specifically** — `hermes cron create`'s
-  CLI has no documented one-shot schedule syntax anywhere in this repo (every existing example
-  is a recurring interval, `'30m'`/`'every 24h'`); the ISO-timestamp `schedule` this uses is the
-  most defensible reading of the same job model, not a verified one. See the explicit warning in
-  `hermes/config/README.md §13` for what to check before a real `/tarea` launch, and
-  `jiraTask.ts`'s header comment for the reasoning. Do not check these boxes until a real
-  `/tarea <KEY>` launch has been observed to fire exactly once.
+  marked done without real evidence. The one-shot `schedule` (`'1m'`, no `every` prefix) is not a
+  guess: `hermes/skills/status-report/SKILL.md` ("Registro del cronjob") documents that exact
+  behaviour, verified against the real deployment for a different skill — but never against
+  `/tarea` itself. Check `hermes cron list` after the first real `/tarea <KEY>` launch to confirm
+  the job actually fired once and did not stay scheduled, then check these boxes.
 
 - **US-20.4** — As a reader, I want the documentation's centre of gravity to match reality, so
   that Jira stops reading as an afterthought.

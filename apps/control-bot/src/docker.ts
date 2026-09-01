@@ -138,13 +138,16 @@ export async function restartHermesContainer(docker: Docker, containerName: stri
 /**
  * Crea el cronjob de un solo disparo que ejecuta `/tarea <KEY>` (US-20.3).
  *
- * `schedule` es un timestamp ISO pocos segundos en el futuro, no una cadena
- * de intervalo (`'30m'`) — ver la nota de `jiraTask.ts` sobre por qué esto
- * no está verificado todavía contra el CLI real. `deliver` va siempre al
- * chat de origen (nunca omitido, a diferencia de la tool MCP: aquí no hay
- * turno interactivo que capture el origen automáticamente — ver
- * `agent/prompt_builder.py::_origin_from_env`, citado en
- * `hermes/skills/run-task/SKILL.md`, que no aplica fuera de un turno).
+ * `schedule` es una cadena de intervalo SIN el prefijo `every` (p. ej.
+ * `'1m'`, nunca `'every 1m'`) — verificado contra el despliegue real en
+ * `hermes/skills/status-report/SKILL.md` ("Registro del cronjob"): un
+ * schedule sin `every` delante dispara una sola vez (`repeat: 1`) y no se
+ * repite; el `every` es justo lo que hace falta añadir para lo contrario
+ * (recurrente). `deliver` va siempre al chat de origen (nunca omitido, a
+ * diferencia de la tool MCP: aquí no hay turno interactivo que capture el
+ * origen automáticamente — ver `agent/prompt_builder.py::_origin_from_env`,
+ * citado en `hermes/skills/run-task/SKILL.md`, que no aplica fuera de un
+ * turno).
  */
 export async function createDeterministicTask(
   docker: Docker,

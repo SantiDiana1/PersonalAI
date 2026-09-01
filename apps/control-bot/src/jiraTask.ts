@@ -5,21 +5,16 @@
  * Docker, solo texto derivado de config declarada + lo que escribió el
  * Operador.
  *
- * PARTE NO VERIFICADA CONTRA EL DESPLIEGUE REAL, A PROPÓSITO SEÑALADA: el
- * `schedule` que usa `createDeterministicTask` en `docker.ts` (un timestamp
- * ISO pocos segundos en el futuro, sin repetición) replica cómo la tool MCP
- * `cronjob(action='create', repeat=1)` dispara una vez desde dentro de un
- * turno interactivo (ver `hermes/skills/run-task/SKILL.md` Paso 3). Esta
- * clase no ejecuta ningún turno interactivo — invoca `hermes cron create`
- * por `docker exec` — y `hermes/config/README.md` **no documenta** ningún
- * flag de "una sola vez" para ese comando de CLI (sus únicos ejemplos son
- * recurrentes: `'30m'`, `'every 24h'`). No hay evidencia en este repo de que
- * un `schedule` en forma de timestamp ISO se comporte como disparo único en
- * la CLI — es la lectura más razonable del mismo modelo de datos, pero
- * **confirmar con `hermes cron create --help` en el contenedor real antes de
- * usar esto en producción**, y con `hermes cron list` tras el primer disparo
- * para comprobar que el job no queda repitiendo. Ver docs/roadmap.md Fase 20,
- * US-20.3.
+ * Semántica de disparo único, verificada contra el despliegue real (no
+ * asumida): `hermes/skills/status-report/SKILL.md`, sección "Registro del
+ * cronjob", documenta que un `schedule` de `hermes cron create` SIN el
+ * prefijo `every` (`'30m'`, no `'every 30m'`) dispara una sola vez
+ * (`repeat: 1`) y no se repite — `every` es lo que hay que añadir para lo
+ * contrario. `createDeterministicTask` en `docker.ts` usa por eso `'1m'`
+ * (sin `every`), no un timestamp ISO. Sigue siendo prudente comprobar con
+ * `hermes cron list` tras el primer `/tarea` real que el job no queda
+ * repitiendo — el hallazgo de arriba es real pero viene de otro skill, no de
+ * una prueba dedicada a este comando. Ver docs/roadmap.md Fase 20, US-20.3.
  */
 
 /** Clave de Jira: proyecto en mayúsculas (2-10 caracteres) + guion + número. */

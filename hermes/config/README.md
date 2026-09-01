@@ -557,16 +557,11 @@ on this list is rejected by `resolve-jira-task` itself (Rule 2), not by this
 bot, but declaring it here means the mistake surfaces before a launch, not
 after.
 
-> **Open point, not yet verified against the real deployment.** The one-shot
-> job uses an ISO timestamp as `schedule` (a few seconds in the future,
-> matching how the `cronjob(repeat=1)` MCP tool fires once from inside an
-> interactive turn — see `hermes/skills/run-task/SKILL.md`), instead of the
-> interval strings (`'30m'`, `'every 24h'`) every other example in this file
-> uses. There is no confirmed evidence in this repo that `hermes cron create`
-> treats a timestamp `schedule` as a single fire rather than a recurring one.
-> **Before relying on `/tarea` in production**: run
-> `docker exec -u hermes <container> /opt/hermes/.venv/bin/hermes cron create --help`,
-> confirm the behaviour, and check `hermes cron list` after the first real
-> launch to make sure the job is not still scheduled to repeat. If it does
-> repeat, delete it by hand (`hermes cron delete <job_id>`) until this is
-> fixed in code.
+> **One-shot semantics**: the job's `schedule` is `'1m'`, deliberately without
+> the `every` prefix. This is verified against the real deployment, not
+> assumed — see `hermes/skills/status-report/SKILL.md` ("Registro del
+> cronjob"): a `schedule` without `every` fires once (`repeat: 1`) and does
+> not repeat; `every` is what you add for the opposite. That finding came
+> from a different skill, not a test dedicated to `/tarea` itself, so it is
+> still worth checking `hermes cron list` after the first real `/tarea`
+> launch to confirm the job is not left scheduled to repeat.

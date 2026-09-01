@@ -213,9 +213,10 @@ async function runTareaCommand(deps: CommandDeps, args: string): Promise<string>
   }
 
   const jobName = `tarea-${key}-${Date.now()}`;
-  // Pocos segundos en el futuro, sin repetición — ver la nota en jiraTask.ts
-  // sobre por qué esto todavía no está verificado contra el CLI real.
-  const schedule = new Date(Date.now() + 10_000).toISOString();
+  // '1m' SIN el prefijo 'every' — verificado en real (hermes/skills/status-report/SKILL.md
+  // "Registro del cronjob"): un schedule sin 'every' delante dispara una sola vez
+  // (repeat: 1) y no vuelve a repetirse. Ver la nota de docker.ts para el detalle.
+  const schedule = '1m';
 
   try {
     await createDeterministicTask(docker, hermesContainerName, {
