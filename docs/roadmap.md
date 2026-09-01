@@ -280,10 +280,15 @@ affordances combined into a hole:
   - [x] `hermes/config/README.md` documents `/tarea` alongside the existing cron setup (§13).
 - **US-20.5** — As the Operator, I want this specific failure to be catchable by the Phase 18
   suite, so that it cannot quietly reopen.
-  - [ ] "Self-authored prompt escaping its own skill's rules" added to the Phase 18 taxonomy
-        (US-18.1) as its own attack class, distinct from hostile external input.
-  - [ ] The 2026-08-28 incident included verbatim as a case, with the offending prompt as
-        evidence — the same treatment `MYAI-11` gets.
+  - [x] "Self-authored prompt escaping its own skill's rules" (`SP`) added to the Phase 18
+        taxonomy (`docs/agent-evals/spec.md §5`) as its own attack class, distinct from hostile
+        external input — with an explanation of why it needs a family of its own (no attacker,
+        no external content; the agent writes the under-scoped prompt for itself).
+  - [x] The 2026-08-28 incident included as case `SP-001`, with the offending prompt quoted
+        verbatim (the same one `roadmap.md` Phase 20's opening paragraph already quotes) — the
+        same treatment `MYAI-11` gets in `DH-002`.
+  - Written ahead of Phase 18 itself starting (still blocked on Phase 17): this is the taxonomy
+    document, not the runnable suite — `SP-001` cannot execute until `apps/agent-evals` exists.
 
 #### Definition of Done
 
