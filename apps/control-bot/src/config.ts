@@ -32,8 +32,15 @@ export interface ControlBotConfig {
    * bot a medias.
    */
   modelChoices: ModelChoice[];
-  /** Nombre del contenedor de Hermes contra el que actúa `/modelo`. */
+  /** Nombre del contenedor de Hermes contra el que actúa `/modelo` y `/tarea`. */
   hermesContainerName?: string;
+  /**
+   * Repos permitidos para los tickets que lance `/tarea` (Fase 20, US-20.3).
+   * Misma allowlist explícita que ya exige el cron recurrente de Jira
+   * (`hermes/config/README.md §11`) — nunca deducida del ticket. Vacía =
+   * `/tarea` explica que no está configurado, en vez de lanzar sin acotar.
+   */
+  tareaRepoAllowlist: string[];
 }
 
 export class ConfigError extends Error {}
@@ -90,6 +97,7 @@ export function loadConfig(): ControlBotConfig {
   const cronJobsPath = process.env['CONTROL_BOT_CRON_JOBS_PATH']?.trim();
   const rawModelChoices = process.env['CONTROL_BOT_MODEL_CHOICES']?.trim() ?? '';
   const hermesContainerName = process.env['CONTROL_BOT_HERMES_CONTAINER_NAME']?.trim();
+  const rawTareaRepoAllowlist = process.env['CONTROL_BOT_TAREA_REPO_ALLOWLIST']?.trim() ?? '';
 
   return {
     providerProbes: rawProbes.length > 0 ? parseProbes(rawProbes) : [],
@@ -98,6 +106,10 @@ export function loadConfig(): ControlBotConfig {
     ...(hermesContainerName !== undefined && hermesContainerName.length > 0
       ? { hermesContainerName }
       : {}),
+    tareaRepoAllowlist: rawTareaRepoAllowlist
+      .split(',')
+      .map((r) => r.trim())
+      .filter((r) => r.length > 0),
     telegramToken: required('CONTROL_BOT_TELEGRAM_TOKEN'),
     allowedUsers: parseAllowedUsers(required('CONTROL_BOT_ALLOWED_USERS')),
     databaseUrl: required('DATABASE_URL'),

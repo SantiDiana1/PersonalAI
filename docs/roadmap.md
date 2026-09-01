@@ -258,6 +258,19 @@ affordances combined into a hole:
         header comment.
   - [ ] An unknown or malformed key is answered with the help text, never guessed at or
         interpreted.
+
+  **Implemented, not yet verified against the real deployment (2026-09-01)** — all five criteria
+  above are coded (`apps/control-bot/src/jiraTask.ts`, `docker.ts::createDeterministicTask`,
+  `commands.ts::runTareaCommand`), unit-tested with a mocked Docker client, typechecked and
+  linted clean. Left unchecked on purpose, consistent with this project's rule that nothing is
+  marked done without real evidence: **one open point specifically** — `hermes cron create`'s
+  CLI has no documented one-shot schedule syntax anywhere in this repo (every existing example
+  is a recurring interval, `'30m'`/`'every 24h'`); the ISO-timestamp `schedule` this uses is the
+  most defensible reading of the same job model, not a verified one. See the explicit warning in
+  `hermes/config/README.md §13` for what to check before a real `/tarea` launch, and
+  `jiraTask.ts`'s header comment for the reasoning. Do not check these boxes until a real
+  `/tarea <KEY>` launch has been observed to fire exactly once.
+
 - **US-20.4** — As a reader, I want the documentation's centre of gravity to match reality, so
   that Jira stops reading as an afterthought.
   - [ ] `spec.md §5` no longer titled after `resolve-issue` with Jira as a Phase-7 addendum.

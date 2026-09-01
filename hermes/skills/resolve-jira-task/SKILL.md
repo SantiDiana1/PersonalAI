@@ -213,6 +213,17 @@ por nombre de estado se rompe en silencio el día que alguien lo cambia — y
 Descarta las que además lleven `hermes:in-progress`, `hermes:done` o
 `hermes:needs-human`. Si no queda ninguna, termina en silencio: no es un error.
 
+**Invocación directa por clave (Fase 20, US-20.3 — `/tarea <KEY>` en el bot de
+control)**: si quien te invoca ya te da una clave concreta (p. ej. `WEB-6`) y
+te dice explícitamente que te saltes esta búsqueda, hazlo — la clave ya está
+seleccionada, no hay nada que listar. En vez del JQL de arriba, un único
+`jira_get` sobre `/rest/api/2/issue/{key}` para leer ese ticket, y sigues
+desde el Paso 2 exactamente igual que si hubiera salido de la lista. Ninguna
+otra regla cambia: la Regla 2 (repo por etiqueta, contra la allowlist que te
+dieron) y la degradación de "Transición de estado" se aplican íntegras. Esto
+no es una vía para saltarse la Regla 2 con una clave "de confianza" — solo
+sustituye cómo se selecciona el ticket, nunca cómo se valida.
+
 ### Paso 2 — Marcar antes de empezar
 
 Un solo `jira_put` sobre `/rest/api/3/issue/{key}`:

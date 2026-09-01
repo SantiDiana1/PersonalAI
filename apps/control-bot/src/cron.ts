@@ -1,6 +1,14 @@
 /**
  * Lectura del estado de los cronjobs de hermes-agent (`/cron`).
  *
+ * **Nota de alcance (Fase 20, US-20.3)**: este fichero sigue siendo de solo
+ * lectura, pero ya no describe al bot entero — desde `/tarea` (`docker.ts`,
+ * `commands.ts`), el bot de control también **crea** cronjobs deterministas,
+ * no solo los reporta. La ampliación es deliberada y vive fuera de este
+ * módulo, acotada en `docker.ts::createDeterministicTask` con el mismo
+ * patrón de "solo estas operaciones fijas" que ya usa `/modelo` — ver el
+ * comentario de cabecera de `docker.ts`.
+ *
  * POR QUÉ SE LEE UN FICHERO Y NO UNA API: hermes-agent no expone el cron por
  * HTTP. Su `dashboard` es una web UI atada a localhost (SEC-0.3) y su CLI solo
  * es alcanzable con acceso al contenedor — que este bot no tiene, y no debe

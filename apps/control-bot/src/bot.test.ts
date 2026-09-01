@@ -17,6 +17,7 @@ const CONFIG: ControlBotConfig = {
   pollTimeoutSeconds: 1,
   providerProbes: [],
   modelChoices: [],
+  tareaRepoAllowlist: [],
 };
 
 /** Base de datos falsa con datos suficientes para un informe real. */
@@ -299,6 +300,102 @@ describe('handleCommand — /modelo (Fase 15, US-15.1/US-15.2)', () => {
       modelChoices: MODEL_CHOICES,
     });
     expect(reply).toContain('Activo ahora');
+  });
+});
+
+describe('handleCommand — /tarea (Fase 20, US-20.3)', () => {
+  const REPO_ALLOWLIST = ['SantiDiana1/PersonalAI'];
+
+  /** Cliente Docker falso: `cron create` solo registra la llamada y devuelve éxito. */
+  function fakeDocker(exitCode = 0): { docker: Docker; execCmds: string[][] } {
+    const execCmds: string[][] = [];
+    const docker = {
+      getContainer() {
+        return {
+          async exec(opts: { Cmd: string[] }) {
+            execCmds.push(opts.Cmd);
+            return {
+              async start() {
+                const { Readable } = await import('node:stream');
+                return Readable.from([Buffer.from('', 'utf8')]);
+              },
+              async inspect() {
+                return { ExitCode: exitCode };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as Docker;
+    return { docker, execCmds };
+  }
+
+  it('con una clave válida, crea el cronjob con skills: [resolve-jira-task] y confirma', async () => {
+    const { docker, execCmds } = fakeDocker();
+    const reply = await handleCommand('/tarea WEB-6', {
+      db,
+      docker,
+      hermesContainerName: 'personalai-hermes-1',
+      tareaRepoAllowlist: REPO_ALLOWLIST,
+      chatId: 42,
+    });
+
+    expect(reply).toContain('Lanzado WEB-6');
+    expect(execCmds).toHaveLength(1);
+    const cmd = execCmds[0]!;
+    expect(cmd).toContain('create');
+    expect(cmd).toContain('--skill');
+    expect(cmd[cmd.indexOf('--skill') + 1]).toBe('resolve-jira-task');
+    expect(cmd).toContain('--deliver');
+    expect(cmd[cmd.indexOf('--deliver') + 1]).toBe('telegram:42');
+    expect(cmd.at(-1)).toContain('WEB-6');
+    expect(cmd.at(-1)).toContain('SantiDiana1/PersonalAI');
+  });
+
+  it('con una clave malformada, contesta con la ayuda y no toca Docker', async () => {
+    const { docker, execCmds } = fakeDocker();
+    const reply = await handleCommand('/tarea resuelve la tarea de Jira sobre X', {
+      db,
+      docker,
+      hermesContainerName: 'personalai-hermes-1',
+      tareaRepoAllowlist: REPO_ALLOWLIST,
+      chatId: 42,
+    });
+
+    expect(reply).toContain('no tiene forma de clave de Jira');
+    expect(execCmds).toEqual([]);
+  });
+
+  it('sin clave, pide el uso y no toca Docker', async () => {
+    const { docker, execCmds } = fakeDocker();
+    const reply = await handleCommand('/tarea', {
+      db,
+      docker,
+      hermesContainerName: 'personalai-hermes-1',
+      tareaRepoAllowlist: REPO_ALLOWLIST,
+      chatId: 42,
+    });
+
+    expect(reply).toContain('Falta la clave del ticket');
+    expect(execCmds).toEqual([]);
+  });
+
+  it('sin Docker ni allowlist configurados, lo dice en vez de fallar', async () => {
+    const reply = await handleCommand('/tarea WEB-6', { db, chatId: 42 });
+    expect(reply).toContain('no disponible');
+    expect(reply).toContain('SEC-1.6');
+  });
+
+  it('si hermes cron create falla, lo reporta sin filtrar detalles internos de más', async () => {
+    const { docker } = fakeDocker(1);
+    const reply = await handleCommand('/tarea WEB-6', {
+      db,
+      docker,
+      hermesContainerName: 'personalai-hermes-1',
+      tareaRepoAllowlist: REPO_ALLOWLIST,
+      chatId: 42,
+    });
+    expect(reply).toContain('No he podido lanzar WEB-6');
   });
 });
 

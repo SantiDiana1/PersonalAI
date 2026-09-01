@@ -535,3 +535,38 @@ at the compose file.
 > public contract. It can change on an upstream update. Every field is read
 > optionally and degrades to "unknown", so a format change produces a poorer
 > report, never a dead bot — there are tests pinning exactly that.
+
+## 13. `/tarea <KEY>`: launching a known Jira ticket, deterministically (Phase 20)
+
+**Widens the control bot's scope from "only reports" to "also launches"**,
+through a fixed template — see `apps/control-bot/src/cron.ts`'s header
+comment and `docs/roadmap.md` Fase 20, US-20.3. `/tarea WEB-6` creates a
+one-shot cronjob with `--skill resolve-jira-task` and a templated prompt
+naming exactly that ticket — never freehand text, never the model choosing
+which skill applies. Same principle as the rest of this bot's surface: an
+unknown or malformed key gets the help text, never a guess.
+
+```
+CONTROL_BOT_TAREA_REPO_ALLOWLIST=SantiDiana1/PersonalAI,SantiDiana1/personalWebsite
+```
+
+Required, same as `CONTROL_BOT_MODEL_CHOICES` for `/modelo`: without it,
+`/tarea` explains it is not configured instead of launching unbounded. It is
+the same allowlist discipline as the recurring Jira cron (§11) — a repo not
+on this list is rejected by `resolve-jira-task` itself (Rule 2), not by this
+bot, but declaring it here means the mistake surfaces before a launch, not
+after.
+
+> **Open point, not yet verified against the real deployment.** The one-shot
+> job uses an ISO timestamp as `schedule` (a few seconds in the future,
+> matching how the `cronjob(repeat=1)` MCP tool fires once from inside an
+> interactive turn — see `hermes/skills/run-task/SKILL.md`), instead of the
+> interval strings (`'30m'`, `'every 24h'`) every other example in this file
+> uses. There is no confirmed evidence in this repo that `hermes cron create`
+> treats a timestamp `schedule` as a single fire rather than a recurring one.
+> **Before relying on `/tarea` in production**: run
+> `docker exec -u hermes <container> /opt/hermes/.venv/bin/hermes cron create --help`,
+> confirm the behaviour, and check `hermes cron list` after the first real
+> launch to make sure the job is not still scheduled to repeat. If it does
+> repeat, delete it by hand (`hermes cron delete <job_id>`) until this is
+> fixed in code.

@@ -19,6 +19,16 @@
  * contra la lista declarada — igual que `providers.ts` sondea eslabones
  * DECLARADOS y no la cadena viva, este módulo actúa sobre un catálogo
  * declarado, nunca sobre un valor libre.
+ *
+ * **Ampliado en la Fase 20 (US-20.3) a una cuarta operación**: crear un
+ * cronjob de un solo disparo con `hermes cron create`, para `/tarea <KEY>`.
+ * Sigue el mismo patrón — argumentos fijos por código, nunca una cadena de
+ * shell libre — pero es la primera vez que este módulo hace algo más que
+ * leer o reiniciar: el bot de control pasa de "solo informa" a "también
+ * lanza", con alcance deliberadamente estrecho: la clave se valida en
+ * `jiraTask.ts` (formato `PROYECTO-N`), el prompt es una plantilla fija (no
+ * texto del Operador pegado tal cual — Regla 6 de `run-task/SKILL.md`,
+ * SEC-2.6) y `skills` va siempre `['resolve-jira-task']`, nunca vacío.
  */
 import type Docker from 'dockerode';
 
@@ -123,4 +133,41 @@ export async function setActiveModel(
 export async function restartHermesContainer(docker: Docker, containerName: string): Promise<void> {
   const container = docker.getContainer(containerName);
   await container.restart();
+}
+
+/**
+ * Crea el cronjob de un solo disparo que ejecuta `/tarea <KEY>` (US-20.3).
+ *
+ * `schedule` es un timestamp ISO pocos segundos en el futuro, no una cadena
+ * de intervalo (`'30m'`) — ver la nota de `jiraTask.ts` sobre por qué esto
+ * no está verificado todavía contra el CLI real. `deliver` va siempre al
+ * chat de origen (nunca omitido, a diferencia de la tool MCP: aquí no hay
+ * turno interactivo que capture el origen automáticamente — ver
+ * `agent/prompt_builder.py::_origin_from_env`, citado en
+ * `hermes/skills/run-task/SKILL.md`, que no aplica fuera de un turno).
+ */
+export async function createDeterministicTask(
+  docker: Docker,
+  containerName: string,
+  input: { name: string; skill: string; prompt: string; deliver: string; schedule: string },
+): Promise<void> {
+  const container = docker.getContainer(containerName);
+  const { exitCode, output } = await execAndCollect(container, [
+    HERMES_BIN,
+    'cron',
+    'create',
+    input.schedule,
+    '--name',
+    input.name,
+    '--skill',
+    input.skill,
+    '--deliver',
+    input.deliver,
+    input.prompt,
+  ]);
+  if (exitCode !== 0) {
+    throw new DockerOperationError(
+      `'hermes cron create' terminó con código ${String(exitCode)}: ${output.slice(0, 500)}`,
+    );
+  }
 }
