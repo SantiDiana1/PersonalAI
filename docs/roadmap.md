@@ -217,18 +217,25 @@ affordances combined into a hole:
 
 - **US-20.1** — As the Operator, I want source adapters separated from execution, with Jira as
   the primary path, so that two skills can never both believe they own the same request.
-  - [ ] The skill layer restructured along one axis: **source** (Jira, GitHub, chat) owns
+  - [x] The skill layer restructured along one axis: **source** (Jira, GitHub, chat) owns
         selection, marking and reporting; **execution** (`run_coding_task` → PR) is shared and
-        source-agnostic.
-  - [ ] Exactly one skill owns each source. Every skill that could plausibly match a
-        ticket-shaped request carries an explicit yield rule naming the skill that wins — the
-        rule `resolve-issue` already has for Jira, applied in both directions and to `run-task`.
-  - [ ] Jira documented as the primary path and GitHub as secondary, matching where the work
-        actually lives.
+        source-agnostic. `spec.md §5` names this explicitly (US-20.4); the code already followed
+        it (`run_coding_task` was always shared) but nothing said so until now.
+  - [x] Exactly one skill owns each source. Every skill that could plausibly match a
+        ticket-shaped request carries an explicit yield rule naming the skill that wins:
+        `resolve-issue` → Jira (pre-existing), `run-task` → Jira (added closing US-20.2),
+        `resolve-jira-task`'s ad-hoc-invocation note added alongside it. `run-task` vs.
+        `resolve-issue` needs no yield rule — `spec.md §9.2` confirms by design they never
+        compete: `resolve-issue` is cron-only, `run-task` owns every chat-triggered request.
+  - [x] Jira documented as the primary path and GitHub as secondary, matching where the work
+        actually lives (US-20.4, `spec.md §5.1`/`§5.2`).
   - [ ] **Treated as a change to production prompts, not to documentation.** Phase 6 found three
         real bugs caused by prompt phrasing alone, one of which skipped container isolation
         entirely. Every rewritten skill is re-verified against a real run before this phase
-        closes. No skill is edited and assumed working.
+        closes. No skill is edited and assumed working. **Not done**: the rewritten
+        `run-task`/`resolve-jira-task` prompts have not been re-run against the real deployment
+        since this Fase 20 work started — this is the one thing blocking closing US-20.1, and it
+        needs the Operator (or a live session) at the keyboard, not more editing.
 - **US-20.2** — As the Operator, I want a contract on what a self-authored cron prompt may
   instruct, so that the security rules cannot be bypassed by the agent simply not loading them.
   - [ ] A one-shot cron prompt may not instruct writes to a task source (Jira
