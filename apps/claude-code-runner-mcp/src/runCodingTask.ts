@@ -148,22 +148,40 @@ export async function runCodingTask(
       rateLimiter.release();
     }
 
+    const branchName = await currentBranch(workspaceDir).catch(() => undefined);
+    const commitShas = branchName
+      ? await commitsSinceBase(workspaceDir, baseSha).catch(() => [])
+      : [];
+    const hasCommits = commitShas.length > 0;
+
+    // El workspace es efímero y se borra en el `finally` de más abajo pase lo
+    // que pase, así que cualquier commit real se pierde para siempre salvo
+    // que se empuje aquí ANTES de esa limpieza — sin importar si la tarea
+    // terminó en éxito, timeout o needs_human_input. `needs_human_input` es
+    // precisamente el caso que más necesita preservar el trabajo parcial para
+    // que un humano lo revise, así que empujar solo en 'success' tiraba a la
+    // basura justo el trabajo que hacía falta rescatar.
+    if (hasCommits && branchName && deps.githubToken) {
+      await pushBranch(workspaceDir, input.repo, branchName, deps.githubToken).catch((err) => {
+        logger.error(
+          { err, repo: input.repo, branchName },
+          'no se pudo empujar la rama con el trabajo parcial antes de limpiar el workspace',
+        );
+      });
+    }
+
     if (containerResult.timedOut) {
       const output: RunCodingTaskOutput = {
         status: 'timed_out',
         summary: `La tarea excedió el timeout de ${timeoutSeconds}s.`,
+        ...(branchName !== undefined ? { branchName } : {}),
+        ...(commitShas.length > 0 ? { commitShas } : {}),
       };
       await finishTaskRun(taskRunId, output.status, output);
       return output;
     }
 
-    const branchName = await currentBranch(workspaceDir).catch(() => undefined);
-    const commitShas = branchName
-      ? await commitsSinceBase(workspaceDir, baseSha).catch(() => [])
-      : [];
-
     const containerStatus = containerResult.result?.status;
-    const hasCommits = commitShas.length > 0;
 
     let status: RunCodingTaskOutput['status'];
     let summary: string;
@@ -190,10 +208,6 @@ export async function runCodingTask(
       ...(branchName !== undefined ? { branchName } : {}),
       ...(commitShas.length > 0 ? { commitShas } : {}),
     };
-
-    if (status === 'success' && deps.githubToken && branchName) {
-      await pushBranch(workspaceDir, input.repo, branchName, deps.githubToken);
-    }
 
     await finishTaskRun(taskRunId, status, output);
     return output;
