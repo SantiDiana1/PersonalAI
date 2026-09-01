@@ -18,7 +18,7 @@ Given this, **our job is not to reimplement any of the above**. It is to build t
 
 1. **`claude-code-runner-mcp`** — an MCP server that knows how to launch Claude Code in a one-shot Docker container per task (section 3).
 2. **`brain-mcp`** — an adapter MCP server over our Personal Brain's API (full contract in [personal-brain/spec.md](../personal-brain/spec.md#52-the-mcp-api-appsbrain-mcp-what-hermes-actually-consumes)).
-3. **The `resolve-issue` Skill** — the procedure, in hermes-agent's skill format, telling the agent what to do and in what order (section 5).
+3. **The source Skills (`resolve-jira-task`, `resolve-issue`)** — the procedures, in hermes-agent's skill format, telling the agent what to do and in what order (section 5).
 
 Everything else (reading GitHub Issues, reading Notion, reading Jira) is handled by registering **already-existing third-party** MCP servers for those platforms — we write no connectors of our own.
 
@@ -174,7 +174,7 @@ Claude Code's OAuth session token expires periodically (on the order of hours) a
 - `claude-code-runner-mcp` checks the session's validity (e.g. `claude /status` or equivalent) **before** launching each container (step 3.2.1).
 - hermes-agent itself should run an equivalent check before processing any message, since it shares the same session.
 - If the session has expired or been revoked, the tool returns `status: 'needs_human_input'` with an explicit `summary`, distinguishing the two cases where possible ("session expired, requires `claude /login`" vs. "session rejected by the server — possible revocation, check account status before retrying").
-- The `resolve-issue` Skill (section 5) treats this case like any other `needs_human_input`: it comments on the original task and opens no PR.
+- The source Skills (section 5) treat this case like any other `needs_human_input`: they comment on the original task and open no PR.
 - Re-authentication (`claude /login` or `claude setup-token` on the host) is **manual**. It is not automated.
 - Practical consequence: if Hermes is going to run unattended for several days, this status is worth monitoring (via hermes-agent's Telegram/Discord gateway, section 9) so that expiry — or an eventual account suspension — is not discovered only once tasks pile up in `needs_human_input`.
 
@@ -267,7 +267,7 @@ Already-existing, maintained MCP servers are used, not connectors of our own:
 
 - **GitHub**: [github/github-mcp-server](https://github.com/github/github-mcp-server) (official). Authenticates with a GitHub App or a fine-grained PAT, scoped only to the repos where I want Hermes to act (`issues:write`, `contents:write`, `pull_requests:write` — nothing else).
 - **Notion**: Notion's official MCP server. Points at one specific database ("Hermes Tasks"), filtered by a `status` property.
-- **Jira**: an Atlassian/community MCP server, configured with a fixed JQL (`labels = hermes AND status = "To Do"` by default). The Operator's **personal** source (post-v1, [decisions-log.md — Phase 7](../decisions-log.md#fase-7--ampliar-fuentes-y-canales)).
+- **Jira**: an Atlassian/community MCP server, exposing five raw REST verbs (no semantic tools — see §5). The Operator's **primary** task source since Phase 14 ([decisions-log.md — Phase 7](../decisions-log.md#fase-7--ampliar-fuentes-y-canales) for the original registration, Phase 14 for it becoming primary). Selection is by label (`labels = hermes AND statusCategory != Done`), not the fixed-status JQL this section originally described — see `hermes/skills/resolve-jira-task/SKILL.md` for why labels and not workflow status.
 - **Azure DevOps**: an official or community MCP server (evaluate [microsoft/azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp) at implementation time), with a work-item filter equivalent to Jira's JQL. A source belonging to **the Operator's employer** — **never** registered on the same hermes-agent instance as the personal sources. See §4.1.
 
 Registered in hermes-agent (`hermes/config/hermes.config.yaml` + `hermes mcp add <server>`), each with its own least-privilege credentials. These credentials (GitHub/Notion/Jira/Azure DevOps) are conventional API keys/tokens — only the Anthropic model part uses the shared Pro session (§0.1), and only on the personal instance (§4.1).
@@ -280,25 +280,37 @@ Direct consequence for `claude-code-runner-mcp`: if the work instance ever needs
 
 Numbered, verifiable requirements in [security.md §9 (SEC-7.1–SEC-7.5)](../security.md#9-layer-7--isolation-between-the-personal-and-work-instances-phase-10-of-v2).
 
-## 5. The `resolve-issue` Skill
+## 5. Task sources: Jira (primary) and GitHub (secondary)
 
-Lives in `hermes/skills/resolve-issue/`, in hermes-agent's skill format (compatible with [agentskills.io](https://agentskills.io/) — exact format confirmed at implementation time, using upstream `hermes-agent/skills/` and `hermes-agent/optional-skills/` as reference). It is, essentially, a natural-language procedure plus metadata that the agent itself executes using the available MCP tools:
+**Restructured in Phase 20 (US-20.1/US-20.4)**: this section used to be titled after `resolve-issue` alone, with Jira folded in as a Phase-7 addendum below it. That stopped matching reality once Phase 14 made Jira the primary place the Operator puts tasks — GitHub Issues still work, unchanged, but as the secondary source. The restructuring follows one axis: **source** (which platform selects, marks and reports a task) is owned by exactly one Skill per platform; **execution** (`run_coding_task` → PR) is shared and source-agnostic, used identically by both.
 
-1. Lists candidate tasks by calling the GitHub MCP / Notion MCP / Jira MCP tools (issues/tickets with the agreed label or state).
+Both Skills live in `hermes/skills/`, in hermes-agent's skill format (compatible with [agentskills.io](https://agentskills.io/) — exact format confirmed at implementation time, using upstream `hermes-agent/skills/` and `hermes-agent/optional-skills/` as reference): a natural-language procedure plus metadata that the agent itself executes using the available MCP tools. The shared execution shape:
+
+1. Lists candidate tasks (issues/tickets with the agreed label), scoped to whatever the invoker (cron prompt, or the Operator in a chat turn) told it to look at.
 2. For each new task: calls `brain_query` (brain-mcp) with the task's title/description to get relevant context (conventions, prior decisions, similar past issues).
 3. Calls `run_coding_task` (claude-code-runner-mcp) with the task plus Brain's context.
 4. If `status === 'success'`: opens a PR via the GitHub MCP with the summary as its description, and comments on the original task (in whichever source it came from) with the link.
 5. If `failed`/`needs_human_input`/`timed_out`: comments on the original task explaining what happened, without opening a PR.
 6. Always calls `brain_record_observation` (brain-mcp) with the result — this step is not optional, it is what closes the learning loop.
 
-hermes-agent's **native cron** (`hermes cron`) fires this skill every N minutes (configurable). No scheduler of our own is built.
+### 5.1 `resolve-jira-task` — primary
+
+Lives in `hermes/skills/resolve-jira-task/`. Selects by the same four labels as GitHub (`hermes`, `hermes:in-progress`, `hermes:done`, `hermes:needs-human`) plus a fifth, `repo:<owner>/<name>`, because a Jira ticket does not live inside any repository the way a GitHub issue does — that fact has to be supplied, and the only valid source is the label, validated against an allowlist the invoker provides, never guessed. Jira's MCP server exposes five raw REST verbs (`jira_get/post/put/patch/delete`) rather than semantic tools, so this Skill also carries its own endpoint allowlist (`docs/security.md` SEC-2.5) — `jira_post`/`patch`/`delete` are never called.
+
+Triggered by hermes-agent's **native cron** (`hermes cron`, configurable interval) the same way `resolve-issue` is, but also loadable in any interactive turn — an ad-hoc Telegram message naming a project and a repo allowlist activates it without cron, and `/tarea <KEY>` on the control bot (§9.6, Phase 20 US-20.3) launches it deterministically for one already-known ticket, skipping the label search entirely.
+
+### 5.2 `resolve-issue` — secondary
+
+Lives in `hermes/skills/resolve-issue/`. Unchanged since Phase 2: lists GitHub issues carrying the `hermes` label, in the repos it is told to scan, and runs the same execution shape above. Explicitly yields to `resolve-jira-task` the moment a request is Jira-shaped rather than GitHub-shaped — see §9.2.
+
+hermes-agent's native cron fires both Skills independently (separate jobs, separate intervals — pausing one does not affect the other). No scheduler of our own is built for either.
 
 ## 6. Security — component-specific checklist (OWASP-relevant)
 
 > The complete model, layered and with numbered requirements (`SEC-x.y`) verifiable phase by phase, lives in **[docs/security.md](../security.md)**. This section summarises what is specific to Hermes; on any discrepancy, `security.md` wins.
 
 - **Prompt injection from external issues/tickets**: an issue's body is untrusted input — it can contain instructions aimed at the agent ("ignore your instructions and..."). This is the _expected_ failure mode, not a hypothesis. The defence is not trying to detect the injection, but making sure **the component that ingests it holds no dangerous permissions**: hermes-agent runs in a container with no Docker socket (SEC-2.1) and the most it can ask the runner for is a fixed-shape coding task (SEC-3.3). Even if the ephemeral container's prompt is compromised, that container has no free network (SEC-5.2) nor access to the host (SEC-5.6).
-- **hermes-agent command approval**: the defaults `approvals.mode: manual` and `approvals.cron_mode: deny` are kept (SEC-2.3). A nuance verified in hermes-agent's source (`tools/approval.py`): this mechanism covers **shell commands**, not MCP tool calls — which is why the `resolve-issue` Skill works exclusively via MCP (section 5), letting it run unattended under cron **without** relaxing `cron_mode`.
+- **hermes-agent command approval**: the defaults `approvals.mode: manual` and `approvals.cron_mode: deny` are kept (SEC-2.3). A nuance verified in hermes-agent's source (`tools/approval.py`): this mechanism covers **shell commands**, not MCP tool calls — which is why the source Skills work exclusively via MCP (section 5), letting them run unattended under cron **without** relaxing `cron_mode`.
 - **Agent access from Telegram**: deny by default plus an explicit user allowlist (SEC-1.1); the allow-all flags are never enabled (SEC-1.2). See also §9.4.
 - **Network perimeter**: zero inbound ports on the home router (SEC-0.1) — possible because both Telegram (long polling) and the GitHub cron generate exclusively outbound traffic.
 - **Secret management**: GitHub/Notion/Jira tokens in a `.env` outside git on the local server — never in the repo nor baked into any Docker image. The Claude Code token (`hermes-claude-auth`) lives exclusively in a `.env`/secret store outside git, injected as the `CLAUDE_CODE_OAUTH_TOKEN` environment variable, and is never copied into the image nor written to disk inside a container.
@@ -344,7 +356,11 @@ Hermes is not just "a bot that closes GitHub issues" — this project's goal (se
 
 ### 9.2 From message to task
 
-A conversational message like "resolve issue #42 in my-repo" or "fix X in repo Y" is translated into the same parameters (`repo`, `taskTitle`, `taskDescription`) that `run_coding_task` consumes — it is the same tool the `resolve-issue` Skill uses (section 5), only the trigger is a chat message rather than the GitHub cron. The skill implementing this is `run-task` (`hermes/skills/run-task/SKILL.md`), available in any interactive turn (not only under cron) via hermes-agent's standard progressive-disclosure mechanism (`skills_list()`/`skill_view()`). If the message does not make the repo or the task's scope clear, Hermes asks before executing — it never assumes a default repo nor over-interprets an ambiguous request.
+A conversational message like "fix X in repo Y" is translated into the same parameters (`repo`, `taskTitle`, `taskDescription`) that `run_coding_task` consumes — it is the same tool the source Skills use (section 5), only the trigger is a chat message rather than a cron. The skill implementing this is `run-task` (`hermes/skills/run-task/SKILL.md`), available in any interactive turn (not only under cron) via hermes-agent's standard progressive-disclosure mechanism (`skills_list()`/`skill_view()`). If the message does not make the repo or the task's scope clear, Hermes asks before executing — it never assumes a default repo nor over-interprets an ambiguous request.
+
+**Yield rule (Phase 20, US-20.1)**: `run-task`'s own trigger pattern — "anything that implies writing or modifying code in a real repo" — also matches a message naming or describing a Jira ticket ("launch WEB-6", "resolve the Jira task about X"). When it does, `resolve-jira-task` wins, always, without exception; `run-task` never processes it. This mirrors the carve-out `resolve-issue` already had for Jira (§5.2) applied to the third skill that could plausibly claim the same request — added as a hard rule on 2026-08-28 after a real incident where the absence of exactly this rule let a cron prompt bypass `resolve-jira-task`'s security contract entirely (`docs/security.md` SEC-2.6, `docs/roadmap.md` Phase 20). If a request could plausibly be about Jira, it is treated as if it is.
+
+A message can also ask `resolve-jira-task` to act ad hoc, outside its cron — "review WEB's Jira tasks tagged hermes, allowed repos: X" — which loads the same Skill in the interactive turn instead of waiting for its cron, per §5.1.
 
 ### 9.3 Immediate confirmation and completion notification
 
@@ -392,6 +408,12 @@ read-only (never call `run_coding_task`, never mutate anything beyond
   step of a coding task. Unlike `resolve-issue`, the Operator's message here
   is treated as a legitimate instruction (the same trust level as `run-task`,
   §9.2), not as third-party data.
+
+### 9.6 `/tarea <KEY>` — a deterministic launch surface (Phase 20, US-20.3)
+
+Everything above this point routes through the model deciding which Skill applies to a message. `/tarea <KEY>` (`apps/control-bot/src/commands.ts`, `docker.ts::createDeterministicTask`, `jiraTask.ts`) is the one exception: a fixed command on the control bot's deterministic surface (`apps/control-bot/src/commands.ts`'s own header comment: "no natural-language interpretation, no generic 'run X' command" — the same surface `/modelo`, `/cron`, `/metricas` and `/proveedores` already live on, Phase 15), for the case where the Operator already knows the ticket's key and routing has nothing left to be probabilistic about.
+
+It validates the key's shape (`PROJECT-number`), then creates a one-shot cronjob directly via `hermes cron create` (`docker exec -u hermes`, the same bounded Docker client `/modelo` already uses, SEC-1.6) with `--skill resolve-jira-task` always explicit and a templated prompt — never the Operator's freehand text pasted into the cron, the exact mistake SEC-2.6 closes. An unknown or malformed key gets the command's help text, never a guess. See `hermes/config/README.md` §13 for configuration and the one open verification point (confirming the CLI's one-shot `schedule` behaves as expected for this specific command, not only for the precedent it is based on).
 
 ## 10. The agent's identity (`SOUL.md`)
 

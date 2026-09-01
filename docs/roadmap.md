@@ -271,10 +271,13 @@ affordances combined into a hole:
 
 - **US-20.4** — As a reader, I want the documentation's centre of gravity to match reality, so
   that Jira stops reading as an afterthought.
-  - [ ] `spec.md §5` no longer titled after `resolve-issue` with Jira as a Phase-7 addendum.
-  - [ ] `spec.md §9.2` ("De mensaje a tarea") covers the Jira path and the yield rules. It
-        currently routes to `run-task` without mentioning Jira once.
-  - [ ] `hermes/config/README.md` documents `/tarea` alongside the existing cron setup.
+  - [x] `spec.md §5` no longer titled after `resolve-issue` with Jira as a Phase-7 addendum — now
+        "Task sources: Jira (primary) and GitHub (secondary)", split into §5.1
+        (`resolve-jira-task`) and §5.2 (`resolve-issue`).
+  - [x] `spec.md §9.2` ("From message to task") covers the Jira path and the yield rule (mirrors
+        the one added to `run-task/SKILL.md` in the US-20.2 commit) and the ad-hoc invocation
+        path. It previously routed to `run-task` without mentioning Jira once.
+  - [x] `hermes/config/README.md` documents `/tarea` alongside the existing cron setup (§13).
 - **US-20.5** — As the Operator, I want this specific failure to be catchable by the Phase 18
   suite, so that it cannot quietly reopen.
   - [ ] "Self-authored prompt escaping its own skill's rules" added to the Phase 18 taxonomy
