@@ -1,0 +1,56 @@
+# Instancia de hermes-agent DESECHABLE, solo para la suite de evals de
+# inyección (Fase 18). Nunca la de producción — docs/agent-evals/spec.md §9
+# ("never runs against the live deployment").
+#
+# Reutiliza a propósito claude-code-runner/brain-mcp/postgres del stack real
+# (hermes/docker/docker-compose.yml, red `personalai_personalai`), en vez de
+# duplicarlos: en el camino que se espera de un caso resistido, el agente
+# nunca llega a llamar a run_coding_task ni a tocar el repo real, así que no
+# hay riesgo real en compartirlos. Lo que SÍ es siempre desechable —nunca
+# compartido con producción— es el propio servicio `hermes` de aquí, su
+# HERMES_HOME (variable EVAL_HERMES_HOME, un directorio limpio, nunca
+# ~/.hermes), y el servidor MCP de Jira, que apunta al fixture local
+# (apps/agent-evals/src/fixtures/jiraMcpServer.bin.ts) y jamás a Atlassian.
+#
+# Uso, desde la raíz del repo:
+#   EVAL_HERMES_HOME=~/.hermes-eval \
+#   EVAL_SCRATCH_DIR=<dir con seed.json/trace.ndjson> \
+#     docker compose -f apps/agent-evals/docker/docker-compose.yml up -d
+
+name: personalai-agent-evals
+
+services:
+  hermes-eval:
+    image: hermes-agent:local
+    # Sin `restart:` — a diferencia de producción, este contenedor es de un
+    # solo uso: se levanta para un run, se tira abajo al terminar (§7 paso 6).
+    networks:
+      - personalai_personalai
+    volumes:
+      - ${EVAL_HERMES_HOME:?falta EVAL_HERMES_HOME (directorio HERMES_HOME desechable, NUNCA ~/.hermes)}:/opt/data
+      - ${REPO_ROOT:?falta REPO_ROOT}/hermes/skills:/opt/skills-repo:ro
+      # El repo ENTERO, en la MISMA ruta que en el host (mismo patrón que
+      # WORKSPACE_ROOT en hermes/docker/docker-compose.yml): jiraMcpServer.bin.js
+      # (ya compilado con `pnpm --filter @personalai/agent-evals run build`)
+      # es un módulo ESM de un paquete pnpm — resuelve `@modelcontextprotocol/sdk`
+      # vía symlinks de node_modules que solo funcionan si la ruta coincide
+      # byte a byte con la del host; montar solo `dist/` deja el subproceso con
+      # `ERR_MODULE_NOT_FOUND` (verificado).
+      - ${REPO_ROOT:?falta REPO_ROOT}:${REPO_ROOT:?falta REPO_ROOT}:ro
+      # rw: aquí vive seed.json (sembrado por el orquestador antes de
+      # arrancar) y trace.ndjson (que el fixture va escribiendo mientras
+      # corre — es la evidencia que sobrevive a que el subproceso termine).
+      - ${EVAL_SCRATCH_DIR:?falta EVAL_SCRATCH_DIR}:/opt/eval-scratch
+    environment:
+      HERMES_UID: ${HERMES_UID:-10000}
+      HERMES_GID: ${HERMES_GID:-10000}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?falta CLAUDE_CODE_OAUTH_TOKEN}
+      # Deliberadamente SIN TELEGRAM_BOT_TOKEN/TELEGRAM_ALLOWED_USERS: esta
+      # instancia no habla con nadie por Telegram, el disparo es por
+      # `hermes cron create` de un solo tiro (mismo mecanismo que /tarea en
+      # control-bot, Fase 20).
+    command: ['gateway', 'run']
+
+networks:
+  personalai_personalai:
+    external: true

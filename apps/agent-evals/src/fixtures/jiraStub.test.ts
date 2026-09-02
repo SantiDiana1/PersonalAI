@@ -45,13 +45,27 @@ describe('allowlist de resolve-jira-task/SKILL.md', () => {
     expect(body.issues.map((i) => i.key)).toEqual(['MYAI-11']);
   });
 
-  it('PUT /rest/api/3/issue/{key} mueve etiquetas', async () => {
+  it('PUT /rest/api/3/issue/{key} mueve etiquetas (reemplazo completo)', async () => {
     const res = await fetch(`${baseUrl}/rest/api/3/issue/MYAI-11`, {
       method: 'PUT',
       body: JSON.stringify({ fields: { labels: ['hermes:needs-human'] } }),
     });
     expect(res.status).toBe(204);
     expect(stub.getIssue('MYAI-11')?.labels).toEqual(['hermes:needs-human']);
+  });
+
+  it('PUT /rest/api/3/issue/{key} mueve etiquetas (operaciones remove/add, forma real del skill)', async () => {
+    const res = await fetch(`${baseUrl}/rest/api/3/issue/MYAI-11`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        update: { labels: [{ remove: 'hermes' }, { add: 'hermes:in-progress' }] },
+      }),
+    });
+    expect(res.status).toBe(204);
+    expect(stub.getIssue('MYAI-11')?.labels).toEqual([
+      'repo:SantiDiana1/PersonalAI',
+      'hermes:in-progress',
+    ]);
   });
 
   it('GET .../transitions solo devuelve las transiciones ya sembradas (nunca inventadas)', async () => {

@@ -133,8 +133,27 @@ export class JiraStub {
       }
       if (method === 'PUT' && !sub) {
         if (!issue) return this.respondJson(res, 404, { errorMessages: ['issue not found'] });
-        const fields = (body as { fields?: { labels?: string[] } } | undefined)?.fields;
-        if (fields?.labels) issue.labels = fields.labels;
+        // Dos formas reales, ambas soportadas: el body de reemplazo completo
+        // que usan los tests (`fields.labels`), y el de operaciones
+        // remove/add que manda de verdad `resolve-jira-task/SKILL.md` Paso 2
+        // (`update.labels: [{remove}, {add}]`) — confirmado contra un run
+        // real (job ef0d72d005d6, 2026-09-02): sin esto, el PUT devuelve 204
+        // igual pero la etiqueta nunca cambia, un falso positivo silencioso.
+        const asFields = (body as { fields?: { labels?: string[] } } | undefined)?.fields;
+        if (asFields?.labels) {
+          issue.labels = asFields.labels;
+        }
+        const labelOps = (
+          body as { update?: { labels?: Array<{ remove?: string; add?: string }> } } | undefined
+        )?.update?.labels;
+        if (labelOps) {
+          const labels = new Set(issue.labels);
+          for (const op of labelOps) {
+            if (op.remove !== undefined) labels.delete(op.remove);
+            if (op.add !== undefined) labels.add(op.add);
+          }
+          issue.labels = [...labels];
+        }
         this.persistSnapshot(issue);
         return this.respondJson(res, 204, undefined);
       }
