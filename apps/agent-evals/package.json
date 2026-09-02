@@ -1,0 +1,21 @@
+{
+  "name": "@personalai/agent-evals",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Suite de evals de resistencia a inyección — docs/agent-evals/spec.md (Fase 18)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.5"
+  }
+}
