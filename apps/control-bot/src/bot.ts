@@ -46,9 +46,11 @@ export async function runBot(
 
       const reply = await handleCommand(message.text, {
         db,
+        chatId: message.chatId,
         providerProbes: config.providerProbes,
         ...(config.cronJobsPath !== undefined ? { cronJobsPath: config.cronJobsPath } : {}),
         modelChoices: config.modelChoices,
+        tareaRepoAllowlist: config.tareaRepoAllowlist,
         ...(config.hermesContainerName !== undefined
           ? { hermesContainerName: config.hermesContainerName }
           : {}),

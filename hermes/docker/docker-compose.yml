@@ -267,6 +267,10 @@ services:
       # Nombre real del contenedor de hermes-agent en este despliegue —
       # verificado con `docker ps` (prefijo del nombre del proyecto Compose).
       CONTROL_BOT_HERMES_CONTAINER_NAME: ${CONTROL_BOT_HERMES_CONTAINER_NAME:-personalai-hermes-1}
+      # Fase 20 (US-20.3). Repos permitidos para /tarea <KEY> — misma
+      # allowlist explícita, nunca deducida del ticket, que ya exige el cron
+      # recurrente de Jira (§11 más abajo). Vacía = /tarea deshabilitado.
+      CONTROL_BOT_TAREA_REPO_ALLOWLIST: ${CONTROL_BOT_TAREA_REPO_ALLOWLIST:-}
     volumes:
       # SOLO el subdirectorio `cron` de $HERMES_HOME, y en solo lectura. NO se
       # monta $HERMES_HOME entero: ahí vive `auth.json` con el token OAuth de

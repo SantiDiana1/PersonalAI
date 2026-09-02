@@ -1,50 +1,48 @@
-# Cómo aplicar la configuración de hermes-agent
+# How to apply the hermes-agent configuration
 
-`hermes.config.yaml` de este directorio **no** sustituye a `~/.hermes/config.yaml`.
-Es la lista de claves que este proyecto necesita fijar, con su valor y su
-motivo. El `config.yaml` real lo genera y mantiene hermes-agent.
+`hermes.config.yaml` in this directory does **not** replace `~/.hermes/config.yaml`.
+It is the list of keys this project needs to set, with their value and their
+reason. The real `config.yaml` is generated and maintained by hermes-agent itself.
 
-## 1. Secretos en `~/.hermes/.env`
+## 1. Secrets in `~/.hermes/.env`
 
-Estos valores nunca van en el repositorio (SEC-6.2 de [../../docs/security.md](../../docs/security.md)):
+These values never go in the repository (SEC-6.2 of [../../docs/security.md](../../docs/security.md)):
 
 ```bash
-# Debe coincidir EXACTAMENTE con CLAUDE_CODE_RUNNER_AUTH_TOKEN del compose.
-MCP_CLAUDE_CODE_RUNNER_API_KEY=<el mismo secreto que el runner>
+# Must match EXACTLY the compose's CLAUDE_CODE_RUNNER_AUTH_TOKEN.
+MCP_CLAUDE_CODE_RUNNER_API_KEY=<the same secret as the runner>
 
-# Debe coincidir EXACTAMENTE con BRAIN_MCP_AUTH_TOKEN del compose (Fase 5).
-MCP_BRAIN_MCP_API_KEY=<el mismo secreto que brain-mcp>
+# Must match EXACTLY the compose's BRAIN_MCP_AUTH_TOKEN (Phase 5).
+MCP_BRAIN_MCP_API_KEY=<the same secret as brain-mcp>
 
-# PAT fine-grained, scoped solo a los repos donde Hermes actúa (SEC-6.1).
+# Fine-grained PAT, scoped only to the repos where Hermes acts (SEC-6.1).
 GITHUB_TOKEN=<pat>
 
-# Fase 7 — Notion (integración interna, notion.so/my-integrations).
+# Phase 7 — Notion (internal integration, notion.so/my-integrations).
 NOTION_TOKEN=<secret>
 
-# Fase 7 — Jira. Token en id.atlassian.com/manage-profile/security/api-tokens.
-# ATLASSIAN_SITE_NAME es solo el subdominio (si tu Jira es
-# https://miempresa.atlassian.net, aquí va "miempresa"), no toda la URL.
+# Phase 7 — Jira. Token at id.atlassian.com/manage-profile/security/api-tokens.
+# ATLASSIAN_SITE_NAME is only the subdomain (if your Jira is
+# https://mycompany.atlassian.net, this is "mycompany"), not the full URL.
 ATLASSIAN_TOKEN=<api-token>
-ATLASSIAN_SITE_NAME=<subdominio>
-ATLASSIAN_USER_EMAIL=<tu-email-de-atlassian>
+ATLASSIAN_SITE_NAME=<subdomain>
+ATLASSIAN_USER_EMAIL=<your-atlassian-email>
 ```
 
-Los nombres `MCP_CLAUDE_CODE_RUNNER_API_KEY`/`MCP_BRAIN_MCP_API_KEY` no son
-arbitrarios: hermes-agent deriva la variable del nombre del servidor MCP
+The names `MCP_CLAUDE_CODE_RUNNER_API_KEY`/`MCP_BRAIN_MCP_API_KEY` are not
+arbitrary: hermes-agent derives the variable from the MCP server's name
 (`claude-code-runner` → `MCP_CLAUDE_CODE_RUNNER_API_KEY`, `brain-mcp` →
-`MCP_BRAIN_MCP_API_KEY`). Si renombras un servidor, cambia también su
-variable.
+`MCP_BRAIN_MCP_API_KEY`). If you rename a server, change its variable too.
 
-## 2. Registrar los servidores MCP
+## 2. Register the MCP servers
 
-**Antes de nada, si has tocado `apps/claude-code-runner-mcp/docker/runner/`
-(Dockerfile o entrypoint.sh)**: reconstruye la imagen del contenedor
-efímero por tarea a mano — `docker compose build`/`up --build` **no** la
-reconstruye, es una imagen aparte del servicio `claude-code-runner` de
-abajo (ver el comentario detallado en `hermes/docker/docker-compose.yml`).
-Hallazgo real, Fase 8: olvidarse de este paso deja `run_claude_command`
-(y, en general, cualquier tarea) fallando en silencio con una imagen
-desactualizada.
+**Before anything else, if you have touched `apps/claude-code-runner-mcp/docker/runner/`
+(Dockerfile or entrypoint.sh)**: rebuild the per-task one-shot container image
+by hand — `docker compose build`/`up --build` **does not** rebuild it, it is a
+separate image from the `claude-code-runner` service below (see the detailed
+comment in `hermes/docker/docker-compose.yml`). A real finding, Phase 8:
+forgetting this step leaves `run_claude_command` (and, in general, any task)
+silently failing against a stale image.
 
 ```bash
 docker build -t claude-code-runner-image:local \
@@ -52,7 +50,7 @@ docker build -t claude-code-runner-image:local \
   apps/claude-code-runner-mcp/docker/runner
 ```
 
-Opción A — con la CLI, que escribe en `~/.hermes/config.yaml` por ti:
+Option A — with the CLI, which writes to `~/.hermes/config.yaml` for you:
 
 ```bash
 hermes mcp add claude-code-runner \
@@ -64,66 +62,66 @@ hermes mcp add github \
   --args -y @modelcontextprotocol/server-github \
   --env GITHUB_PERSONAL_ACCESS_TOKEN=$GITHUB_TOKEN
 
-# Fase 5.
+# Phase 5.
 hermes mcp add brain-mcp \
   --url http://brain-mcp:8091/mcp \
   --auth header
 ```
 
-Opción B — editando `~/.hermes/config.yaml` a mano y copiando el bloque
-`mcp_servers` de `hermes.config.yaml`.
+Option B — editing `~/.hermes/config.yaml` by hand and copying the `mcp_servers`
+block from `hermes.config.yaml`.
 
-Comprobar después:
+Check afterwards:
 
 ```bash
-hermes mcp list          # los tres deben aparecer conectados
-hermes mcp test github   # prueba de conexión
+hermes mcp list          # all three should show as connected
+hermes mcp test github   # connection test
 ```
 
-**Fase 7 (Notion/Jira) — activado con tokens propios del Operador**: los
-bloques `notion`/`jira` de `hermes.config.yaml` están descomentados y
-registrados de verdad en `~/.hermes/config.yaml`:
+**Phase 7 (Notion/Jira) — turned on with the Operator's own tokens**: the
+`notion`/`jira` blocks of `hermes.config.yaml` are uncommented and genuinely
+registered in `~/.hermes/config.yaml`:
 
 ```bash
-# Notion: integración interna creada en notion.so/my-integrations.
+# Notion: an internal integration created at notion.so/my-integrations.
 hermes mcp add notion \
   --command npx \
   --args -y @notionhq/notion-mcp-server \
   --env NOTION_TOKEN=$NOTION_TOKEN
 
-# Jira: API token en id.atlassian.com/manage-profile/security/api-tokens.
-# Se eligió el servidor de comunidad @aashari/mcp-server-atlassian-jira
-# (stdio, auth por API token clásico) en vez del remoto oficial de Atlassian
-# porque este último exige OAuth — infraestructura que no hacía falta añadir.
+# Jira: API token at id.atlassian.com/manage-profile/security/api-tokens.
+# The community server @aashari/mcp-server-atlassian-jira was chosen
+# (stdio, classic API-token auth) over Atlassian's official remote one
+# because the latter requires OAuth — infrastructure not worth adding here.
 hermes mcp add jira \
   --command npx \
   --args -y @aashari/mcp-server-atlassian-jira \
-  --env ATLASSIAN_SITE_NAME=<subdominio-de-tu-sitio> \
-  --env ATLASSIAN_USER_EMAIL=<tu-email-de-atlassian> \
+  --env ATLASSIAN_SITE_NAME=<your-site-subdomain> \
+  --env ATLASSIAN_USER_EMAIL=<your-atlassian-email> \
   --env ATLASSIAN_API_TOKEN=$ATLASSIAN_TOKEN
 ```
 
-Nota: `hermes mcp add --args` no admite flags sueltos como `-y` bien (falla
-con "unrecognized arguments"); si te pasa, edita `~/.hermes/config.yaml` a
-mano en `mcp_servers.<nombre>.args` con una lista YAML (`['-y', 'paquete']`) —
-es la Opción B de este mismo README, y es lo que se usó aquí.
+Note: `hermes mcp add --args` does not handle bare flags like `-y` well (it
+fails with "unrecognized arguments"); if that happens, edit
+`~/.hermes/config.yaml` by hand under `mcp_servers.<name>.args` with a YAML
+list (`['-y', 'package']`) — that is Option B of this same README, and it is
+what was used here.
 
-Verificado (`hermes mcp test notion` / `hermes mcp test jira`): ambos
-conectan y descubren sus tools, y ambos tokens autentican de verdad contra
-las APIs reales (llamadas de prueba con 200 OK).
+Verified (`hermes mcp test notion` / `hermes mcp test jira`): both connect and
+discover their tools, and both tokens genuinely authenticate against the real
+APIs (test calls with a 200 OK).
 
-**Jira ya no lo maneja `resolve-issue`**: tiene skill propio,
-`resolve-jira-task` (Fase 14, ver §11). El motivo es que este servidor MCP
-expone cinco verbos REST crudos (`jira_get/post/put/patch/delete`) en vez de
-tools con nombre, así que cada llamada se construye a mano y el procedimiento
-no se parece al de GitHub. Para **Notion**, en cambio, `resolve-issue`
-(§ "Generalización a Notion y Jira") sigue sirviendo sin cambios en cuanto se
-resuelva el paso manual de arriba.
+**Jira is no longer handled by `resolve-issue`**: it has its own skill,
+`resolve-jira-task` (Phase 14, see §11). The reason is that this MCP server
+exposes five raw REST verbs (`jira_get/post/put/patch/delete`) rather than
+named tools, so every call has to be built by hand and the procedure does not
+look like GitHub's. For **Notion**, on the other hand, `resolve-issue`
+(§ "Generalisation to Notion and Jira") still serves it unchanged.
 
-## 3. Fijar aprobaciones y modelo
+## 3. Fix approvals and model
 
-En `~/.hermes/config.yaml`, asegurar que existen (son los valores por defecto,
-pero aquí son requisito de seguridad, no preferencia — SEC-2.3):
+In `~/.hermes/config.yaml`, make sure these exist (they are hermes-agent's
+defaults, but here they are a security requirement, not a preference — SEC-2.3):
 
 ```yaml
 approvals:
@@ -133,383 +131,386 @@ model:
   provider: anthropic
 ```
 
-Y que **no** hay `ANTHROPIC_API_KEY` en `~/.hermes/.env`: si la hay,
-hermes-agent la usará en lugar de la sesión Pro compartida.
+And that there is **no** `ANTHROPIC_API_KEY` in `~/.hermes/.env`: if there is,
+hermes-agent will use it instead of the shared Pro session.
 
-## 4. Cargar los skills
+## 4. Load the skills
 
-Viven en [`../skills/`](../skills/): `resolve-issue` (flujo automático de
-issues de GitHub, Fase 2), `run-task` (peticiones conversacionales por
-Telegram, Fase 3, ver `docs/hermes/spec.md §9`), `status-report`/`ask-brain`
-(cierre operativo y superficie conversacional, Fase 6), `run-design-task`
-(diseños/Artifacts pedidos por chat, Fase 8) y `resolve-jira-task` (flujo
-automático de tareas de Jira, Fase 14, ver §11). Dos formas de que hermes los
-vea:
+They live in [`../skills/`](../skills/): `resolve-issue` (automatic GitHub
+issue flow, Phase 2), `run-task` (conversational Telegram requests, Phase 3,
+see `docs/hermes/spec.md §9`), `status-report`/`ask-brain` (operational
+closure and conversational surface, Phase 6), `run-design-task`
+(chat-requested designs/Artifacts, Phase 8) and `resolve-jira-task`
+(automatic Jira task flow, Phase 14, see §11). Two ways for hermes to see them:
 
-- **Recomendada** — montar el directorio del repo en el contenedor y apuntar
-  `skills.external_dirs` ahí. La fuente de verdad sigue siendo el repo, sin
-  copias divergentes. Añade al servicio `hermes` del compose:
+- **Recommended** — mount the repo's directory into the container and point
+  `skills.external_dirs` at it. The repo stays the source of truth, with no
+  diverging copies. Add to the compose's `hermes` service:
 
   ```yaml
   volumes:
     - ../skills:/opt/skills-repo:ro
   ```
 
-  Deliberadamente **fuera** de `/opt/data` (`$HERMES_HOME`), no debajo — ver
-  el comentario en `hermes/docker/docker-compose.yml` (US-6.2 de
-  `docs/decisions-log.md`): montarlo bajo `$HERMES_HOME` hacía que el `chown -R`
-  recursivo del entrypoint fallara en él (es `:ro`), produciendo en cada
-  arranque el warning "chown failed (rootless container?)" — engañoso, no
-  tiene nada que ver con Podman rootless.
+  Deliberately **outside** `/opt/data` (`$HERMES_HOME`), not below it — see
+  the comment in `hermes/docker/docker-compose.yml` (US-6.2 of
+  `docs/decisions-log.md`): mounting it under `$HERMES_HOME` made the
+  entrypoint's recursive `chown -R` fail on it (it is `:ro`), producing the
+  "chown failed (rootless container?)" warning on every startup — misleading,
+  it has nothing to do with rootless Podman.
 
-- **Alternativa** — copiar cada skill de `hermes/skills/` a
-  `~/.hermes/skills/` y dejar `external_dirs` vacío. Más simple, pero hay que
-  reconciliar a mano cada cambio.
+- **Alternative** — copy each skill from `hermes/skills/` to
+  `~/.hermes/skills/` and leave `external_dirs` empty. Simpler, but every
+  change then has to be reconciled by hand.
 
-Comprobar: `hermes skills list` debe mostrar `resolve-issue`, `run-task`,
-`status-report`, `ask-brain`, `run-design-task` y `resolve-jira-task`.
+Check: `hermes skills list` should show `resolve-issue`, `run-task`,
+`status-report`, `ask-brain`, `run-design-task` and `resolve-jira-task`.
 
-## 5. Programar el cron
+## 5. Schedule the cron
 
 ```bash
 hermes cron create '30m' --name resolve-issues --skill resolve-issue
-# US-6.3: resumen proactivo, necesita --deliver explícito (no hay chat de
-# origen propio en un cronjob recurrente) — ver hermes/skills/status-report/SKILL.md.
+# US-6.3: proactive summary, needs an explicit --deliver (a recurring
+# cronjob has no originating chat of its own) — see hermes/skills/status-report/SKILL.md.
 hermes cron create 'every 24h' --name status-report --skill status-report \
-  --deliver telegram:<tu_chat_id>
+  --deliver telegram:<your_chat_id>
 hermes cron list
-hermes cron tick     # ejecuta los jobs pendientes una vez, sin esperar
+hermes cron tick     # runs pending jobs once, without waiting
 ```
 
-`hermes cron tick` es la forma de probar el ciclo sin esperar al intervalo real.
-`run-task` y `ask-brain` no necesitan cron — se activan igual que cualquier
-otro skill en un turno interactivo normal (ver paso 6).
+`hermes cron tick` is how you test the cycle without waiting for the real
+interval. `run-task` and `ask-brain` need no cron — they trigger like any
+other skill in a normal interactive turn (see step 6).
 
-El cron de Jira (Fase 14) va **aparte** del de GitHub, y lleva la allowlist de
-repos en el prompt posicional — ver §11.
+The Jira cron (Phase 14) is **separate** from GitHub's, and carries the repo
+allowlist in its positional prompt — see §11.
 
-> **Siempre `docker exec -u hermes`, nunca root.** El `gateway` corre como el
-> usuario no-root `hermes`; un `hermes cron create` ejecutado como root deja
-> `cron/jobs.json` con dueño `root` e ilegible para el gateway, y el cron deja
-> de dispararse **en silencio**. Hallazgo real de la Fase 2, reproducido otra
-> vez en la Fase 6.
+> **Always `docker exec -u hermes`, never root.** The `gateway` runs as the
+> non-root user `hermes`; a `hermes cron create` run as root leaves
+> `cron/jobs.json` owned by root and unreadable by the gateway, and the cron
+> stops firing **silently**. A real finding from Phase 2, reproduced again in
+> Phase 6.
 
-## 6. Telegram (Fase 3)
+## 6. Telegram (Phase 3)
 
-1. Crea el bot con [@BotFather](https://t.me/BotFather) (`/newbot`) y guarda
-   el token que te da en `TELEGRAM_BOT_TOKEN` (`~/.hermes/.env` o el `.env` del
-   compose — ver `hermes/docker/.env.example`).
-2. Averigua tu ID numérico de usuario de Telegram (p. ej. escribiéndole a
-   [@userinfobot](https://t.me/userinfobot)) y ponlo en `TELEGRAM_ALLOWED_USERS`
-   (SEC-1.1). **Nunca** actives `GATEWAY_ALLOW_ALL_USERS` ni
-   `TELEGRAM_ALLOW_ALL_USERS` (SEC-1.2).
-3. Reinicia el contenedor de hermes tras cambiar cualquiera de las dos
-   variables (`docker compose restart hermes`) — igual que con `mcp_servers`,
-   el gateway carga la config al arrancar (ver "gotcha operacional" de la
-   Fase 2 en `docs/decisions-log.md`).
-4. Verifica desde tu cuenta de Telegram que el bot responde, y desde una
-   **segunda cuenta** no listada en `TELEGRAM_ALLOWED_USERS` que el mensaje se
-   rechaza (SEC-1.1, verificado, no asumido).
-5. Los skills `run-task` y `ask-brain` (`../skills/run-task/`,
-   `../skills/ask-brain/`) ya están disponibles en cuanto pasa el paso 4 de
-   esta guía — no necesitan registro de cron, se activan igual que cualquier
-   otro skill en un turno interactivo normal. `status-report` también
-   responde a demanda sin cron, además de su mitad proactiva del paso 5.
-6. **Notas de voz (Fase 7, US-7.5)**: no requiere ningún cambio de
-   configuración — verificado en el despliegue real que el contenedor de
-   hermes trae `faster-whisper` instalado y `stt.enabled: true` con
-   `provider: local` por defecto en `~/.hermes/config.yaml` (transcripción
-   local, sin API key ni servicio externo). Una nota de voz enviada por
-   Telegram debería transcribirse y disparar `run-task`/`ask-brain`/etc.
-   igual que un mensaje de texto — **pendiente de una prueba real** con un
-   audio real del Operador, no verificado end-to-end todavía.
-7. **Canal de mensajería adicional (Fase 7, US-7.4)**: hermes-agent trae de
-   fábrica Discord/Slack/WhatsApp/Signal además de Telegram, pero activar
-   cualquiera de ellos necesita una cuenta/bot token nuevo en esa plataforma
-   que solo el Operador puede crear — bloqueado hasta que el Operador elija
-   plataforma y genere las credenciales. El mecanismo de activación es el
-   mismo patrón de los pasos 1–4 de esta sección, sustituyendo Telegram por
-   el gateway de la plataforma elegida (`hermes gateway setup`, ver su
-   `--help` para el flag por plataforma).
+1. Create the bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and
+   save the token it gives you in `TELEGRAM_BOT_TOKEN` (`~/.hermes/.env` or
+   the compose's `.env` — see `hermes/docker/.env.example`).
+2. Find your numeric Telegram user ID (e.g. by messaging
+   [@userinfobot](https://t.me/userinfobot)) and put it in
+   `TELEGRAM_ALLOWED_USERS` (SEC-1.1). **Never** turn on
+   `GATEWAY_ALLOW_ALL_USERS` or `TELEGRAM_ALLOW_ALL_USERS` (SEC-1.2).
+3. Restart the hermes container after changing either variable
+   (`docker compose restart hermes`) — same as with `mcp_servers`, the gateway
+   loads its config at startup (see the Phase 2 "operational gotcha" in
+   `docs/decisions-log.md`).
+4. Verify from your own Telegram account that the bot responds, and from a
+   **second account** not listed in `TELEGRAM_ALLOWED_USERS` that the message
+   is rejected (SEC-1.1, verified, not assumed).
+5. The `run-task` and `ask-brain` skills (`../skills/run-task/`,
+   `../skills/ask-brain/`) are already available as soon as step 4 of this
+   guide passes — they need no cron registration, they trigger like any other
+   skill in a normal interactive turn. `status-report` also answers on demand
+   with no cron, in addition to its proactive half from step 5.
+6. **Voice notes (Phase 7, US-7.5)**: needs no configuration change —
+   verified in the real deployment that the hermes container ships with
+   `faster-whisper` installed and `stt.enabled: true` with `provider: local`
+   by default in `~/.hermes/config.yaml` (local transcription, no API key or
+   external service). A voice note sent over Telegram should get transcribed
+   and trigger `run-task`/`ask-brain`/etc. exactly like a text message —
+   confirmed by the Operator with a real audio note (2026-08-28).
+7. **Additional messaging channel (Phase 7, US-7.4)**: hermes-agent ships
+   with Discord/Slack/WhatsApp/Signal out of the box in addition to Telegram,
+   but turning any of them on needs a new account/bot token on that platform
+   that only the Operator can create — blocked until the Operator picks a
+   platform and generates the credentials. The activation mechanism is the
+   same pattern as steps 1–4 of this section, substituting Telegram for the
+   chosen platform's gateway (`hermes gateway setup`, see its `--help` for the
+   per-platform flag).
 
-## 7. Identidad del agente (`SOUL.md`)
+## 7. The agent's identity (`SOUL.md`)
 
-Sin esto, hermes-agent usa la plantilla por defecto (vacía) y se comporta
-como un asistente genérico — ver `docs/hermes/spec.md §10`.
+Without this, hermes-agent uses the default (empty) template and behaves like
+a generic assistant — see `docs/hermes/spec.md §10`.
 
 ```bash
-cp SOUL.md ~/.hermes/SOUL.md   # o la ruta de HERMES_HOME que uses
+cp SOUL.md ~/.hermes/SOUL.md   # or whichever HERMES_HOME path you use
 ```
 
-Se lee en caliente (no hace falta reiniciar el contenedor de hermes). Si lo
-editas en vivo desde el propio chat de Hermes, trae el cambio de vuelta a
-este `SOUL.md` del repo para que no se pierda en el siguiente despliegue —
-este fichero es la fuente de verdad versionada, `~/.hermes/SOUL.md` es la
-copia operativa.
+It is read live (no need to restart the hermes container). If you edit it
+live from Hermes' own chat, bring the change back to this repo's `SOUL.md` so
+it is not lost on the next deployment — this file is the versioned source of
+truth, `~/.hermes/SOUL.md` is the operational copy.
 
-## 8. Webhook de métricas — el camino determinista (US-9.2)
+## 8. Metrics webhook — the deterministic path (US-9.2)
 
-Pedirle las métricas a Hermes por lenguaje natural funciona, pero gasta tokens
-de la ventana Pro y depende de que el modelo elija la tool correcta. Este
-webhook es la alternativa **sin modelo**: cero tokens, cero decisiones del
-agente.
+Asking Hermes for metrics in natural language works, but it spends tokens
+from the Pro window and depends on the model picking the right tool. This
+webhook is the **model-free** alternative: zero tokens, zero agent decisions.
 
-**Por qué un webhook y no un `/comando`**: los slash commands de hermes-agent
-están hardcodeados en su registro central (`hermes_cli/commands.py`); los
-custom son una petición abierta y sin implementar
-([#25335](https://github.com/NousResearch/hermes-agent/issues/25335), duplicado
-en [#31373](https://github.com/NousResearch/hermes-agent/issues/31373), con
-[PR #4602](https://github.com/NousResearch/hermes-agent/pull/4602) sin
-mergear). Añadir uno exigiría parchear el código de hermes-agent, que este
-proyecto decidió no tocar. El flag `--deliver-only` de `hermes webhook` es la
-única vía documentada para entregar un mensaje **sin agent loop**.
+**Why a webhook and not a `/command`**: hermes-agent's slash commands are
+hardcoded in its central registry (`hermes_cli/commands.py`); custom ones are
+an open, unimplemented request
+([#25335](https://github.com/NousResearch/hermes-agent/issues/25335),
+duplicated in
+[#31373](https://github.com/NousResearch/hermes-agent/issues/31373), with
+[PR #4602](https://github.com/NousResearch/hermes-agent/pull/4602) unmerged).
+Adding one would require patching hermes-agent's code, which this project
+decided not to touch. The `--deliver-only` flag of `hermes webhook` is the
+only documented way to deliver a message **with no agent loop**.
 
-El precio de esa decisión: el disparador es un POST HTTP, no un mensaje de
-Telegram. Desde el móvil se lanza con un atajo de iOS / acceso directo de
-Android; la respuesta sí llega al chat de Telegram de siempre.
+The price of that decision: the trigger is an HTTP POST, not a Telegram
+message. From a phone it is fired with an iOS shortcut / Android home-screen
+action; the reply does land in the usual Telegram chat.
 
 ```bash
-# 1. Script y su configuración, en $HERMES_HOME/scripts (hermes-agent confina
-#    los scripts de webhook a ese directorio; no se ejecutan desde el repo).
+# 1. Script and its config, under $HERMES_HOME/scripts (hermes-agent confines
+#    webhook scripts to that directory; they are not run from the repo).
 mkdir -p ~/.hermes/scripts
 cp ../scripts/metrics-webhook.sh ~/.hermes/scripts/
 cp ../scripts/metrics-webhook.env.example ~/.hermes/scripts/metrics-webhook.env
 chmod +x ~/.hermes/scripts/metrics-webhook.sh
-chmod 600 ~/.hermes/scripts/metrics-webhook.env   # contiene el token del runner
-$EDITOR ~/.hermes/scripts/metrics-webhook.env     # rellenar RUNNER_TOKEN
+chmod 600 ~/.hermes/scripts/metrics-webhook.env   # holds the runner's token
+$EDITOR ~/.hermes/scripts/metrics-webhook.env     # fill in RUNNER_TOKEN
 
-# 2. Suscripción. --deliver-only es lo que evita el turno de modelo: el prompt
-#    renderizado ({script_output} = la salida del script) se entrega literal.
+# 2. Subscription. --deliver-only is what skips the model turn: the rendered
+#    prompt ({script_output} = the script's output) is delivered verbatim.
 hermes webhook subscribe metrics \
   --script metrics-webhook.sh \
   --prompt '{script_output}' \
   --deliver-only \
   --deliver telegram \
-  --deliver-chat-id '<tu_chat_id>'
+  --deliver-chat-id '<your_chat_id>'
 
-hermes webhook list          # devuelve la URL y el secreto HMAC
-hermes webhook test metrics  # comprobar sin esperar a dispararlo de verdad
+hermes webhook list          # returns the URL and the HMAC secret
+hermes webhook test metrics  # check it without firing it for real
 ```
 
-`<tu_chat_id>` es el mismo ID numérico que `TELEGRAM_ALLOWED_USERS` (SEC-1.1).
+`<your_chat_id>` is the same numeric ID as `TELEGRAM_ALLOWED_USERS` (SEC-1.1).
 
-**Cómo funciona el script** (`hermes/scripts/metrics-webhook.sh`): hace un
-`curl` autenticado a `GET /v1/metrics` del runner y escribe el informe en
-stdout. Detalles del contrato de hermes-agent de los que depende, verificados
-antes de escribirlo:
+**How the script works** (`hermes/scripts/metrics-webhook.sh`): it makes an
+authenticated `curl` call to the runner's `GET /v1/metrics` and writes the
+report to stdout. Details of the hermes-agent contract it depends on,
+verified before writing it:
 
-- El entorno del script está **saneado**, así que la configuración se lee de
-  `metrics-webhook.env` al lado del script, no de variables heredadas del
-  compose.
-- stdout de **texto** se expone como `{script_output}`; un stdout que sea un
-  **objeto JSON** reemplazaría el payload en vez de exponerse. El informe
-  empieza por `PersonalAI` y nunca por `{`, por eso se entrega en texto plano
-  y no en JSON.
-- stdout vacío, `[SILENT]`, o **salida distinta de cero** hacen que el webhook
-  se ignore y no se entregue nada. Es el comportamiento deseado ante un error:
-  verificado que token incorrecto (exit 22), falta de configuración (exit 1) y
-  runner caído (exit 7) dejan stdout vacío, así que nunca se entrega un informe
-  en blanco que parezca real.
+- The script's environment is **sanitised**, so configuration is read from
+  `metrics-webhook.env` next to the script, not from variables inherited from
+  the compose.
+- **Text** stdout is exposed as `{script_output}`; stdout that is a **JSON
+  object** would replace the payload instead of being exposed as text. The
+  report always starts with `PersonalAI` and never with `{`, which is why it
+  is delivered as plain text and not JSON.
+- Empty stdout, `[SILENT]`, or a **non-zero exit code** cause the webhook to
+  be skipped and nothing delivered. This is the desired behaviour on error:
+  verified that a wrong token (exit 22), missing configuration (exit 1) and a
+  down runner (exit 7) all leave stdout empty, so a blank report that looks
+  real is never delivered.
 
-La ruta `GET /v1/metrics` exige la misma autenticación Bearer que `/mcp`
-(SEC-3.2), es de solo lectura y sin parámetros, y devuelve agregados fijos —
-nunca títulos de tarea ni contenido de repos.
+The `GET /v1/metrics` route requires the same Bearer auth as `/mcp` (SEC-3.2),
+is read-only with no parameters, and returns fixed aggregates — never task
+titles or repo content.
 
-## 9. Bot de control — el camino determinista definitivo (US-9.2)
+## 9. The control bot — the definitive deterministic path (US-9.2)
 
-Un SEGUNDO bot de Telegram, con su propio token, que responde `/metricas`
-calculando sobre la base de datos: **sin modelo, sin gastar cuota de Claude
-Pro, y sin depender de que un agente decida llamar a la tool correcta**.
+A SECOND Telegram bot, with its own token, that answers `/metricas` by
+computing directly against the database: **no model, no Claude Pro quota
+spent, and no dependence on an agent deciding to call the right tool**.
 
-Es la alternativa al webhook de §8: mismo determinismo, pero el disparador sí
-es un mensaje. El precio es un bot más en tu Telegram.
+It is the alternative to the §8 webhook: same determinism, but the trigger is
+still a message. The price is one more bot on your Telegram.
 
-**Por qué un bot aparte y no un comando del de Hermes**: Telegram admite un
-único consumidor de updates por token. Si los dos servicios hicieran
-`getUpdates` con el mismo token se robarían los mensajes (error 409 de la Bot
-API). Y un `/comando` dentro de Hermes no es posible: sus slash commands están
-hardcodeados en su registro central (ver §8).
+**Why a separate bot rather than a command on Hermes' own**: Telegram only
+allows one update consumer per token. If both services called `getUpdates`
+with the same token they would steal each other's messages (the Bot API's
+409 error). And a `/command` inside Hermes is not possible: its slash
+commands are hardcoded in its central registry (see §8).
 
 ```bash
-# 1. Crear el bot en BotFather (/newbot) y copiar el token. NO reutilices el
-#    de Hermes.
-# 2. Añadir al .env del compose:
-#      CONTROL_BOT_TELEGRAM_TOKEN=<token del bot nuevo>
-#      CONTROL_BOT_ALLOWED_USERS=<los mismos IDs que TELEGRAM_ALLOWED_USERS>
-# 3. Levantarlo:
+# 1. Create the bot in BotFather (/newbot) and copy the token. Do NOT reuse
+#    Hermes' own.
+# 2. Add to the compose's .env:
+#      CONTROL_BOT_TELEGRAM_TOKEN=<the new bot's token>
+#      CONTROL_BOT_ALLOWED_USERS=<the same IDs as TELEGRAM_ALLOWED_USERS>
+# 3. Bring it up:
 docker compose up -d --build control-bot
-docker compose logs -f control-bot   # debe decir "bot de control escuchando"
+docker compose logs -f control-bot   # should say "bot de control escuchando"
 ```
 
-Luego, en el chat del bot nuevo: `/metricas`. También valen `/metrics`, `/m`,
-y se toleran acentos y mayúsculas (`/Métricas`). `/ayuda` lista los comandos.
+Then, in the new bot's chat: `/metricas`. `/metrics`, `/m` also work, and
+accents and capitalisation are tolerated (`/Métricas`). `/ayuda` lists the
+commands.
 
-**Comportamiento que conviene conocer**:
+**Behaviour worth knowing**:
 
-- **Allowlist obligatoria**: sin `CONTROL_BOT_ALLOWED_USERS` el proceso no
-  arranca (sale con código 2 y un mensaje claro). A un usuario no autorizado no
-  se le contesta **nada** — ni un "no autorizado", que le confirmaría que el bot
-  existe. Queda en el log.
-- **Descarta el backlog al arrancar**: Telegram retiene los mensajes hasta 24 h,
-  así que un `/metricas` enviado mientras el bot estaba caído no se contesta al
-  volver. Un informe de ayer entregado hoy sin avisar sería peor que ninguno.
-- **No hace lenguaje natural, a propósito**: es su garantía de determinismo. Un
-  mensaje que no sea un comando conocido recibe la lista de comandos, nunca una
-  interpretación.
-- **Es el servicio menos privilegiado del compose** (SEC-1.5): sin socket de
-  Docker, sin el token del runner, sin puertos publicados. Solo SELECTs contra
-  Postgres.
+- **Mandatory allowlist**: without `CONTROL_BOT_ALLOWED_USERS` the process
+  refuses to start (exits with code 2 and a clear message). An unauthorised
+  user gets **no** reply at all — not even a "not authorised", which would
+  confirm the bot exists. It is logged.
+- **Discards the backlog on startup**: Telegram retains messages for up to
+  24h, so a `/metricas` sent while the bot was down is not answered once it
+  comes back. Delivering yesterday's report today with no warning would be
+  worse than delivering nothing.
+- **Does not do natural language, on purpose**: that is its determinism
+  guarantee. A message that is not a known command gets the command list
+  back, never an interpretation.
+- **It is the least privileged service in the compose** (SEC-1.5): no Docker
+  socket, no runner token, no published ports. Only SELECTs against Postgres.
 
-Añadir un comando nuevo es añadir una entrada a `COMMANDS` en
-`apps/control-bot/src/commands.ts`: la superficie es exactamente esa lista, no
-un intérprete genérico.
+Adding a new command means adding an entry to `COMMANDS` in
+`apps/control-bot/src/commands.ts`: the surface is exactly that list, not a
+generic interpreter.
 
-## 10. Cadena de proveedores y modelo local (Fase 13)
+## 10. Provider chain and local model (Phase 13)
 
-Desde el 2026-08-26 el agent loop de Hermes **no puede usar la suscripción
-Pro**: Anthropic lo clasifica como _third-party app_ y lo rechaza con `HTTP
-400` (ver Fase 12 del roadmap). El runner no está afectado — ejecuta el binario
-oficial `claude -p`, que sí se acepta.
+Since 2026-08-26 Hermes' agent loop **cannot use the Pro subscription**:
+Anthropic classifies it as a _third-party app_ and rejects it with `HTTP 400`
+(see Phase 12 of the roadmap). The runner is unaffected — it runs the
+official `claude -p` binary, which is accepted.
 
-La respuesta no es cambiar de proveedor, que sería repetir el mismo error con
-otro nombre, sino una **cadena** con degradación ordenada:
-`ollama` (local, gratis) → _eslabón barato por decidir_ → `anthropic` (créditos,
-con tope).
+The answer is not switching provider, which would just repeat the same error
+under another name, but a **chain** with ordered degradation:
+`ollama` (local, free) → _a cheap link yet to be decided_ → `anthropic`
+(credits, capped).
 
-### Despliegue en el Mac Mini (16 GB)
+### Deployment on the (16 GB) Mac Mini
 
 ```bash
-# 1. Levantar Ollama. Está detrás de un PROFILE: `docker compose up -d` a secas
-#    NO lo arranca, para que en una máquina sin RAM suficiente no muera por OOM
-#    arrastrando la sensación de que el compose está roto.
+# 1. Bring up Ollama. It sits behind a PROFILE: a bare `docker compose up -d`
+#    does NOT start it, so a machine without enough RAM does not die of OOM
+#    and leave the impression the whole compose is broken.
 docker compose --profile local-llm up -d ollama
 
-# 2. Descargar el modelo. SIN esto el contenedor arranca, el healthcheck pasa,
-#    y la cadena falla igual en el primer turno — el fallo más traicionero de
-#    todo este montaje. `/proveedores` lo distingue explícitamente.
+# 2. Download the model. WITHOUT this the container starts, the healthcheck
+#    passes, and the chain still fails on the first turn — the most
+#    treacherous failure in this whole setup. `/proveedores` calls it out
+#    explicitly.
 docker compose exec ollama ollama pull qwen2.5:3b
 
-# 3. Apuntar hermes a la cadena (NO se aplica copiando hermes.config.yaml —
-#    ver la cabecera de ese fichero).
+# 3. Point hermes at the chain (this is NOT applied by copying
+#    hermes.config.yaml — see that file's header).
 hermes config set model.provider ollama
 hermes config set model.base_url http://ollama:11434
 hermes fallback add anthropic
 hermes fallback list
 
-# 4. Comprobar desde el bot de control, sin gastar un token:
+# 4. Check from the control bot, without spending a single token:
 #    /proveedores
 ```
 
-Ajustes disponibles en el `.env` del compose: `OLLAMA_MEMORY_LIMIT` (8g por
-defecto) y `OLLAMA_KEEP_ALIVE` (5m — descarga el modelo de RAM tras ese tiempo
-sin uso, para no quitarle memoria a Postgres, Brain y el runner todo el día).
+Settings available in the compose's `.env`: `OLLAMA_MEMORY_LIMIT` (8g by
+default) and `OLLAMA_KEEP_ALIVE` (5m — unloads the model from RAM after that
+much idle time, so it does not take memory away from Postgres, Brain and the
+runner all day).
 
-### `/proveedores` en el bot de control
+### `/proveedores` in the control bot
 
-Sondea cada eslabón y dice si responde. Para Ollama además **lista los modelos
-descargados**, que es lo que distingue "vivo pero inútil" de "vivo y listo".
+Probes each link and reports whether it responds. For Ollama it additionally
+**lists the downloaded models**, which is what tells "alive but useless" apart
+from "alive and ready".
 
-Lo que **no** hace, y el propio comando lo advierte en su salida: no lee la
-cadena viva de hermes. Esa vive en su `config.yaml`, dentro de un volumen que
-contiene también `auth.json` con el token OAuth; montarlo en el bot de control
-—el proceso que ingiere texto de Telegram— contradiría SEC-1.5. Así que sondea
-la lista **declarada** en `CONTROL_BOT_PROVIDER_PROBES`, y si cambias la cadena
-con `hermes fallback` tienes que actualizar esa variable también.
+What it does **not** do, and the command's own output warns of it: it does
+not read hermes' live chain. That lives in its `config.yaml`, inside a volume
+that also holds `auth.json` with the OAuth token; mounting that into the
+control bot — the process that ingests Telegram text — would contradict
+SEC-1.5. So it probes the list **declared** in `CONTROL_BOT_PROVIDER_PROBES`,
+and if you change the chain with `hermes fallback` you have to update that
+variable too.
 
-Tampoco responde "qué proveedor atendió el último turno": hermes-agent solo
-deja caer eso en texto de log al hacer fallback (`auxiliary_client.py`), sin
-registro estructurado. Afirmarlo sería inventarse un dato que no existe.
+Nor does it answer "which provider served the last turn": hermes-agent only
+drops that into log text when it falls back (`auxiliary_client.py`), with no
+structured record. Claiming otherwise would be inventing a fact that does not
+exist.
 
-### Antes de dar la cadena por buena
+### Before trusting the chain
 
-El riesgo real no es la RAM, es la fiabilidad de las **tool calls**: los
-modelos pequeños son flojos llamando a herramientas, y el bug 2 de la Fase 8 ya
-demostró que un modelo mal equipado fabrica resultados plausibles en vez de
-fallar. Por eso US-13.1 es una puerta: hay que ver una petición real de Telegram
-disparando `run_coding_task` **de verdad** (fila nueva en `runner.task_runs`),
-no descrita en texto, antes de confiar en el eslabón local.
+The real risk is not RAM, it is **tool-call reliability**: small models are
+weak at calling tools, and Phase 8's bug 2 already showed a poorly-equipped
+model fabricating plausible results instead of failing. That is why US-13.1
+is a gate: a real Telegram request has to be seen genuinely triggering
+`run_coding_task` (a new row in `runner.task_runs`), not just described in
+text, before the local link is trusted.
 
-## 11. Jira como fuente de tareas (Fase 14)
+## 11. Jira as a task source (Phase 14)
 
-Jira usa **las mismas cuatro etiquetas** que GitHub (`hermes`,
-`hermes:in-progress`, `hermes:done`, `hermes:needs-human`) más una quinta,
-`repo:<owner>/<nombre>`, que dice en qué repositorio aterriza la tarea.
+Jira uses **the same four labels** as GitHub (`hermes`, `hermes:in-progress`,
+`hermes:done`, `hermes:needs-human`) plus a fifth, `repo:<owner>/<name>`,
+that says which repository the task lands in.
 
-No hay que crear ninguna: a diferencia de GitHub, donde un label debe existir
-en el repo antes de aplicarse, las etiquetas de Jira son texto libre y nacen al
-asignarlas. Los dos puntos y la barra son caracteres válidos (verificado contra
-`<tu-dominio>.atlassian.net`); lo único prohibido son los espacios.
+None need to be created up front: unlike GitHub, where a label must exist in
+the repo before it can be applied, Jira labels are free text and are born the
+moment they are assigned. Colons and slashes are valid characters (verified
+against `<your-domain>.atlassian.net`); the only thing Jira forbids is spaces.
 
-### Crear el cron
+### Create the cron
 
 ```bash
 docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes \
   cron create '30m' --name resolve-jira --skill resolve-jira-task \
-  'Procesa tareas de Jira. Repos permitidos: SantiDiana1/PersonalAI.'
+  'Process Jira tasks. Allowed repos: SantiDiana1/PersonalAI.'
 ```
 
-El prompt posicional es **obligatorio en la práctica**: ahí va la allowlist de
-repos. Sin ella el skill se planta y no ejecuta nada, a propósito — un ticket
-de Jira no vive dentro de ningún repo, así que el destino no es un hecho que se
-pueda deducir, y dejar que lo elija el texto del ticket sería exactamente el
-agujero que cierra SEC-3.4. Ver la Regla 2 de
+The positional prompt is **mandatory in practice**: that is where the repo
+allowlist goes. Without it the skill deliberately refuses to run anything — a
+Jira ticket does not live inside any repo, so the destination is not a fact
+that can be deduced, and letting the ticket's text choose it would be exactly
+the hole SEC-3.4 closes. See Rule 2 of
 `hermes/skills/resolve-jira-task/SKILL.md`.
 
-Añade cada repo nuevo a esa lista **editando el job**, no al ticket.
+Add each new repo to that list **by editing the job**, not the ticket.
 
-### Ajustar la frecuencia
+### Adjusting the frequency
 
 ```bash
 docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes cron list
-docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes cron tick   # dispara ya, sin esperar
+docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes cron tick   # fires now, without waiting
 ```
 
-Para cambiar el intervalo, borra el job y créalo de nuevo con otro `schedule`.
-Está separado del de `resolve-issue` justo para esto: puedes parar o acelerar
-la fuente Jira sin tocar la de GitHub.
+To change the interval, delete the job and create it again with a different
+`schedule`. It is kept separate from `resolve-issue`'s job for exactly this:
+you can pause or speed up the Jira source without touching GitHub's.
 
-### Comprobar el filtro a mano
+### Checking the filter by hand
 
-El JQL que usa el skill, por si quieres verlo desde la UI de Jira:
+The JQL the skill uses, in case you want to see it from the Jira UI:
 
 ```
 labels = hermes AND statusCategory != Done ORDER BY created ASC
 ```
 
-**No filtres por `status`**: JQL resuelve los nombres canónicos en inglés, no
-los que muestra la UI. En un site en español, `status = "Tareas por hacer"`
-devuelve **cero resultados sin dar error** — el cron seguiría corriendo sin
-coger nunca nada. `statusCategory` tiene tres valores fijos del propio Jira y
-es inmune al idioma y a que renombres un estado.
+**Do not filter by `status`**: JQL resolves canonical English names, not the
+ones the UI shows. On a Spanish-language site, `status = "Tareas por hacer"`
+returns **zero results with no error** — the cron would keep running and
+never pick anything up. `statusCategory` has three fixed values from Jira
+itself and is immune to both language and renaming a state.
 
-## 12. Gobierno: entrega del cron y `/cron`
+## 12. Governance: cron delivery and `/cron`
 
-Dos piezas que responden a la misma pregunta — _¿qué está corriendo solo, y cómo
-me entero de lo que hizo?_
+Two pieces answering the same question — _what is running unattended, and how
+do I find out what it did?_
 
-### Que los cronjobs te avisen
+### Making cronjobs notify you
 
-Un job con `Deliver: local` deja su resultado dentro del contenedor. Parece
-sano en `hermes cron list` y **nadie se entera de nada**, ni de los errores.
-Este fue un fallo real: `resolve-issues` estuvo fallando cada 30 minutos sin
-avisar. Todo job debe entregar a Telegram:
+A job with `Deliver: local` leaves its result inside the container. It looks
+healthy in `hermes cron list` and **nobody finds out about anything**, errors
+included. This was a real failure: `resolve-issues` was failing every 30
+minutes with no warning. Every job must deliver to Telegram:
 
 ```bash
 docker exec -u hermes personalai-hermes-1 /opt/hermes/.venv/bin/hermes \
-  cron edit <job_id> --deliver telegram:<tu_chat_id>
+  cron edit <job_id> --deliver telegram:<your_chat_id>
 ```
 
-`hermes cron edit` cambia el job en sitio, sin perder su historial de
-ejecuciones (`repeat.completed`), a diferencia de borrarlo y recrearlo.
+`hermes cron edit` changes the job in place, without losing its run history
+(`repeat.completed`), unlike deleting and recreating it.
 
-### `/cron` en el bot de control
+### `/cron` in the control bot
 
-Lista jobs, horario, próxima ejecución y resultado de la última — determinista,
-sin modelo y sin gastar cuota, igual que `/metricas` y `/proveedores`. Además
-**avisa** de los dos fallos silenciosos: un job con entrega `local`, y un job
-que corrió bien pero cuya entrega falló (`last_delivery_error`).
+Lists jobs, schedule, next run and the last run's result — deterministic, no
+model, no quota spent, same as `/metricas` and `/proveedores`. It also
+**flags** the two silent failure modes: a job with `local` delivery, and a
+job that ran fine but whose delivery failed (`last_delivery_error`).
 
-Requiere dos cosas en el compose, ya puestas en el servicio `control-bot`:
+Requires two things in the compose, already set on the `control-bot` service:
 
 ```yaml
 volumes:
@@ -519,18 +520,48 @@ environment:
   CONTROL_BOT_CRON_JOBS_PATH: /hermes-cron/jobs.json
 ```
 
-El `user:` no es opcional ni es pereza: hermes escribe `jobs.json` con modo
-`0600` **y restaura ese modo cada vez que reescribe el fichero**, así que un
-`chmod` se deshace solo en el siguiente tick del scheduler. Se monta el
-subdirectorio `cron` y no `$HERMES_HOME` entero, para que `auth.json` quede
-fuera de alcance. El razonamiento completo, incluida la parte que sí amplía el
-alcance, está en [`../../docs/security.md`](../../docs/security.md) SEC-1.5.
+The `user:` is neither optional nor laziness: hermes writes `jobs.json` with
+mode `0600` **and restores that mode every time it rewrites the file**, so a
+`chmod` undoes itself on the scheduler's very next tick. The `cron`
+subdirectory is mounted, not the whole `$HERMES_HOME`, so that `auth.json`
+stays out of reach. The full reasoning, including the part that does widen
+scope, is in [`../../docs/security.md`](../../docs/security.md) SEC-1.5.
 
-Si falta el mount, `/cron` lo dice y explica qué hacer, en vez de contestar un
-error genérico: el Operador está leyendo Telegram, no tiene el compose delante.
+If the mount is missing, `/cron` says so and explains what to do, instead of
+answering with a generic error: the Operator is reading Telegram, not looking
+at the compose file.
 
-> **Acoplamiento declarado**: `jobs.json` es formato interno de hermes-agent,
-> no un contrato público. Puede cambiar al actualizar el upstream. Todos los
-> campos se leen de forma opcional y degradan a "desconocido", así que un
-> cambio de formato produce un informe más pobre, nunca un bot caído — hay
-> tests que fijan justo eso.
+> **Declared coupling**: `jobs.json` is hermes-agent's internal format, not a
+> public contract. It can change on an upstream update. Every field is read
+> optionally and degrades to "unknown", so a format change produces a poorer
+> report, never a dead bot — there are tests pinning exactly that.
+
+## 13. `/tarea <KEY>`: launching a known Jira ticket, deterministically (Phase 20)
+
+**Widens the control bot's scope from "only reports" to "also launches"**,
+through a fixed template — see `apps/control-bot/src/cron.ts`'s header
+comment and `docs/roadmap.md` Fase 20, US-20.3. `/tarea WEB-6` creates a
+one-shot cronjob with `--skill resolve-jira-task` and a templated prompt
+naming exactly that ticket — never freehand text, never the model choosing
+which skill applies. Same principle as the rest of this bot's surface: an
+unknown or malformed key gets the help text, never a guess.
+
+```
+CONTROL_BOT_TAREA_REPO_ALLOWLIST=SantiDiana1/PersonalAI,SantiDiana1/personalWebsite
+```
+
+Required, same as `CONTROL_BOT_MODEL_CHOICES` for `/modelo`: without it,
+`/tarea` explains it is not configured instead of launching unbounded. It is
+the same allowlist discipline as the recurring Jira cron (§11) — a repo not
+on this list is rejected by `resolve-jira-task` itself (Rule 2), not by this
+bot, but declaring it here means the mistake surfaces before a launch, not
+after.
+
+> **One-shot semantics**: the job's `schedule` is `'1m'`, deliberately without
+> the `every` prefix. This is verified against the real deployment, not
+> assumed — see `hermes/skills/status-report/SKILL.md` ("Registro del
+> cronjob"): a `schedule` without `every` fires once (`repeat: 1`) and does
+> not repeat; `every` is what you add for the opposite. That finding came
+> from a different skill, not a test dedicated to `/tarea` itself, so it is
+> still worth checking `hermes cron list` after the first real `/tarea`
+> launch to confirm the job is not left scheduled to repeat.

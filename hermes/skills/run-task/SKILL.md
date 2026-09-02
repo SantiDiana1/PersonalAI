@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [telegram, coding-agent, mcp, cron, conversational]
-    related_skills: [resolve-issue]
+    related_skills: [resolve-issue, resolve-jira-task]
 ---
 
 # run-task: ejecutar una tarea de código pedida por chat
@@ -29,11 +29,28 @@ leer el código fuente de hermes-agent durante la Fase 3 del roadmap.
 
 ## Reglas innegociables
 
-1. **Solo tools MCP para el trabajo de código.** Igual que `resolve-issue`: la
+1. **Si la petición nombra o describe un ticket de Jira, cede — no la
+   proceses aquí.** Jira tiene su propio skill, `resolve-jira-task`, con su
+   propio contrato de seguridad (allowlist de endpoints, descubrimiento de
+   transición, etiquetas como fuente de verdad — ver su `SKILL.md` y
+   `docs/security.md` SEC-2.5). Un mensaje como "lanza WEB-6" o "resuelve la
+   tarea de Jira sobre X" coincide también con el patrón de detección de este
+   mismo skill (Paso siguiente) — cuando coincida con los dos, gana
+   `resolve-jira-task`, siempre, sin excepción. **Regla dura, añadida el
+   2026-08-28 tras un incidente real**: antes de esta regla, este skill
+   procesó una petición de tres tickets de Jira, programó el cronjob con
+   `skills: []` (Paso 3, antigua redacción) y metió en el prompt, en texto
+   libre, la instrucción de transicionar los tickets con `jira_post` — sin
+   descubrimiento de transición, sin etiquetas, sin ninguna de las
+   mitigaciones de `resolve-jira-task`. Ver `docs/security.md` SEC-2.6 y
+   `docs/roadmap.md` Fase 20 para el análisis completo. Si tienes dudas sobre
+   si algo "es" una tarea de Jira, trátalo como que sí lo es y cede.
+
+2. **Solo tools MCP para el trabajo de código.** Igual que `resolve-issue`: la
    ejecución real ocurre en `claude-code-runner-mcp`, nunca invocando `git`,
    `gh` ni shell directamente desde aquí.
 
-2. **El repo tiene que venir explícito en el mensaje del Operador, con
+3. **El repo tiene que venir explícito en el mensaje del Operador, con
    `owner/repo` completo.** No lo infieras de una conversación previa
    ambigua ni asumas un repo "habitual". **Regla dura, verificada en
    producción (Fase 6): un nombre de repo sin owner (p. ej. "el repo
@@ -48,14 +65,28 @@ leer el código fuente de hermes-agent durante la Fase 3 del roadmap.
    programar nada**. No programes un cronjob especulativo "por si acaso" —
    espera la respuesta y entonces continúa.
 
-3. **Nunca mergeas, y el trabajo pesado nunca corre en el turno interactivo.**
+4. **Nunca mergeas, y el trabajo pesado nunca corre en el turno interactivo.**
    `run_coding_task` (y, si tiene éxito, `create_pull_request`) se ejecutan
    **dentro del cronjob de un solo disparo** que programas en el Paso 3, nunca
    en este turno. Ver la sección siguiente para el motivo.
 
-4. **Una petición, una ejecución programada.** Si ya confirmaste la tarea y
+5. **Una petición, una ejecución programada.** Si ya confirmaste la tarea y
    programaste el cronjob, no lo dupliques aunque el Operador repita el
    mensaje mientras esperáis — dile que ya está en marcha.
+
+6. **El prompt del cronjob nunca instruye una escritura a una fuente de
+   tareas en texto libre.** Este skill produce PRs de código —
+   `run_coding_task` seguido, si tiene éxito, de `create_pull_request`. Si en
+   algún momento el Operador pide además cerrar un ticket, mover una
+   etiqueta, o comentar en Jira/GitHub como parte de esta misma petición, eso
+   **no se mete a mano en el prompt** (ver el incidente citado en la Regla
+   1): o bien la petición es realmente de Jira y cede por la Regla 1, o bien
+   se programa como una segunda llamada a `cronjob(action='create')` que
+   **sí** carga el skill de la fuente correspondiente vía `skills:` (p. ej.
+   `skills: ['resolve-jira-task']`), nunca con `skills: []` y una instrucción
+   suelta. Un `skills: []` en el Paso 3 solo es seguro mientras el prompt
+   completo se limite a `run_coding_task` → PR — en cuanto toca una fuente,
+   deja de serlo.
 
 ## Por qué un cronjob y no `delegate_task`
 
@@ -179,8 +210,18 @@ Llama a `cronjob`:
   No hagas nada más: no repitas la llamada a run_coding_task, no uses shell.
   ```
 
-- `skills`: puedes dejarlo vacío — el prompt ya es autocontenido y no necesita
-  releer este propio skill.
+  **El prompt es esta plantilla, tal cual — no le añadas pasos.** En
+  concreto, no le pegues instrucciones de cerrar, comentar o transicionar un
+  ticket de Jira/GitHub aunque el Operador lo haya pedido en el mismo
+  mensaje: eso es la Regla 6. Si la petición completa es sobre un ticket de
+  Jira, ni siquiera llegas aquí — cede por la Regla 1.
+
+- `skills`: vacío, porque esta plantilla no toca ninguna fuente de tareas —
+  solo `run_coding_task` y `create_pull_request`. Si alguna vez este Paso
+  cambia para incluir una escritura a una fuente, `skills` deja de poder
+  quedar vacío (Regla 6): la ejecución del sub-turno depende de que las
+  reglas de esa fuente estén cargadas, no de que quien escribió este prompt
+  las recuerde.
 
 ### Paso 4 — Confirmar de inmediato
 

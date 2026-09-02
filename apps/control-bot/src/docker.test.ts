@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import type Docker from 'dockerode';
 import {
   DockerOperationError,
+  createDeterministicTask,
   readActiveModel,
   restartHermesContainer,
   setActiveModel,
@@ -120,6 +121,48 @@ describe('restartHermesContainer', () => {
   });
 });
 
+describe('createDeterministicTask', () => {
+  it('ejecuta hermes cron create con los flags fijos, como el usuario hermes', async () => {
+    const { docker, execCalls } = fakeDocker([{ exitCode: 0, output: '' }]);
+
+    await createDeterministicTask(docker, CONTAINER_NAME, {
+      name: 'tarea-WEB-6-123',
+      skill: 'resolve-jira-task',
+      prompt: 'Ticket de Jira ya seleccionado, sin búsqueda: WEB-6.',
+      deliver: 'telegram:42',
+      schedule: '1m',
+    });
+
+    expect(execCalls[0]?.cmd).toEqual([
+      '/opt/hermes/.venv/bin/hermes',
+      'cron',
+      'create',
+      '1m',
+      '--name',
+      'tarea-WEB-6-123',
+      '--skill',
+      'resolve-jira-task',
+      '--deliver',
+      'telegram:42',
+      'Ticket de Jira ya seleccionado, sin búsqueda: WEB-6.',
+    ]);
+    expect(execCalls[0]?.user).toBe('hermes');
+  });
+
+  it('lanza DockerOperationError si el exit code no es 0', async () => {
+    const { docker } = fakeDocker([{ exitCode: 1, output: 'clave de skill desconocida' }]);
+    await expect(
+      createDeterministicTask(docker, CONTAINER_NAME, {
+        name: 'tarea-WEB-6-123',
+        skill: 'resolve-jira-task',
+        prompt: 'x',
+        deliver: 'telegram:42',
+        schedule: '1m',
+      }),
+    ).rejects.toThrow(DockerOperationError);
+  });
+});
+
 // No es un test, es documentación ejecutable de la promesa de "acotado en
 // código": la única forma de llegar al demonio de Docker desde este módulo es
 // vía `docker.getContainer(name).exec/.restart` — nunca `docker.run`,
@@ -134,6 +177,7 @@ describe('superficie del módulo', () => {
     expect(exportedFunctions.sort()).toEqual(
       [
         'DockerOperationError',
+        'createDeterministicTask',
         'readActiveModel',
         'restartHermesContainer',
         'setActiveModel',

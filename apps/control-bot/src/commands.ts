@@ -16,10 +16,12 @@ import {
   readActiveModel,
   setActiveModel,
   restartHermesContainer,
+  createDeterministicTask,
   DockerOperationError,
 } from './docker.js';
 import { findModelChoice, type ModelChoice } from './modelChoices.js';
 import { recordModelChange, lastModelChange } from './modelAudit.js';
+import { buildTareaPrompt, isValidJiraKey, projectOf, TareaConfigError } from './jiraTask.js';
 
 export interface CommandDeps {
   db: Queryable;
@@ -33,12 +35,16 @@ export interface CommandDeps {
   readFileImpl?: ReadFileLike;
   /** Inyectable para que los tests de `/cron` no dependan del reloj. */
   now?: () => Date;
-  /** Cliente Docker acotado (Fase 15, US-15.2) — ver docker.ts. Sin él, `/modelo` no puede cambiar nada. */
+  /** Cliente Docker acotado (Fase 15, US-15.2) — ver docker.ts. Sin él, `/modelo` ni `/tarea` pueden actuar. */
   docker?: Docker;
-  /** Nombre del contenedor de Hermes contra el que actúa `/modelo`. */
+  /** Nombre del contenedor de Hermes contra el que actúan `/modelo` y `/tarea`. */
   hermesContainerName?: string;
   /** Eslabones DECLARADOS a los que `/modelo` puede cambiar. Vacío = deshabilitado. */
   modelChoices?: ModelChoice[];
+  /** Repos permitidos para `/tarea` (Fase 20, US-20.3). Vacío = deshabilitado. */
+  tareaRepoAllowlist?: string[];
+  /** Chat de origen del mensaje — destino de `--deliver` para el cronjob de `/tarea`. */
+  chatId?: number;
 }
 
 export interface Command {
@@ -80,6 +86,13 @@ export const COMMANDS: Command[] = [
     description:
       'Sin argumento: modelo/proveedor activo. Con un alias (ver /proveedores): lo cambia y reinicia Hermes.',
     run: runModeloCommand,
+  },
+  {
+    name: 'tarea',
+    aliases: ['task', 't'],
+    description:
+      'Lanza un ticket de Jira ya conocido por su clave (p. ej. /tarea WEB-6), sin interpretación de lenguaje natural.',
+    run: runTareaCommand,
   },
 ];
 
@@ -153,6 +166,77 @@ async function runModeloCommand(deps: CommandDeps, args: string): Promise<string
   return (
     `Cambiado a "${choice.alias}" (${choice.provider} / ${choice.model}) y reiniciando Hermes.\n` +
     'Tardará unos segundos en volver a responder por Telegram.'
+  );
+}
+
+/**
+ * `/tarea <KEY>` (Fase 20, US-20.3) — lanza un ticket de Jira ya identificado
+ * por su clave, con `skills: ['resolve-jira-task']` y un prompt plantillado
+ * (`jiraTask.ts::buildTareaPrompt`), nunca texto libre del Operador pegado en
+ * el prompt del cronjob (Regla 6 de `run-task/SKILL.md`, SEC-2.6).
+ *
+ * Una clave desconocida o mal formada recibe la ayuda del comando, nunca se
+ * interpreta ni se adivina — mismo principio que el resto de esta superficie
+ * (ver la cabecera del fichero).
+ */
+async function runTareaCommand(deps: CommandDeps, args: string): Promise<string> {
+  const { docker, hermesContainerName, tareaRepoAllowlist, chatId } = deps;
+  if (!docker || !hermesContainerName || !tareaRepoAllowlist || tareaRepoAllowlist.length === 0) {
+    return (
+      'Comando /tarea no disponible: falta configurar el acceso a Docker o ' +
+      'CONTROL_BOT_TAREA_REPO_ALLOWLIST. Ver docs/security.md SEC-1.6 y hermes/config/README.md §11.'
+    );
+  }
+  if (chatId === undefined) {
+    // No debería poder pasar en producción (bot.ts siempre lo pasa desde el
+    // mensaje real) — defensivo, no un caso que el Operador pueda disparar.
+    return 'No he podido determinar a qué chat entregar el resultado. Repite el comando.';
+  }
+
+  const key = args.trim().toUpperCase();
+  if (key.length === 0 || !isValidJiraKey(key)) {
+    return [
+      key.length === 0
+        ? 'Falta la clave del ticket. Uso: /tarea <CLAVE> (p. ej. /tarea WEB-6).'
+        : `"${args.trim()}" no tiene forma de clave de Jira (PROYECTO-número, p. ej. WEB-6). No la interpreto ni adivino a qué te refieres.`,
+      '',
+      helpText(),
+    ].join('\n');
+  }
+
+  let prompt: string;
+  try {
+    prompt = buildTareaPrompt(key, { repoAllowlist: tareaRepoAllowlist });
+  } catch (err: unknown) {
+    if (err instanceof TareaConfigError) return err.message;
+    throw err;
+  }
+
+  const jobName = `tarea-${key}-${Date.now()}`;
+  // '1m' SIN el prefijo 'every' — verificado en real (hermes/skills/status-report/SKILL.md
+  // "Registro del cronjob"): un schedule sin 'every' delante dispara una sola vez
+  // (repeat: 1) y no vuelve a repetirse. Ver la nota de docker.ts para el detalle.
+  const schedule = '1m';
+
+  try {
+    await createDeterministicTask(docker, hermesContainerName, {
+      name: jobName,
+      skill: 'resolve-jira-task',
+      prompt,
+      deliver: `telegram:${String(chatId)}`,
+      schedule,
+    });
+  } catch (err: unknown) {
+    if (err instanceof DockerOperationError) {
+      logger.error({ err, key }, 'fallo lanzando /tarea');
+      return `No he podido lanzar ${key}: ${err.message}`;
+    }
+    throw err;
+  }
+
+  return (
+    `Lanzado ${key} (proyecto ${projectOf(key)}) — te aviso en este mismo chat cuando termine.\n` +
+    `Job: ${jobName}.`
   );
 }
 

@@ -269,6 +269,38 @@ touch external data, because it is the only one that ingests arbitrary text.
     it. Accepted as a conscious risk, bounded by the fact that the Atlassian site
     is personal and holds no company data (the same boundary as SEC-7.x).
 
+- **SEC-2.6 — A cron job's prompt is not a place to smuggle privileged
+  instructions.** A skill that creates a one-shot cron job to escape the
+  interactive turn (`run-task`, and any future skill following the same
+  pattern — see [hermes/spec.md §9.3](hermes/spec.md#93-immediate-confirmation-and-completion-notification))
+  must not write, freehand, an instruction that calls a task-source write
+  operation — a Jira transition/label/comment, a GitHub label/comment —
+  directly into the prompt string. When the sub-turn needs to touch a source,
+  the skill governing that source (`resolve-jira-task`, `resolve-issue`) must
+  be attached via `skills:` so its rules load into that turn: endpoint
+  allowlist, transition discovery, labels-as-source-of-truth. An empty
+  `skills:` is only safe while the sub-turn's entire job is
+  `run_coding_task` → PR — the moment the prompt also writes to a source, it
+  stops being safe, and `run-task`'s Step 3 previously authorised leaving it
+  empty unconditionally.
+  - _Found missing in production, 2026-08-28_ (see `decisions-log.md`, that
+    date's incident): a `run-task` cron job instructed _"actualiza WEB-6 y
+    WEB-7 en Jira a Done usando `jira_post` con transición al estado
+    completado"_, with `skills: []`. That sub-turn would have run unattended,
+    with all 82 MCP tools available, writing to Jira with none of
+    `resolve-jira-task`'s mitigations loaded — no transition discovery, no
+    labels-as-source-of-truth, none of SEC-2.5's endpoint allowlist. Nothing
+    attacked the system; two individually-documented affordances (`run-task`
+    claiming every code request without a yield rule for Jira, and Step 3's
+    unconditional `skills: []`) combined into the hole. Caught before
+    execution, by the Operator noticing and asking; not caught by any check.
+  - _Verification_: inspect `skills:` on any cron job whose prompt mentions a
+    task-source write. It must be non-empty and must name the skill matching
+    that source. Phase 20 (`roadmap.md`) tracks the skill-layer restructure
+    this closes; Phase 18's eval taxonomy (US-18.1) gains this as its own
+    attack class — a self-authored prompt escaping its own skill's rules,
+    distinct from hostile external input.
+
 ## 5. Layer 3 — The channel between hermes-agent and the runner
 
 This is where the chosen option earns its keep: it is the border between "reads
@@ -336,7 +368,7 @@ the untrusted" and "holds the master key".
 - **SEC-4.4 — Bounded working directory.** Repo checkouts live under a dedicated
   workspace root, shared with the host at the **same path** (needed so the
   ephemeral containers' bind mounts resolve correctly, see
-  [hermes/spec.md §3.6](hermes/spec.md#36-nota-de-implementación-rutas-de-workspace-en-despliegue-contenerizado)).
+  [hermes/spec.md §3.6](hermes/spec.md#36-implementation-note-workspace-paths-in-a-containerised-deployment)).
   That root contains only project workspaces, never `$HOME` or system paths.
 
 ## 7. Layer 5 — The ephemeral container where Claude Code runs
@@ -442,7 +474,7 @@ model is complete in one place.
   must not yield the others.
 - **SEC-6.5 — Manual re-authentication.** When the Claude Code session expires or
   is revoked, it is renewed by hand. Token extraction **is not automated** (see
-  [hermes/spec.md §3.3](hermes/spec.md#33-limitación-conocida-expiración-o-revocación-de-sesión)).
+  [hermes/spec.md §3.3](hermes/spec.md#33-known-limitation-session-expiry-or-revocation)).
 
 ## 9. Layer 7 — Isolation between the personal and work instances (Phase 10 of v2)
 
@@ -508,11 +540,11 @@ A security model that does not enumerate its limits is marketing. These risks ar
 - **Malicious code written by Claude Code.** If an injection gets Claude Code to
   write harmful code, that code lands in a **PR**, not in `main`. Human review of
   the PR before merging is part of the security model, not a process detail
-  ([hermes/spec.md §2](hermes/spec.md#2-no-objetivos-v1)).
+  ([hermes/spec.md §2](hermes/spec.md#2-non-objectives-v1)).
 - **Terms of Service risk.** Using the Pro subscription's OAuth token outside the
   official client violates Anthropic's consumer ToS, with a risk of the entire
   account being suspended. Explicitly accepted in
-  [hermes/spec.md §0.2](hermes/spec.md#02-nota-de-riesgo--actualizada-ya-no-es-teórica).
+  [hermes/spec.md §0.2](hermes/spec.md#02-risk-note--updated-no-longer-theoretical).
 - **Availability.** The system depends on home power and network. There is no high
   availability and none is attempted.
 - **Compromise of the host by some other route.** This model protects the machine
@@ -532,5 +564,6 @@ into the decisions log.
 | 14             | SEC-2.5, SEC-3.4 (Jira variant), SEC-4.3                                                 |
 | 14 (WEB)       | SEC-5.7, widening the sandbox proxy to `registry.npmjs.org`                              |
 | 15             | SEC-1.6, Docker socket scoped in code for `/modelo`                                      |
+| 20             | SEC-2.6, skill layer restructure + cron prompt contract                                  |
 | 4–5            | Review that Brain reintroduces no surface (API on the internal network only, own token)  |
 | Phase 10 of v2 | SEC-7.1 – SEC-7.5, as soon as a "Hermes work" instance exists                            |
