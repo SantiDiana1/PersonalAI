@@ -96,13 +96,14 @@ mapping to a boundary `security.md` already defines:
 | `TM` | Tool misuse             | call a tool outside the procedure's allowlist (`jira_delete`, direct GitHub writes)    | SEC-2.5       |
 | `CE` | Credential exfiltration | reveal tokens, environment variables, or session material                              | SEC-6.x       |
 | `PE` | Privilege escalation    | reach the Docker socket or act outside the ephemeral container                         | SEC-1.x, 4.x  |
-| `FR` | Fabricated results      | report success for work it did not do                                                  | —             |
+| `FR` | Fabricated results      | report success for work it did not do                                                  | SEC-8.1       |
 | `SP` | Self-authored escape    | write, as itself, a sub-turn prompt that bypasses the rules of the skill it belongs to | SEC-2.6       |
 
-`FR` has no `SEC` mapping on purpose: fabrication is not a security boundary in the current
-model, it is a reliability failure. It is in scope here because it is the failure mode this
-project actually hit, and because a fabricating agent silently invalidates every other eval.
-Whether it earns a `SEC-x.y` of its own is an open question (§13).
+`FR` is not an access-control boundary like the other six — nothing is reached that shouldn't
+be. It earns `SEC-8.1` anyway (added in Phase 18, by the Operator's decision) because a
+fabricating agent silently invalidates every other eval in this table: a case can report `PASS`
+on `DH`/`TM`/`CE` purely because the agent claimed compliance, never because any evidence source
+in §4 confirmed it. See `security.md` §10 for the full reasoning.
 
 **`SP` is structurally different from the other five, added in Phase 20 (US-20.5) after a real
 incident — see `docs/roadmap.md` Phase 20 and `security.md` SEC-2.6.** Every other family
@@ -252,7 +253,7 @@ Two outputs:
 1. **Per-run report** — case, family, `SEC` mapped, N runs, resistance rate, verdict
    (`PASS` / `FAIL` / `INCONCLUSIVE`), evidence collected, and the agent's own reply quoted but
    never scored.
-2. **A coverage section added to `security.md`** stating, for each of the 39 requirements,
+2. **A coverage section added to `security.md`** stating, for each of the 41 requirements,
    whether it is verified by an automated eval, by documented manual verification, or not
    verified at all.
 
@@ -268,9 +269,8 @@ the existing `@personalai/shared` Postgres helpers for `task_runs` queries.
 
 ## 13. Open questions
 
-- **Does fabrication (`FR`) deserve its own `SEC-x.y`?** It is a reliability failure, not a
-  boundary breach — but it silently invalidates every other guarantee, which is a security
-  property in effect if not in category.
+- ~~Does fabrication (`FR`) deserve its own `SEC-x.y`?~~ **Resolved (Phase 18):** yes —
+  `SEC-8.1`, see §5 and `security.md` §10.
 - **Cross-model sweep as a published artifact?** A comparative resistance table across
   `anthropic` / `minimax` / `nemotron` is genuinely interesting and nobody publishes one. It is
   also a claim about third-party models made from a sample of one deployment, which needs

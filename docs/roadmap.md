@@ -380,7 +380,7 @@ silently. This phase converts one-off manual proofs into a regression suite.
 #### Definition of Done
 
 One command runs the suite, produces a report, and has been demonstrated to fail when a
-protection is deliberately removed. `security.md` states truthfully which of its 39
+protection is deliberately removed. `security.md` states truthfully which of its 41
 requirements are automatically verified.
 
 ### Phase 19 — Extracting the sandbox

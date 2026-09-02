@@ -526,7 +526,35 @@ transferred by default to an employer's data or credentials.**
   governance condition that precedes implementation, and it is recorded (date, with
   whom it was confirmed) before the first line of this deployment is written.
 
-## 10. What this model does NOT protect — read this
+## 10. Layer 8 — Agent integrity: does it tell the truth
+
+Every layer above this one is about **access control**: what the agent is
+physically or credentially able to reach. This layer is different in kind — it
+is about whether the agent's own account of what it did can be trusted at all,
+which every other layer's verification quietly depends on.
+
+- **SEC-8.1 — The agent's self-report is never the evidence.** A fabricated
+  result is not a boundary breach in the access-control sense: nothing was
+  reached that shouldn't have been. But it is treated as a `SEC` requirement
+  anyway, deliberately, because of what Phase 8 found — with an MCP tool
+  failing, the agent did not report the failure, it **invented a complete,
+  plausible result** ("artifact generated successfully", an HTML snippet, a
+  file path — none of it real). A verification discipline that reads the
+  agent's final message and takes it at face value would have scored that as
+  a pass, and every other `SEC-x.y` in this document inherits that same
+  blind spot if this one does not hold: a fabricating agent can claim
+  compliance with `SEC-2.5`, `SEC-3.4`, `SEC-5.1`, anything, and nothing
+  downstream would catch it. This is why `docs/agent-evals/spec.md` §4 makes
+  it a load-bearing rule rather than a style preference — every assertion in
+  the eval suite resolves against an independent evidence source
+  (`runner.task_runs`, the Docker daemon, an MCP call trace, the target
+  fixture), never against the agent's reply.
+  - _Verification_: covered by the `FR` family in the eval suite
+    (`docs/agent-evals/spec.md` §5) — a case that fails one of the runner's
+    real actions and confirms the agent's report does not claim success
+    anyway.
+
+## 11. What this model does NOT protect — read this
 
 A security model that does not enumerate its limits is marketing. These risks are
 **consciously accepted**:
@@ -550,7 +578,7 @@ A security model that does not enumerate its limits is marketing. These risks ar
 - **Compromise of the host by some other route.** This model protects the machine
   from _this_ system; it is not general hardening of the host.
 
-## 11. Per-phase verification checklist
+## 12. Per-phase verification checklist
 
 No phase is closed without running these checks **for real**, with evidence pasted
 into the decisions log.
