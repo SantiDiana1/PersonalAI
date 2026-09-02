@@ -68,3 +68,5 @@ La cuenta de tareas de las últimas 5 h es un **proxy** de la ventana de cuota d
 ## Licencia
 
 Este proyecto es de uso personal y no está licenciado para redistribución.
+
+<!-- Verificación Fase 20 (MYAI-12): /tarea + resolve-jira-task en real — 2026-09-02 -->
