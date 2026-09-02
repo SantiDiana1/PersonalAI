@@ -35,9 +35,15 @@ importers:
 
   apps/agent-evals:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.30.0
+        version: 1.30.0(zod@3.25.76)
       yaml:
         specifier: ^2.6.1
         version: 2.9.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^22.10.1
