@@ -13,9 +13,12 @@ No son dos demos aisladas: **Hermes consulta a Brain (vía MCP) antes de actuar*
 
 Este proyecto es, ante todo, **mi sistema de IA personal** — un TODO-EN-1 backed by Claude Code, desplegado en un servidor local (hoy WSL2/Docker Desktop; el destino planeado es un Mac Mini dedicado — ver [docs/architecture.md §Despliegue](docs/architecture.md#deployment)), hablable desde el móvil. También es una pieza de portfolio técnico (demuestra que sé diseñar y construir agentes autónomos y el patrón de integración Hermes ↔ MCP ↔ memoria), pero eso es secundario al uso real. **v1** — ver [docs/decisions-log.md §Milestone v1](docs/decisions-log.md#milestone-v1--qué-es-la-primera-versión) — es Hermes desplegado en local resolviendo issues de GitHub, hablable por Telegram, con un Brain básico consultado antes de actuar. Notion/Jira, el pulido de portfolio y el Company Brain completo (consolidación real) quedan como **futuribles**, explícitamente post-v1 y sin bloquear el hito.
 
-## Requisitos previos
+## Puesta en marcha
 
-Para trabajar en este monorepo necesitas:
+**[docs/quickstart.md](docs/quickstart.md)** — de un `git clone` limpio a un sistema
+funcionando, con cada credencial manual explicada y qué significa "hecho" para cada una.
+
+Para trabajar en el código sin desplegar el stack completo basta con:
 
 - **Node.js 20** o superior
 - **pnpm 9** (el repo fija `packageManager` en el `package.json` raíz)
@@ -27,6 +30,7 @@ Este repo se desarrolla siguiendo un enfoque _spec-first_: antes de escribir có
 
 | Documento                                                  | Contenido                                                                                                                                 |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| [docs/quickstart.md](docs/quickstart.md)                   | De un clon limpio a un sistema funcionando — credenciales manuales, `.env`, build, verificación                                           |
 | [docs/architecture.md](docs/architecture.md)               | Visión general del sistema, estructura del monorepo, diagrama de integración Hermes ↔ MCP servers ↔ Brain                                 |
 | [docs/roadmap.md](docs/roadmap.md)                         | **Empieza aquí para saber qué es esto y qué viene**: estado actual y las fases abiertas                                                   |
 | [docs/decisions-log.md](docs/decisions-log.md)             | La bitácora completa: cada fase cerrada, cada bug encontrado, cada hipótesis descartada y cada decisión revertida, con su porqué          |

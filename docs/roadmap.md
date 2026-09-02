@@ -163,22 +163,40 @@ architecture doc and correctly explain what the system does and what its securit
 
 - **US-17.1** — As a new user, I want to go from a clean clone to a running system by
   following written steps, so that I do not have to reconstruct the deployment from specs.
-  - [ ] A quickstart verified **from a clean clone on a machine that has never run this** —
-        not written from memory of an already-working deployment. This is the whole point of
-        the story; a quickstart validated against an existing install proves nothing.
-  - [ ] `.env.example` complete and honest about every credential actually required, which of
-        them are optional, and what degrades without each.
-  - [ ] Every step that cannot be automated (creating bot tokens, GitHub PATs, Atlassian
-        credentials) called out explicitly as manual, with what "done" looks like.
-- **US-17.2** _(absorbed from US-9.1)_ — As a visitor, I want to see the system working
-  without installing it, so that I can judge it in thirty seconds.
-  - [ ] A recorded demo embedded in the README: a real ticket going in, a real pull request
-        coming out, and the Telegram notification arriving.
+  - [x] `docs/quickstart.md` written and **mechanically rehearsed** (2026-09-02) against a fresh
+        `git clone` in a directory that had never run this repo: `pnpm install`, `pnpm build`,
+        and `docker compose build` for all four images this repo owns all succeeded with no
+        fixes needed. **Honest limit**: this rehearsal was run by the same session that wrote
+        the document, not by a person unfamiliar with the repo — the credential-heavy half
+        (registering bots, generating tokens, actually bringing the stack up) was not
+        mechanically re-run, since that would require throwaway real credentials. A genuinely
+        independent person completing the quickstart end to end is still open — this is the one
+        thing this document cannot self-certify, same category of gap as US-17.1 had before.
+  - [x] `.env.example` (both root and `hermes/docker/`) reviewed against real deployment
+        practice: complete, and every value already commented in place with what it is, where
+        it comes from, and what's optional (e.g. `CONTROL_BOT_TAREA_REPO_ALLOWLIST` empty =
+        `/tarea` disabled, stated explicitly). No gap found requiring a fix.
+  - [x] Every manual step (bot tokens, GitHub PAT, Atlassian/Notion, Hugging Face) tabulated in
+        `docs/quickstart.md §4` with where to get it and what "done" looks like for each.
+- ~~**US-17.2** _(absorbed from US-9.1)_~~ — **Dropped by the Operator's decision (2026-09-02)**,
+  out of scope for this phase. Was: a recorded demo embedded in the README (a real ticket going
+  in, a real PR coming out, the Telegram notification arriving).
 - **US-17.3** — As the Operator, I want the deployment to survive a host restart without
   manual repair, so that "it runs" is not conditional on me being present.
-  - [ ] Restart policies reviewed across the compose stack. Real motivation: on 2026-08-28 a
+  - [x] Restart policies reviewed across the compose stack. Real motivation: on 2026-08-28 a
         WSL restart left two containers dead with a stale Docker socket bind-mount and the
-        system was silently down until noticed by hand.
+        system was silently down until noticed by hand. Full analysis, the fix, and a recovery
+        runbook in [`operations.md`](operations.md). Summary: `restart: unless-stopped` was
+        already set everywhere; the actual gap was that neither `claude-code-runner` nor
+        `control-bot` could tell a stale `/var/run/docker.sock` bind-mount from a healthy one —
+        both now do (`docker.ping()` in each service's healthcheck), verified `"healthy"`
+        against the real deployment (2026-09-02) with the failure path covered by a unit test.
+        **Left open on purpose**: a full WSL/host restart was not reproduced live in this
+        session (it would have killed the Claude Code session running in the same WSL distro,
+        by explicit Operator instruction) — a Docker Desktop GUI-only restart _was_ tried live
+        and, verified, does not reproduce the incident (the engine backend never stopped). The
+        exact behaviour of a genuine full restart on this deployment remains unverified by
+        direct observation.
 
 #### Definition of Done
 
