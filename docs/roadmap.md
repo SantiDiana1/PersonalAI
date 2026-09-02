@@ -229,52 +229,59 @@ affordances combined into a hole:
         compete: `resolve-issue` is cron-only, `run-task` owns every chat-triggered request.
   - [x] Jira documented as the primary path and GitHub as secondary, matching where the work
         actually lives (US-20.4, `spec.md §5.1`/`§5.2`).
-  - [ ] **Treated as a change to production prompts, not to documentation.** Phase 6 found three
+  - [x] **Treated as a change to production prompts, not to documentation.** Phase 6 found three
         real bugs caused by prompt phrasing alone, one of which skipped container isolation
         entirely. Every rewritten skill is re-verified against a real run before this phase
-        closes. No skill is edited and assumed working. **Not done**: the rewritten
-        `run-task`/`resolve-jira-task` prompts have not been re-run against the real deployment
-        since this Fase 20 work started — this is the one thing blocking closing US-20.1, and it
-        needs the Operator (or a live session) at the keyboard, not more editing.
+        closes. No skill is edited and assumed working. **Verified 2026-09-02**: `/tarea MYAI-12`
+        launched against the real deployment; the cron job's prompt loaded `resolve-jira-task` in
+        full via `skills:`, and the sub-turn followed it exactly — `hermes:in-progress` → "En
+        curso", `run_coding_task` → PR #37 (`SantiDiana1/PersonalAI`), `hermes:done` →
+        "Finalizada", comment posted on the ticket. Evidence: the job's own output log
+        (`~/.hermes/cron/output/9bf8dcde2c92/2026-09-02_06-39-42.md`), MYAI-12's final state in
+        Jira, and PR #37 on GitHub.
 - **US-20.2** — As the Operator, I want a contract on what a self-authored cron prompt may
   instruct, so that the security rules cannot be bypassed by the agent simply not loading them.
-  - [ ] A one-shot cron prompt may not instruct writes to a task source (Jira
+  - [x] A one-shot cron prompt may not instruct writes to a task source (Jira
         transitions/labels/comments, GitHub labels/comments) in freehand text.
-  - [ ] When a sub-turn must touch a source, the skill governing that source is propagated via
+  - [x] When a sub-turn must touch a source, the skill governing that source is propagated via
         `skills:` — replacing the current blanket permission to leave it empty.
-  - [ ] The restriction stated where it is enforceable (in the skills that create cron jobs) and
+  - [x] The restriction stated where it is enforceable (in the skills that create cron jobs) and
         cross-referenced from `security.md` under its own `SEC-x.y`. `SEC-2.5` currently assumes
-        this boundary holds; on 2026-08-28 it did not, and nothing recorded that.
+        this boundary holds; on 2026-08-28 it did not, and nothing recorded that. **Verified
+        2026-09-02**: the real `/tarea MYAI-12` job carried `skills: ['resolve-jira-task']` and no
+        freehand source-write instruction, matching `run-task/SKILL.md` Regla 6 and `security.md`
+        SEC-2.6 exactly (same job output as US-20.1's evidence above).
 - **US-20.3** — As the Operator, I want to launch a known ticket without describing it in natural
   language, so that routing stops being probabilistic for the cases where I already know the key.
-  - [ ] A command on the control-bot's deterministic surface (`/tarea <KEY>`), consistent with
+  - [x] A command on the control-bot's deterministic surface (`/tarea <KEY>`), consistent with
         its stated design: _"no hay interpretación de lenguaje natural, ni un comando genérico
         'ejecuta X'"_.
-  - [ ] It creates the job through `hermes cron create` with `skills:` set explicitly and a
+  - [x] It creates the job through `hermes cron create` with `skills:` set explicitly and a
         **templated** prompt — never freehand text — so execution stays governed by the source
         skill instead of bypassing it.
-  - [ ] Executed as **uid 10000** (`docker exec -u hermes`), through the bounded Docker client
+  - [x] Executed as **uid 10000** (`docker exec -u hermes`), through the bounded Docker client
         already used by `/modelo` (`SEC-1.6`). Non-negotiable and not cosmetic: a root-owned
         `cron/jobs.json` is mode 0600, unreadable by the gateway, and the cron then stops firing
         **silently**. Found in Phase 2, reproduced in Phase 6, and reproduced a third time on
         2026-08-28 while relaunching the jobs from this very incident — by an assistant that had
         the warning in `hermes/config/README.md §5` available and did not follow it. A written
         warning has now failed three times; this story is where it becomes code.
-  - [ ] The control-bot's scope explicitly widened from "only reports" to "launches, through a
+  - [x] The control-bot's scope explicitly widened from "only reports" to "launches, through a
         fixed template", recorded as a decision — `cron.ts` currently states the opposite in its
         header comment.
-  - [ ] An unknown or malformed key is answered with the help text, never guessed at or
+  - [x] An unknown or malformed key is answered with the help text, never guessed at or
         interpreted.
 
-  **Implemented, not yet verified against the real deployment (2026-09-01)** — all five criteria
-  above are coded (`apps/control-bot/src/jiraTask.ts`, `docker.ts::createDeterministicTask`,
+  **Verified against the real deployment on 2026-09-02.** All five criteria above were coded
+  2026-09-01 (`apps/control-bot/src/jiraTask.ts`, `docker.ts::createDeterministicTask`,
   `commands.ts::runTareaCommand`), unit-tested with a mocked Docker client, typechecked and
-  linted clean. Left unchecked on purpose, consistent with this project's rule that nothing is
-  marked done without real evidence. The one-shot `schedule` (`'1m'`, no `every` prefix) is not a
-  guess: `hermes/skills/status-report/SKILL.md` ("Registro del cronjob") documents that exact
-  behaviour, verified against the real deployment for a different skill — but never against
-  `/tarea` itself. Check `hermes cron list` after the first real `/tarea <KEY>` launch to confirm
-  the job actually fired once and did not stay scheduled, then check these boxes.
+  linted clean — but left unchecked until real evidence existed. That evidence: the `control-bot`
+  image running at the first attempt (2026-08-27 build) predated the feature entirely and
+  answered "Comando desconocido: /tarea" — rebuilding and recreating the container fixed it, a
+  reminder that `docker compose up -d` never rebuilds. After the rebuild, `/tarea MYAI-12` fired
+  the one-shot job (`hermes cron list` / `~/.hermes/cron/jobs.json` — the job is absent after
+  firing, confirming it did not stay scheduled, exactly as this section asked to check), executed
+  as uid 10000, with `skills: ['resolve-jira-task']` and a templated prompt, and produced PR #37.
 
 - **US-20.4** — As a reader, I want the documentation's centre of gravity to match reality, so
   that Jira stops reading as an afterthought.
