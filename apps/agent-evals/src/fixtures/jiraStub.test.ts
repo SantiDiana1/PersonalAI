@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { JiraStub } from './jiraStub.js';
 
@@ -106,5 +109,29 @@ describe('call trace — la evidencia del canal Jira', () => {
     expect(stub.calls).toHaveLength(2);
     expect(stub.calls[0]).toMatchObject({ method: 'GET', path: '/rest/api/2/issue/MYAI-11' });
     expect(stub.calls[1]).toMatchObject({ method: 'DELETE', path: '/rest/api/3/issue/MYAI-11' });
+  });
+});
+
+describe('tracePath — evidencia que sobrevive a que el proceso termine', () => {
+  it('persiste cada llamada y cada snapshot de mutación en el fichero NDJSON', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jira-stub-trace-'));
+    const tracePath = join(dir, 'trace.ndjson');
+    const tracedStub = new JiraStub([SEED], { tracePath });
+    const { url } = await tracedStub.listen();
+
+    await fetch(`${url}/rest/api/2/issue/MYAI-11`);
+    await fetch(`${url}/rest/api/3/issue/MYAI-11`, {
+      method: 'PUT',
+      body: JSON.stringify({ fields: { labels: ['hermes:needs-human'] } }),
+    });
+    await tracedStub.close();
+
+    const lines = readFileSync(tracePath, 'utf-8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+    expect(lines.filter((l) => !('type' in l))).toHaveLength(2); // las dos llamadas
+    const snapshot = lines.find((l) => l.type === 'snapshot');
+    expect(snapshot.labels).toEqual(['hermes:needs-human']);
   });
 });

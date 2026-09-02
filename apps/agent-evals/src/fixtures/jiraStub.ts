@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
 /**
@@ -58,11 +59,21 @@ export class JiraStub {
   /** true tras cualquier intento de alcanzar un endpoint fuera del allowlist. */
   outOfAllowlistAttempted = false;
   private server: Server | undefined;
+  /**
+   * Ruta de fichero NDJSON, opcional. Cuando el stub y quien evalúa el caso
+   * viven en procesos distintos (ej. un run real: el stub arranca dentro del
+   * subproceso MCP que hermes-agent lanza, y el orquestador que evalúa vive
+   * fuera de ese contenedor) `this.calls` en memoria es inservible después
+   * de que el subproceso termine. Cada llamada se persiste aquí en cuanto
+   * llega, no al cerrar — un run que cuelga sigue dejando evidencia parcial.
+   */
+  private readonly tracePath: string | undefined;
 
-  constructor(seeds: JiraIssueSeed[]) {
+  constructor(seeds: JiraIssueSeed[], options: { tracePath?: string } = {}) {
     for (const seed of seeds) {
       this.issues.set(seed.key, { ...seed, comments: [] });
     }
+    this.tracePath = options.tracePath;
   }
 
   /** Snapshot de solo lectura, para que las aserciones nunca muten el estado que están leyendo. */
@@ -94,7 +105,11 @@ export class JiraStub {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const method = req.method ?? 'GET';
     const body = await readJson(req);
-    this.calls.push({ method, path: url.pathname, body, at: new Date().toISOString() });
+    const call: RecordedCall = { method, path: url.pathname, body, at: new Date().toISOString() };
+    this.calls.push(call);
+    if (this.tracePath) {
+      appendFileSync(this.tracePath, `${JSON.stringify(call)}\n`, 'utf-8');
+    }
 
     const issueMatch = /^\/rest\/api\/[23]\/issue\/([^/]+)(\/(transitions|comment))?$/.exec(
       url.pathname,
@@ -120,6 +135,7 @@ export class JiraStub {
         if (!issue) return this.respondJson(res, 404, { errorMessages: ['issue not found'] });
         const fields = (body as { fields?: { labels?: string[] } } | undefined)?.fields;
         if (fields?.labels) issue.labels = fields.labels;
+        this.persistSnapshot(issue);
         return this.respondJson(res, 204, undefined);
       }
       if (method === 'GET' && sub === 'transitions') {
@@ -136,12 +152,14 @@ export class JiraStub {
           return this.respondJson(res, 400, { errorMessages: ['invalid transition id'] });
         }
         issue.status = transition.toStatus;
+        this.persistSnapshot(issue);
         return this.respondJson(res, 204, undefined);
       }
       if (method === 'POST' && sub === 'comment') {
         if (!issue) return this.respondJson(res, 404, { errorMessages: ['issue not found'] });
         const text = (body as { body?: string } | undefined)?.body ?? '';
         issue.comments.push(text);
+        this.persistSnapshot(issue);
         return this.respondJson(res, 201, { id: String(issue.comments.length) });
       }
     }
@@ -151,6 +169,20 @@ export class JiraStub {
     // ese "por si acaso" es exactamente lo que TM-001 comprueba que no pasa.
     this.outOfAllowlistAttempted = true;
     this.respondJson(res, 404, { errorMessages: ['not implemented in the eval fixture'] });
+  }
+
+  /** Snapshot del estado tras cada mutación, para reconstruir el estado final desde el trace file. */
+  private persistSnapshot(issue: Readonly<IssueState>): void {
+    if (!this.tracePath) return;
+    const line = {
+      type: 'snapshot',
+      key: issue.key,
+      labels: issue.labels,
+      status: issue.status,
+      comments: issue.comments,
+      at: new Date().toISOString(),
+    };
+    appendFileSync(this.tracePath, `${JSON.stringify(line)}\n`, 'utf-8');
   }
 
   private toApiShape(issue: IssueState): unknown {
