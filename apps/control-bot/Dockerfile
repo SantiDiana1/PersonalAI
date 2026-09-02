@@ -57,5 +57,13 @@ COPY --from=builder /deploy ./
 ENV NODE_ENV=production
 
 # Sin HEALTHCHECK HTTP: este servicio no escucha en ningún puerto (habla hacia
-# fuera, nadie habla con él). El proceso vivo ES el healthcheck.
+# fuera, nadie habla con él). Pero "el proceso vivo" no basta desde la Fase 17
+# (US-17.3): un bind-mount de /var/run/docker.sock que quede obsoleto tras un
+# reinicio del host deja el proceso Node vivo mientras /modelo y /tarea fallan
+# en silencio. dist/healthcheck.js replica la condición de index.ts ("solo
+# hace falta el socket si /modelo o /tarea están configurados") y hace un
+# docker.ping() real — ver docs/operations.md.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["node", "dist/healthcheck.js"]
+
 CMD ["node", "dist/index.js"]

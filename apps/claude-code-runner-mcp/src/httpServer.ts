@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import Docker from 'dockerode';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
@@ -116,8 +117,37 @@ export async function startHttpServer(options: HttpServerOptions): Promise<Serve
     const url = new URL(req.url ?? '/', 'http://localhost');
 
     // Healthcheck del contenedor: sin autenticación a propósito, pero también
-    // sin ninguna información sensible — solo confirma que el proceso responde.
+    // sin ninguna información sensible — solo confirma que el proceso responde
+    // Y que puede hablar de verdad con el socket de Docker (Fase 17, US-17.3).
+    //
+    // Antes de esto, este endpoint solo comprobaba que el proceso Node seguía
+    // vivo: un bind-mount de /var/run/docker.sock que quedara obsoleto tras un
+    // reinicio del host (Docker Desktop/WSL2 recrea el socket) dejaba el
+    // proceso respondiendo "ok" mientras cada tarea real fallaba silenciosamente
+    // al intentar `docker.createContainer`. `docker compose ps` nunca lo
+    // reflejaba porque el HEALTHCHECK del Dockerfile solo mira esta ruta.
     if (url.pathname === '/health') {
+      const docker = new Docker();
+      try {
+        // Timeout corto: un socket realmente colgado (no solo lento) no debe
+        // dejar el healthcheck esperando más de lo que dura su propio timeout
+        // de Docker (`--timeout=5s` en el HEALTHCHECK del Dockerfile).
+        await Promise.race([
+          docker.ping(),
+          new Promise((_resolve, reject) => {
+            setTimeout(() => {
+              reject(new Error('docker.ping() timeout'));
+            }, 3000);
+          }),
+        ]);
+      } catch (err) {
+        logger.error(
+          { err },
+          'healthcheck: no se puede hablar con el socket de Docker (SEC-4.1, US-17.3)',
+        );
+        writeJson(res, 503, { status: 'docker socket unreachable' });
+        return;
+      }
       writeJson(res, 200, { status: 'ok' });
       return;
     }

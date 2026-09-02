@@ -7,6 +7,15 @@ import type { Server } from 'node:http';
 const getMetrics = vi.hoisted(() => vi.fn());
 vi.mock('./db.js', () => ({ getMetrics }));
 
+// Mock de dockerode: por defecto ping() resuelve (socket sano). Un test
+// concreto lo hace rechazar para cubrir el camino que el incidente de
+// Fase 17 (US-17.3) dejó silencioso — un socket de Docker inalcanzable no
+// debe parecer un healthcheck en verde.
+const dockerPing = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('dockerode', () => ({
+  default: vi.fn().mockImplementation(() => ({ ping: dockerPing })),
+}));
+
 const { startHttpServer } = await import('./httpServer.js');
 
 const SECRET = 'x'.repeat(48);
@@ -105,6 +114,13 @@ describe('rutas del servidor HTTP', () => {
     const res = await fetch(`${baseUrl}/health`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: 'ok' });
+  });
+
+  it('/health responde 503 si el socket de Docker es inalcanzable (US-17.3)', async () => {
+    dockerPing.mockRejectedValueOnce(new Error('connect ENOENT /var/run/docker.sock'));
+    const res = await fetch(`${baseUrl}/health`);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ status: 'docker socket unreachable' });
   });
 
   it('una ruta desconocida sigue devolviendo 404 sin pedir autenticación', async () => {
