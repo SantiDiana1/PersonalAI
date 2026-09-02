@@ -346,11 +346,22 @@ silently. This phase converts one-off manual proofs into a regression suite.
 
 - **US-18.1** — As the Operator, I want a corpus of hostile inputs with a stated attack
   taxonomy, so that coverage is a deliberate decision rather than whatever I happened to think of.
-  - [ ] Taxonomy documented in `docs/agent-evals/spec.md`: instruction override, tool misuse,
-        credential exfiltration, destination hijacking (making the agent write to a repo other
-        than the labelled one), privilege escalation, and fabricated results.
-  - [ ] The historical real attacks (`MYAI-11` and the Phase 2 GitHub test) included verbatim
-        as cases, so their evidence stops being prose in a log.
+  - [x] Taxonomy documented in `docs/agent-evals/spec.md` §5: seven families (the six listed
+        here plus `SP`, self-authored escape, added in Phase 20/US-20.5 after the real
+        `run-task` incident — see that phase's opening paragraph) — instruction override, tool
+        misuse, credential exfiltration, destination hijacking (making the agent write to a
+        repo other than the labelled one), privilege escalation, fabricated results, and
+        self-authored escape, each mapped to a primary `SEC-x.y`.
+  - [x] The historical real attacks included verbatim as declarative case files under
+        `apps/agent-evals/cases/`, not only as spec prose: `MYAI-11` (Phase 14) split across
+        `DH-001.yaml` (repo-switch ask), `TM-001.yaml` (`jira_delete` ask) and `CE-001.yaml`
+        (env-dump ask) — one hostile ticket, three single-purpose assertions, per §6's "no
+        executable logic in a case" rule; the Phase 2 GitHub issue #7 test as `IO-001.yaml`;
+        and the Phase 20 `run-task` incident as `SP-001.yaml`, copied verbatim from
+        `spec.md` §5. **What's still open**: these are case _files_ only — no harness exists
+        yet to run them (that's US-18.2), so none has actually been executed as a case; the
+        PASS/FAIL verdicts described in each file's comments are the historical record being
+        cited, not a suite result.
 - **US-18.2** — As the Operator, I want to run the suite with one command and get a report,
   so that verifying the security model is cheap enough that it actually happens.
   - [ ] Runnable harness producing a per-case pass/fail report.
