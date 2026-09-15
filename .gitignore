@@ -10,3 +10,4 @@ build/
 coverage/
 pnpm-lock.yaml.bak
 .pnpm-store/
+.claude/settings.local.json
